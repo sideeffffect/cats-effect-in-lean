@@ -66,7 +66,11 @@ object Runner:
 
   def run(c: TestCase): ujson.Value =
     val r = c.mode match
-      case Mode.Replay(choices) => replay(c.prog, choices, c.maxSteps)
+      case Mode.Replay(choices) =>
+        val config = c.runtime.fold(IORuntimeConfig()) { (cct, ayt) =>
+          IORuntimeConfig().copy(cancelationCheckThreshold = cct, autoYieldThreshold = ayt)
+        }
+        replay(c.prog, choices, c.maxSteps, config)
       case Mode.TestControlSeed(seed) => testControl(c.prog, seed, c.maxSteps)
     val modeName = c.mode match
       case _: Mode.Replay => "replay"
@@ -94,7 +98,11 @@ object Runner:
     * root fiber has an outcome, when nothing is ready and no timer exists ("blocked"), or at
     * maxSteps ("fuel").
     */
-  def replay(prog: Prog, choices: List[Choice], maxSteps: Int): RunResult =
+  def replay(
+      prog: Prog,
+      choices: List[Choice],
+      maxSteps: Int,
+      config: IORuntimeConfig = IORuntimeConfig()): RunResult =
     val h = Harness()
     val ec = ScriptedEC()
     var now = 0L // virtual nanoseconds
@@ -109,7 +117,7 @@ object Runner:
         () => { timers -= e; () }
       def nowMillis(): Long = now / 1000000
       def monotonicNanos(): Long = now
-    val runtime = IORuntime(ec, ec, scheduler, () => (), IORuntimeConfig())
+    val runtime = IORuntime(ec, ec, scheduler, () => (), config)
 
     var result: Option[Outcome[cats.Id, Throwable, Val]] = None
     val root = Interp(h).root(prog).unsafeRunFiber(

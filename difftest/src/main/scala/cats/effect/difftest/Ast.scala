@@ -94,6 +94,15 @@ enum Mode:
   case Replay(choices: List[Choice])
   case TestControlSeed(seed: Long)
 
-final case class TestCase(id: String, mode: Mode, prog: Prog, maxSteps: Int, version: Int = Json.FormatVersion)
+/** `runtime`: the `IORuntimeConfig` thresholds (cancelation check, auto-yield) of a replay run;
+  * `None` is the default config.
+  */
+final case class TestCase(
+    id: String,
+    mode: Mode,
+    prog: Prog,
+    maxSteps: Int,
+    version: Int = Json.FormatVersion,
+    runtime: Option[(Int, Int)] = None)
 
 final class DecodeError(msg: String) extends Exception(msg)

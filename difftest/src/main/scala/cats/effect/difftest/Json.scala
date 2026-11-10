@@ -232,7 +232,7 @@ object Json:
 
   def decodeCase(j: Value): TestCase =
     val o = obj(j, "case")
-    keys(o, Set("v", "id", "mode", "choices", "seed", "maxSteps", "prog"), "case")
+    keys(o, Set("v", "id", "mode", "choices", "seed", "maxSteps", "runtime", "prog"), "case")
     val v = nat(field(o, "v", "case"), "case.v")
     if !Versions.contains(v) then fail(s"case.v: unsupported format version $v")
     val id = str(field(o, "id", "case"), "case.id")
@@ -249,7 +249,18 @@ object Json:
         Mode.TestControlSeed(nat(field(o, "seed", "case"), "case.seed"))
       case m => fail(s"case.mode: unknown mode '$m'")
     val max = o.get("maxSteps").map(nat(_, "case.maxSteps").toInt).getOrElse(DefaultMaxSteps)
-    TestCase(id, mode, decodeProg(field(o, "prog", "case"), v), max, v.toInt)
+    // `runtime`: IORuntimeConfig thresholds, with the checks of IORuntimeConfig.scala:33-40.
+    val runtime = o.get("runtime").map { r =>
+      if o.contains("seed") then fail("case: 'runtime' is only for mode replay")
+      val ro = obj(r, "case.runtime")
+      keys(ro, Set("cancelationCheckThreshold", "autoYieldThreshold"), "case.runtime")
+      val c = nat(field(ro, "cancelationCheckThreshold", "case.runtime"), "case.runtime.cancelationCheckThreshold")
+      val a = nat(field(ro, "autoYieldThreshold", "case.runtime"), "case.runtime.autoYieldThreshold")
+      if c == 0 || a <= 1 || a % c != 0 || a > MaxLimit then
+        fail(s"case.runtime: invalid thresholds $c, $a")
+      (c.toInt, a.toInt)
+    }
+    TestCase(id, mode, decodeProg(field(o, "prog", "case"), v), max, v.toInt, runtime)
 
   private def choice(j: Value): Choice = j match
     case ujson.Num(_) => Choice.Pick(nat(j, "choice").toInt)

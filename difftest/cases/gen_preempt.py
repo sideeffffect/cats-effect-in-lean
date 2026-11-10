@@ -27,7 +27,8 @@ def case(id, prog, **k):
 
 
 # Two fibers with three delays each and no cede. Default config: each child runs to its end
-# in one task. With an auto-yield every 2 iterations, the delays interleave.
+# in one task. With an auto-yield every 2 iterations, each child runs in many tasks (the trace
+# order is the same as with the default config, in Scala and in Lean; not analysed further).
 def two_children():
     a = seq(delay(0, N(1)), delay(0, N(2)), delay(0, N(3)))
     b = seq(delay(0, N(4)), delay(0, N(5)), delay(0, N(6)))
