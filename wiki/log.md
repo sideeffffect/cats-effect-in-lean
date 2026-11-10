@@ -193,3 +193,6 @@
 
 ## [2026-11-10] ingest | Reviewer evidence rule
 - Updated: Agent workflow
+## [2026-11-10] update | Track M follow-up: decisions 53-54, CE-0030 twin family
+- Updated: memoize model (satisfiability witnesses, non-forgeable observations, fixed twin on 7 fa)
+- Raw: raw/cats-effect/2026-11-10-memoize-track-m-followup-notes.md

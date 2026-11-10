@@ -283,14 +283,20 @@ def registry : List Entry := [
       Counterexample: fa = IO.canceled, one preemption of the second get between state.get and \
       state.flatModifyFull; flatModifyFull returns canceled *> never without poll (masked), so \
       the get waits forever (K/GenConcurrent.scala:91-92). Fixed twin poll(fromEither(..).flatten) \
-      is never blocked with one preemption < 120 (Proofs/Phase6/MemoizeFixed.lean)." },
+      completes on all one-preemption schedules < 120 for 7 fa (canceled, pure, raiseError, \
+      emit >> canceled, start(emit) >> canceled, cede >> canceled with a 2-preemption grid, \
+      uncancelable(_ => canceled)); v3.7.1 is stuck exactly for the self-canceling fa \
+      (Proofs/Phase6/MemoizeFixed.lean). Hypothesis satisfiable: MemoizeStuck.fa_wf; observed \
+      memo cell not forgeable (Proofs/Phase6/MemoizeSat.lean, decision 54)." },
   { id := "core.IO.memoize.getsAgree"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeGetsAgree
     status := .«open»
     note := "Two concurrent gets observe the same outcome when the root completes (all \
       WellFormed fa, all PChoice schedules). Smoke: 9 fa x 400 random schedules, 0 violations; a \
-      memoize without cache breaks it (test/Phase6/MemoizeSmoke.lean). Open: a proof for all fa \
+      memoize without cache breaks it (test/Phase6/MemoizeSmoke.lean). Satisfiability witness \
+      (decision 53): MemoizeSat.getsAgree_sat (fa = IO.cede: a get subscribes during the \
+      evaluation, root completes with a pair). Open: a proof for all fa \
       needs a state invariant over SchedP (memo cell, deferred cell, go fiber outcome)." },
   { id := "core.IO.memoize.atMostOnce"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
@@ -298,7 +304,9 @@ def registry : List Entry := [
     status := .«open»
     note := "Without a cancel from the program, fa starts at most once (counter <= 1 in every \
       reachable state of countedTwoGets). Smoke: 9 fa x 400 random schedules, max 1; a memoize \
-      without cache gives 2 (test/Phase6/MemoizeSmoke.lean). Open: same missing invariant as \
+      without cache gives 2 (test/Phase6/MemoizeSmoke.lean). Satisfiability witness: \
+      MemoizeSat.atMostOnce_sat (counter 1, a get during the evaluation). Counter and memo cell \
+      not forgeable (MemoizeSat.forged_*). Open: same missing invariant as \
       core.IO.memoize.getsAgree (at most one Evaluating transition while no get is canceled)." },
   -- Phase 6, track Res (Resource use/allocated/both)
   { id := "kernel.Resource.both.releaseOnce"
