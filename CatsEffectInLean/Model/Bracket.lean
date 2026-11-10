@@ -478,4 +478,94 @@ def isLib (id : Nat) : Bool :=
   | some l => l.good
   | none => false
 
+/-! ## Lemmas: an environment that runs the mirror
+
+An environment that sends the ids of this mirror to `call u ioOf` and all other ids to `u` is a
+`LibEnv`, because `call` calls its user-function argument only on even ids (for good closures).
+Track 6.2 (`Resource`) reuses these. -/
+
+theorem BLam.ofFields_toVal (l : BLam) :
+    (match ofCloVal l.toVal with
+     | some (k, tag, fs) => if k == ns then BLam.ofFields tag fs else none
+     | none => none) = some l := by
+  cases l <;> simp [BLam.toVal, ofCloVal_cloVal, BLam.ofFields]
+
+theorem BLam.ofId?_id (l : BLam) : BLam.ofId? l.id = some l := by
+  have h1 : isLibId l.id = true := by simp [isLibId, BLam.id]
+  have h2 : cloOfId l.id = some l.toVal := by
+    simp only [cloOfId, BLam.id]
+    rw [show (2 * valToNat l.toVal + 1) / 2 = valToNat l.toVal by omega]
+    exact natToVal_valToNat _
+  simp only [BLam.ofId?, h1, ite_true, h2, Option.bind_some]
+  exact BLam.ofFields_toVal l
+
+theorem BLam.ofId?_even {k : Nat} (hk : k % 2 = 0) : BLam.ofId? k = none := by
+  simp [BLam.ofId?, isLibId, hk]
+
+theorem BLam.odd_of_ofId? {k : Nat} {l : BLam} (h : BLam.ofId? k = some l) : userId k = false := by
+  rcases Nat.mod_two_eq_zero_or_one k with hk | hk
+  · rw [BLam.ofId?_even hk] at h; cases h
+  · simp [userId, hk]
+
+section congr
+variable {uc₁ uc₂ : Nat → Val → View → UserResult} (ioOf : Val → IO)
+  (h : ∀ k, k % 2 = 0 → ∀ a v, uc₁ k a v = uc₂ k a v)
+include h
+
+theorem callLeaf_congr {k : Nat} (hk : leafOK k = true) (a : Val) (v : View) :
+    callLeaf uc₁ ioOf k a v = callLeaf uc₂ ioOf k a v := by
+  unfold leafOK at hk
+  unfold callLeaf
+  rcases hof : BLam.ofId? k with _ | l
+  · simp only [hof, Bool.or_false] at hk ⊢
+    exact h k (by simpa [userId] using hk) a v
+  · have hodd := BLam.odd_of_ofId? hof
+    simp only [hof, hodd, Bool.false_or] at hk ⊢
+    cases l <;> simp_all [userId]
+
+theorem callFn_congr {k : Nat} (hk : fnOK k = true) (a : Val) (v : View) :
+    callFn uc₁ ioOf k a v = callFn uc₂ ioOf k a v := by
+  unfold callFn
+  rcases hof : BLam.ofId? k with _ | l
+  · have hl : leafOK k = true := by
+      unfold fnOK at hk; simpa [hof] using hk
+    simp only [hof]
+    exact callLeaf_congr ioOf h hl a v
+  · cases l
+    case relA rel a' =>
+      have hl : leafOK rel = true := by
+        unfold fnOK leafOK at hk
+        simp [hof, BLam.odd_of_ofId? hof] at hk
+        unfold leafOK; simpa [Bool.or_eq_true] using hk
+      simp only [hof]
+      exact callLeaf_congr ioOf h hl _ v
+    all_goals
+      have hl : leafOK k = true := by
+        unfold fnOK at hk; simpa [hof] using hk
+      simp only [hof]
+      exact callLeaf_congr ioOf h hl a v
+
+theorem call_congr {l : BLam} (hl : l.good = true) (a : Val) (v : View) :
+    call uc₁ ioOf l a v = call uc₂ ioOf l a v := by
+  have hF : ∀ k, fnOK k = true → ∀ a v, callFn uc₁ ioOf k a v = callFn uc₂ ioOf k a v :=
+    fun k hk a v => callFn_congr ioOf h hk a v
+  have hL : ∀ k, leafOK k = true → ∀ a v, callLeaf uc₁ ioOf k a v = callLeaf uc₂ ioOf k a v :=
+    fun k hk a v => callLeaf_congr ioOf h hk a v
+  cases l <;> simp only [BLam.good, Bool.and_eq_true] at hl <;> simp only [call] <;>
+    (try split) <;> simp_all [userId]
+
+end congr
+
+/-- An environment that runs the mirror on its ids and `u` on all other ids is a `LibEnv`. -/
+theorem libEnv_of_dispatch (env : UserEnv) (ioOf : Val → IO) (u : Nat → Val → View → UserResult)
+    (henv : ∀ id a v, env.callV id a v =
+      match BLam.ofId? id with
+      | some l => call u ioOf l a v
+      | none => u id a v) :
+    LibEnv env ioOf := by
+  intro l hl a v
+  rw [henv, BLam.ofId?_id]
+  refine call_congr ioOf (fun k hk a v => ?_) hl a v
+  rw [henv, BLam.ofId?_even hk]
+
 end CatsEffectInLean.Model.Bracket
