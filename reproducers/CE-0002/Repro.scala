@@ -18,6 +18,10 @@
 //   Case B (test from upstream fix PR #4630): an uncancelable `fa` that calls `IO.canceled`
 //     inside its own mask; the resource is allocated inside `poll` of an outer uncancelable.
 //     The continuation after `allocatedCase` must run.
+//   Case C (the Lean witness, resourceEvalPreservesUncancelable_refuted): with
+//     fa = IO.uncancelable(_ => IO.canceled), `Resource.eval(fa).allocatedCase` must have the same
+//     outcome as `IO.uncancelable(_ => Resource.eval(fa).allocatedCase)` (fa is uncancelable, so the
+//     allocation must be uncancelable too). Each runs as its own fiber; no time is used.
 // Each case runs with `Resource.eval(fa)` and with the twin `Resource.make(fa)(_ => IO.unit)`.
 
 import cats.effect.*
@@ -48,16 +52,28 @@ object Repro {
     } yield c == 1
   }
 
+  // Case C: true when masking the allocation does not change its outcome kind.
+  def caseC(lift: Lift): IO[Boolean] = {
+    val alloc = lift(IO.uncancelable(_ => IO.canceled)).allocatedCase
+    for {
+      plain <- alloc.start.flatMap(_.join)
+      masked <- IO.uncancelable(_ => alloc).start.flatMap(_.join)
+    } yield plain.isSuccess == masked.isSuccess && plain.isCanceled == masked.isCanceled
+  }
+
   def main(args: Array[String]): Unit = {
     var bad = 0
-    List("A: eval(uncancelable sleep).timeout" -> caseA, "B: allocatedCase continuation" -> caseB).foreach {
+    List(
+      "A: eval(uncancelable sleep).timeout" -> caseA,
+      "B: allocatedCase continuation" -> caseB,
+      "C: allocatedCase vs uncancelable(allocatedCase)" -> caseC).foreach {
       case (name, c) =>
         val e = TestControl.executeEmbed(c(viaEval)).unsafeRunSync()
         val m = TestControl.executeEmbed(c(viaMake)).unsafeRunSync()
         if (!e) bad += 1
         println(s"$name: eval ok=$e, make ok=$m ${if (e) "" else "(eval violates the promise)"}")
     }
-    println(s"cases that fail with Resource.eval: $bad / 2")
+    println(s"cases that fail with Resource.eval: $bad / 3")
     println(if (bad > 0) s"REPRODUCED $Id" else s"NOT REPRODUCED $Id")
   }
 }

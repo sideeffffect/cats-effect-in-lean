@@ -1,7 +1,7 @@
 # Cats Effect bug history and target areas
 
 > Sources: typelevel/cats-effect issues labelled `:beetle: bug` and 3.x release notes, collected 2026-11-10
-> Raw: [Bug history notes](../../raw/cats-effect/2026-11-10-ce-bug-history-notes.md); [3.x release bug fixes](../../raw/cats-effect/cats-effect-3x-release-bug-fixes.md); [Open bug status check](../../raw/cats-effect/2026-11-10-open-bug-status-check.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md); [SyncIO and syncStep mirror notes](../../raw/cats-effect/2026-11-10-syncstep-mirror-notes.md)
+> Raw: [Bug history notes](../../raw/cats-effect/2026-11-10-ce-bug-history-notes.md); [3.x release bug fixes](../../raw/cats-effect/cats-effect-3x-release-bug-fixes.md); [Open bug status check](../../raw/cats-effect/2026-11-10-open-bug-status-check.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md); [SyncIO and syncStep mirror notes](../../raw/cats-effect/2026-11-10-syncstep-mirror-notes.md); [Resource mirror notes](../../raw/cats-effect/2026-11-10-resource-mirror-notes.md)
 
 ## Overview
 
@@ -54,19 +54,19 @@ All five are open issues and all five are present at v3.7.1. No release after v3
 
 ## Calibration bug records and reproducers (Phase 5, Scala side)
 
-Draft records with deterministic `scala-cli` reproducers. Run all with `scripts/run_reproducers.sh` (not in CI). Lean status: CE-0001 is refuted in Lean (registry entry `core.IO.syncStep.syncStepIdentitySyncIO`, see [SyncIO and syncStep model](syncio-and-syncstep-model.md)); CE-0002 and CE-0003 are still `open`.
+Draft records with deterministic `scala-cli` reproducers. Run all with `scripts/run_reproducers.sh` (not in CI). Lean status: CE-0001 is refuted in Lean (registry entry `core.IO.syncStep.syncStepIdentitySyncIO`, see [SyncIO and syncStep model](syncio-and-syncstep-model.md)); CE-0002 is refuted in Lean (registry entry `kernel.Resource.eval.preservesUncancelable`, see [Resource model](resource-model.md)); CE-0003 is still `open`.
 
 | Record | Upstream | Promise (short) | Reproducer method | v3.7.1 |
 |---|---|---|---|---|
 | [CE-0001](../../bugs/CE-0001.yaml) | #4687 | `AsyncLaws.syncStepIdentity` (`AsyncLaws.scala:84`) | `TestControl`; direct vs `syncStep` remainder, cancel after 10 ms | REPRODUCED (4/4 cases); Lean: refuted (case 4) |
-| [CE-0002](../../bugs/CE-0002.yaml) | #4627 | `Resource.eval` "Preserves interruptibility of `fa`" (`Resource.scala:986`) | `TestControl`; `eval` vs `make` twin | REPRODUCED (2/2 cases) |
+| [CE-0002](../../bugs/CE-0002.yaml) | #4627 | `Resource.eval` "Preserves interruptibility of `fa`" (`Resource.scala:986`) | `TestControl`; `eval` vs `make` twin | REPRODUCED (3/3 cases); Lean: refuted (case C) |
 | [CE-0003](../../bugs/CE-0003.yaml) | #4571 | No lost element; `IO#timeout` returns the source outcome (`IO.scala:800`) | `TestControl` seeds 0–499 | REPRODUCED (328/500 and 37/500 seeds) |
 
 Results on `series/3.x` and `series/3.7.x` snapshots: see the records and the [raw notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md).
 
 - CE-0003 is a `racePair` defect. Under `TestControl`, the external-cancel form loses the element in most seeds, so the Lean model needs only a small schedule search to find it.
 - CE-0001: case 4 (`IO.uncancelable(_ => IO.canceled *> flag.set(true))`) needs no external cancel. It is the Lean counterexample (`syncStepIdentitySyncIO_refuted`). Also 4/4 on `series/3.x` and `series/3.7.x`.
-- CE-0002: `Resource.make(fa)(noop)` is the twin that keeps `fa` masked. The record compares the two.
+- CE-0002: `Resource.make(fa)(noop)` is the twin that keeps `fa` masked. The record compares the two. Case C (`Resource.eval(IO.uncancelable(_ => IO.canceled)).allocatedCase` vs the same under `IO.uncancelable`) needs no time and no external cancel. It is the Lean counterexample (`resourceEvalPreservesUncancelable_refuted`). The fix on `series/3.7.x` passes all 3 cases.
 
 ## Open questions
 
@@ -79,3 +79,4 @@ Results on `series/3.x` and `series/3.7.x` snapshots: see the records and the [r
 - [Semantics of CE3](semantics.md)
 - [Lessons for Cats Effect in Lean](../methodology/lessons-for-cats-effect.md)
 - [SyncIO and syncStep model](syncio-and-syncstep-model.md)
+- [Resource model and CE-0002](resource-model.md)

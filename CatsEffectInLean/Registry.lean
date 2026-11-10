@@ -2,6 +2,8 @@ import CatsEffectInLean.Props.IO.MonadCancelLaws
 import CatsEffectInLean.Proofs.IO.MonadCancelLaws
 import CatsEffectInLean.Props.Calibration.SyncStep
 import CatsEffectInLean.Proofs.Calibration.SyncStep
+import CatsEffectInLean.Props.Calibration.ResourceEval
+import CatsEffectInLean.Proofs.Calibration.ResourceEval
 
 /-!
 # Property registry
@@ -98,7 +100,17 @@ def registry : List Entry := [
     thm := some ``Proofs.Calibration.syncStepIdentitySyncIO_refuted
     bug := some "bugs/CE-0001.yaml"
     note := "AsyncLaws.syncStepIdentity for IO#syncStep with G = SyncIO; counterexample = \
-      case 4 of reproducers/CE-0001 (IO.uncancelable(_ => IO.canceled *> flag.set(true)))." }
+      case 4 of reproducers/CE-0001 (IO.uncancelable(_ => IO.canceled *> flag.set(true)))." },
+  { id := "kernel.Resource.eval.preservesUncancelable"
+    rows := ["kernel.Resource.eval", "kernel.Resource.allocatedCase", "kernel.Resource.pure"]
+    prop := ``Props.Calibration.resourceEvalPreservesUncancelable
+    status := .refuted
+    thm := some ``Proofs.Calibration.resourceEvalPreservesUncancelable_refuted
+    bug := some "bugs/CE-0002.yaml"
+    note := "Scaladoc Resource.scala:986-987 'Preserves interruptibility of fa': for \
+      fa = IO.uncancelable(_ => g), Resource.eval(fa).allocatedCase <-> \
+      IO.uncancelable(_ => Resource.eval(fa).allocatedCase) (Eqv, F = IO). Counterexample \
+      g = IO.canceled: Canceled vs Succeeded = case C of reproducers/CE-0002." }
 ]
 
 end CatsEffectInLean

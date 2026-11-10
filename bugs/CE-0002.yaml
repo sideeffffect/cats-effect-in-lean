@@ -1,6 +1,6 @@
 id: CE-0002
 title: "Resource.eval adds a cancelation point after fa, so an uncancelable fa is canceled"
-status: draft  # calibration bug; known upstream; Lean refutation not done yet
+status: draft  # calibration bug; known upstream; refuted in Lean (2026-11-10); waits for review
 priority: medium
 kind: doc-mismatch
 area: kernel
@@ -24,8 +24,10 @@ summary: >
   the allocation ends as Canceled, although fa itself was uncancelable. Resource.make(fa)(noop)
   does not have this gap, because Allocate runs under F.uncancelable. Visible results:
   Resource.eval(IO.uncancelable(_ => IO.sleep(100 ms))).timeout(10 ms).use_ raises
-  TimeoutException; and inside a flatMap chain under poll, the continuation after
-  allocatedCase is skipped (fiber outcome Canceled).
+  TimeoutException; inside a flatMap chain under poll, the continuation after
+  allocatedCase is skipped (fiber outcome Canceled); and with fa = IO.uncancelable(_ =>
+  IO.canceled), Resource.eval(fa).allocatedCase ends Canceled, but
+  IO.uncancelable(_ => Resource.eval(fa).allocatedCase) ends Succeeded.
 likelihood: >
   Medium. Resource.eval is very common. The gap matters only when a cancel arrives while an
   uncancelable fa runs and the Resource is allocated through allocatedCase (allocated, race,
@@ -40,22 +42,25 @@ output:
   v3.7.1: |
     A: eval(uncancelable sleep).timeout: eval ok=false, make ok=true (eval violates the promise)
     B: allocatedCase continuation: eval ok=false, make ok=true (eval violates the promise)
-    cases that fail with Resource.eval: 2 / 2
+    C: allocatedCase vs uncancelable(allocatedCase): eval ok=false, make ok=true (eval violates the promise)
+    cases that fail with Resource.eval: 3 / 3
     REPRODUCED CE-0002
   # series/3.x = 3.7.1-89-de84c01 (origin/series/3.x de84c01f76), publishLocal, 2026-11-10
   series/3.x: |
     A: eval(uncancelable sleep).timeout: eval ok=false, make ok=true (eval violates the promise)
     B: allocatedCase continuation: eval ok=false, make ok=true (eval violates the promise)
-    cases that fail with Resource.eval: 2 / 2
+    C: allocatedCase vs uncancelable(allocatedCase): eval ok=false, make ok=true (eval violates the promise)
+    cases that fail with Resource.eval: 3 / 3
     REPRODUCED CE-0002
   # series/3.7.x = 3.7.1-15-2f94201 (origin/series/3.7.x 2f9420145f, contains fix PR #4630), publishLocal, 2026-11-10
   series/3.7.x: |
     A: eval(uncancelable sleep).timeout: eval ok=true, make ok=true
     B: allocatedCase continuation: eval ok=true, make ok=true
-    cases that fail with Resource.eval: 0 / 2
+    C: allocatedCase vs uncancelable(allocatedCase): eval ok=true, make ok=true
+    cases that fail with Resource.eval: 0 / 3
     NOT REPRODUCED CE-0002
 expected: |
-  Both cases: eval ok=true (same as the Resource.make twin), so the last line is
+  All cases: eval ok=true (same as the Resource.make twin), so the last line is
   NOT REPRODUCED CE-0002.
 promised_by:
   - "Scaladoc of Resource.eval, kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:986-987: 'Lifts an applicative into a resource. The resource has a no-op release. Preserves interruptibility of `fa`.'"
@@ -80,5 +85,17 @@ duplicates:
     - "gh search issues 'Resource.eval cancel' -R typelevel/cats-effect (2026-11-10)"
     - "gh search issues 'Resource eval' -R typelevel/cats-effect (2026-11-10)"
 lean:
-  property: resource_eval_preserves_uncancelable   # planned name
-  theorem: open                                    # resource_eval_preserves_uncancelable_refuted
+  registry: kernel.Resource.eval.preservesUncancelable
+  property: CatsEffectInLean.Props.Calibration.resourceEvalPreservesUncancelable   # CatsEffectInLean/Props/Calibration/ResourceEval.lean
+  theorem: CatsEffectInLean.Proofs.Calibration.resourceEvalPreservesUncancelable_refuted   # CatsEffectInLean/Proofs/Calibration/ResourceEval.lean
+  statement: >
+    For all user code and all g, with fa = IO.uncancelable(_ => g):
+    Resource.eval(fa).allocatedCase <-> IO.uncancelable(_ => Resource.eval(fa).allocatedCase)
+    (Eqv: same observations over all fuel values and all pick schedules; F = IO).
+  counterexample: >
+    g = IO.canceled (reproducer case C). Left side: Canceled for every fuel and schedule
+    (7 micro-steps). Right side: Succeeded((), _ => F.unit) at fuel 8.
+  model: >
+    CatsEffectInLean/Model/Resource.lean (Res ADT, allocatedCase loop, make);
+    CatsEffectInLean/Model/ResourceExamples.lean (case B agrees with the reproducer;
+    the fix of PR #4630 gives Succeeded on both sides of case C).
