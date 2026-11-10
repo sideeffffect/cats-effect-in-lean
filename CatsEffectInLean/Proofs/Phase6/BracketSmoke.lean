@@ -13,8 +13,10 @@ They support the `open` entries; they prove nothing for all programs.
   runs the finalizer breaks it (`law_wrongFunction`).
 * `bracketFullIsKernelDefaultPureUse`: holds for 4 pure `use` functions with a self-cancel in
   acquire (the CE-0005 situation) and without it.
-* `bracketReleaseOnce`, `guaranteeFinalizerOnce`: hold for the parent-cancel program with several
-  acquire and use programs; a broken `bracket` that skips release breaks the first.
+* `bracketReleaseOnce`, `guaranteeFinalizerOnce`: the parent-cancel programs have about 3,000
+  states each; `decide +kernel` needs about 19 GB per module. These checks are `#guard`s
+  (compiled evaluation, not kernel-checked) in `test/Phase6/BracketSmokeParent.lean`; run them
+  with `lake env lean test/Phase6/BracketSmokeParent.lean`.
 -/
 
 namespace CatsEffectInLean.Proofs.Phase6.BracketSmoke
@@ -76,38 +78,5 @@ theorem twin_pure_u_5 : checkEqvP {} counterMaskModel env 400 (bracketFullIO (ui
     (defaultBracketFullIO (uid 0 [.nat 6]) (uid 0 [.nat 5]) (uid 2 [.nat 9])) = true := by decide +kernel
 theorem twin_pure_u_8 : checkEqvP {} counterMaskModel env 400 (bracketFullIO (uid 0 [.nat 6]) (uid 0 [.nat 8]) (uid 2 [.nat 9]))
     (defaultBracketFullIO (uid 0 [.nat 6]) (uid 0 [.nat 8]) (uid 2 [.nat 9])) = true := by decide +kernel
-
-/-! ## Release and finalizer run once (parent cancels the child) -/
-
-/-- All observations satisfy `p`. -/
-def allObs (io : IO) (p : Obs → Bool) : Option Bool :=
-  (outcomesPList {} counterMaskModel env2 4000 io).map (·.all p)
-
-/-- `bracket(a0.flatMap(markA 77))(use)(_ => IO.delay(emit 88) *> IO.unit)` under `parent`. -/
-def relProg (a0 use : Nat) : IO :=
-  parent (bracketIO (.ext (.pair (.nat 50) (.nat a0))) (uid 0 [.nat use]) (uid 6 []))
-
-def relOK (o : Obs) : Bool := o.out.count (.nat 88) == o.out.count (.nat 77)
-
-theorem rel_6_9 : allObs (relProg 6 9) relOK = some true := by decide +kernel
-theorem rel_6_2 : allObs (relProg 6 2) relOK = some true := by decide +kernel
-theorem rel_6_1 : allObs (relProg 6 1) relOK = some true := by decide +kernel
-theorem rel_9_6 : allObs (relProg 9 6) relOK = some true := by decide +kernel
-theorem rel_1_6 : allObs (relProg 1 6) relOK = some true := by decide +kernel
-theorem rel_2_6 : allObs (relProg 2 6) relOK = some true := by decide +kernel
-
-/-- Wrong-function test: a `bracket` that never runs release (`acquire.flatMap(use)`). -/
-theorem rel_wrongFunction :
-    allObs (parent (.flatMap (progOf (.pair (.nat 50) (.nat 6))) (.user (uid 0 [.nat 9])))) relOK = some false := by
-  decide +kernel
-
-def finOK (o : Obs) : Bool := o.out.count (.nat 88) ≤ 1 && o.out.count (.nat 77) ≤ o.out.count (.nat 88)
-
-/-- `guarantee(IO.delay(emit 77) *> progOf c)(IO.delay(emit 88) *> IO.unit)` under `parent`. -/
-def finProg (c : Nat) : IO := parent (guaranteeIO (.ext (.pair (.nat 51) (.nat c))) (.ext (.nat 10)))
-
-theorem fin_9 : allObs (finProg 9) finOK = some true := by decide +kernel
-theorem fin_2 : allObs (finProg 2) finOK = some true := by decide +kernel
-theorem fin_5 : allObs (finProg 5) finOK = some true := by decide +kernel
 
 end CatsEffectInLean.Proofs.Phase6.BracketSmoke

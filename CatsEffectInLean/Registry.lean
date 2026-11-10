@@ -197,7 +197,7 @@ def registry : List Entry := [
     status := .«open»
     note := "Invariant (decision 50): bracket in a child fiber that the parent cancels at any \
       point and joins; release runs exactly once iff acquire completed, every use outcome, all \
-      schedules. Smoke-tested (rel_*; rel_wrongFunction). Open: a universal proof needs an \
+      schedules. Smoke-tested by #guard (test/Phase6/BracketSmokeParent.lean: rel_*, wrong function). Open: a universal proof needs an \
       invariant on scheduler states (the onCancel release is on the finalizer stack iff the \
       acquire marker was emitted and the release marker not)." },
   { id := "core.IO.guarantee.finalizerOnce"
@@ -205,7 +205,7 @@ def registry : List Entry := [
     prop := ``Props.Phase6.Bracket.guaranteeFinalizerOnce
     status := .«open»
     note := "Invariant: guarantee in a child fiber that the parent cancels and joins; the \
-      finalizer runs at most once, and it runs if fa started. Smoke-tested (fin_*). Open: same \
+      finalizer runs at most once, and it runs if fa started. Smoke-tested by #guard (test/Phase6/BracketSmokeParent.lean). Open: same \
       missing state invariant as core.IO.bracket.releaseOnce." }
 ]
 
