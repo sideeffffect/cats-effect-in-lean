@@ -175,3 +175,7 @@
 
 ## [2026-11-10] ingest | Decisions 53-54 (satisfiability witness, harness-only markers)
 - Updated: Agent workflow
+
+## [2026-11-10] ingest | Review batch 5 (4 track Res entries; 3 HOLLOW)
+- Updated: Agent workflow (review log: CE-0020 HOLLOW as registered, bug real; use.releaseOnce and flatMap.releaseOrder HOLLOW; eval.preservesCancelable FAITHFUL; UserMarkersOnly forgeable through library closures)
+- Raw: raw/project-decisions/2026-11-10-review-batch-5-notes.md
