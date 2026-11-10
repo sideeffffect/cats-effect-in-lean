@@ -157,3 +157,6 @@
 - Created: memoize model and CE-0030
 - Updated: Bug history (CE-0030, memoize issue history), Difftest program format (ops `memoize`, `memoGet`; `Deferred` and memo handle renumbering)
 - Raw: raw/cats-effect/2026-11-10-memoize-track-m-notes.md
+
+## [2026-11-10] ingest | Phase 6 merge notes (orchestration)
+- Updated: Agent workflow (orchestration)
