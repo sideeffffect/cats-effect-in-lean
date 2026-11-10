@@ -583,7 +583,7 @@ class Gen:
                     stop = {'op': 'raise', 'code': self.code()} if f == 'raise' else {'op': 'canceled'}
                     k = {'op': 'rFlatMap', 'res': {'op': 'rEval', 'e': stop if f == 'raise' else
                                                    {'op': 'seq', 'ps': [stop, {'op': 'pure', 'v': {'t': 'unit'}}]}},
-                         'x': self.fresh('x', kenv), 'k': k}
+                         'x': self.fresh('x'), 'k': k}
                 # often a `make` first: its release runs when the rest fails
                 first = self.res_make(s, env, sa, ctx) if self.r.random() < 0.5 else self.g_res(s, env, sa, ctx)
                 return {'op': 'rFlatMap', 'res': first, 'x': x, 'k': k}

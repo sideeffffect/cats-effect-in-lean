@@ -716,7 +716,7 @@ def main(argv=None):
     r.add_argument('--max-shrink', type=int, default=5)
     r.add_argument('--json')
     r.add_argument('--allow-known-model-bugs', action='store_true',
-                   help='do not fail on the bin known-model-bug (it is still printed); CI does not use it')
+                   help='do not fail on the bin known-model-bug (it is still printed); CI uses it, the corpus pins each known bug')
 
     c = sub.add_parser('scala-check')
     c.add_argument('--seeds', type=int, nargs='+', default=[1, 2, 3])
