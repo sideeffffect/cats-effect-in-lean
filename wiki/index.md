@@ -7,7 +7,7 @@ How this project works: synthesis, agent loop, difftest design. Start here.
 | Article | Summary | Updated |
 |---------|---------|---------|
 | [Lessons for Cats Effect in Lean](methodology/lessons-for-cats-effect.md) | Top-level synthesis: what to copy, what is new for CE, order of work | 2026-11-10 |
-| [Agent workflow and review protocol](methodology/agent-workflow.md) | Inventory → mirror → difftest → prove/refute → review; rubric; bug records | 2026-11-10 |
+| [Agent workflow and review protocol](methodology/agent-workflow.md) | Inventory → mirror → difftest → prove/refute → review; rubric; bug records; no upstream filing | 2026-11-10 |
 | [Differential testing](methodology/differential-testing.md) | Planned Lean-vs-CE difftest harness, nondeterminism handling, triage bins | 2026-11-10 |
 
 ## cats-effect
@@ -35,7 +35,7 @@ Lean 4 toolchain facts and proof hygiene.
 
 | Article | Summary | Updated |
 |---------|---------|---------|
-| [Lean v4.35.0 toolchain](lean/toolchain-v4-35.md) | lake check, vcgen, native_decide axioms, recursion styles, env gotchas | 2026-11-10 |
+| [Lean v4.35.0 toolchain](lean/toolchain-v4-35.md) | lake check (+ bwrap/AppArmor failure), vcgen, native_decide axioms, recursion styles | 2026-11-10 |
 | [Proof hygiene and agent tooling](lean/proof-hygiene-and-agent-tooling.md) | Forbidden tactics, axiom audit, CI gates, lean-lsp-mcp, lean4-skills, Plausible | 2026-11-10 |
 
 ## precedents

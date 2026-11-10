@@ -1,7 +1,7 @@
 # Lean v4.35.0 toolchain facts
 
 > Sources: Lean FRO release notes, 2026-10-12; Lean reference manual (recursive definitions, tactics); local experiments, 2026-11-10
-> Raw: [v4.35.0 release notes](../../raw/lean-tooling/2026-10-12-lean-v4-35-0-release-notes.md); [v4.29–v4.34 highlights](../../raw/lean-tooling/lean-v4-29-to-v4-34-release-highlights.md); [Recursive definitions](../../raw/lean-tooling/lean-reference-recursive-definitions.md); [decide / cbv / vcgen](../../raw/lean-tooling/lean-reference-tactics-decide-cbv-vcgen.md); [Local experiments](../../raw/lean-tooling/2026-11-10-local-experiments-lean-v4-35-0.md)
+> Raw: [lake check bwrap note](../../raw/lean-tooling/2026-11-10-lake-check-bwrap-apparmor-note.md); [v4.35.0 release notes](../../raw/lean-tooling/2026-10-12-lean-v4-35-0-release-notes.md); [v4.29–v4.34 highlights](../../raw/lean-tooling/lean-v4-29-to-v4-34-release-highlights.md); [Recursive definitions](../../raw/lean-tooling/lean-reference-recursive-definitions.md); [decide / cbv / vcgen](../../raw/lean-tooling/lean-reference-tactics-decide-cbv-vcgen.md); [Local experiments](../../raw/lean-tooling/2026-11-10-local-experiments-lean-v4-35-0.md)
 
 ## Overview
 
@@ -27,7 +27,9 @@ The project uses `leanprover/lean4:v4.35.0` (latest stable, 2026-10-12; v4.36.0-
 ## Environment gotchas (this machine)
 
 - `lean`/`lake` are only in `~/.elan/bin`, not on PATH in non-login bash.
-- `lake check` fails with `bwrap: setting up uid map: Permission denied` (Ubuntu 24.04 AppArmor `apparmor_restrict_unprivileged_userns=1`). `lake check --inadvisably-no-sandbox` works. GitHub ubuntu-24.04 runners may have the same issue (unverified).
+- `lake check` fails with `bwrap: setting up uid map: Permission denied`. Cause: Ubuntu's `kernel.apparmor_restrict_unprivileged_userns=1` gives a new user namespace no capabilities unless an AppArmor profile grants `userns`; `/usr/bin/bwrap` is not setuid and has no such profile. `unshare -Ur id` fails the same way.
+- Why it matters: `lake check` builds the project inside a bwrap sandbox (read-only `/`, home hidden, only `.lake` writable, no network during build). Lean runs arbitrary code at build time (macros, `#eval`, `initialize`), so without the sandbox, agent-written code could tamper with the check. `--inadvisably-no-sandbox` works but "can compromise the result fully".
+- Fixes (need sudo, none applied): an AppArmor profile granting `userns` to bwrap (narrowest); setuid bwrap; disable the sysctl globally (least preferred); or run `lake check` in CI/a VM where user namespaces work. GitHub ubuntu-24.04 runners: unverified.
 
 ## Pitfalls
 

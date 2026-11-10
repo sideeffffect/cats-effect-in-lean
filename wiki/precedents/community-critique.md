@@ -31,8 +31,7 @@ Public discussion is still small (HN 50435105 had 9 comments; no Reddit/Lobsters
 
 - Every claimed bug needs a Scala reproducer on v3.7.1 (and a check on `series/3.x`).
 - Keep a `maybe_intended` field and a QUESTIONS file with maintainer rulings; CE has deliberate, subtle semantics (e.g. #4488 "as designed").
-- Ask Typelevel maintainers how they want reports *before* filing; file few, human-read reports; prefer PRs for trivial fixes; send security issues privately.
-- Agents never write to GitHub (issues, PRs, comments).
+- Maintainer burden is avoided by project decision (user, 2026-11-10): never open bugs, PRs or comments in any repository other than this one. Bug records stay in this repo. See [Agent workflow](../methodology/agent-workflow.md).
 
 ## See Also
 

@@ -17,7 +17,7 @@ The top-level synthesis. Read this first before planning formalization work. Con
 6. **Independent read-only review** with MIRROR/PROPERTY/SETTLED + wrong-function test.
 7. **Mechanical gates**: forbidden tactics/axioms grep, exact `prop`/`¬prop` audit, axiom allowlist, CI.
 8. **Fewer, deeper properties.** Breadth-first failed in both projects.
-9. **Careful upstream etiquette**: human-read reports, few at a time, ask Typelevel first, PRs for trivial fixes, security privately, agents never write to GitHub.
+9. **No upstream filing** (user decision, 2026-11-10): never open bugs, PRs or comments in any repository other than this one. Bug records stay in this repo.
 
 ## What is new for CE (no precedent covers it fully)
 
@@ -45,7 +45,7 @@ Inventory coverage (reviewed FAITHFUL / in scope), difftest case counts and seed
 - Model the real IOFiber (mask counter) or the spec (mask ids)? Probably both.
 - Can TestControl replay a Lean-chosen schedule?
 - Safety only, or fairness/liveness too?
-- How do Typelevel maintainers want reports? (Not asked yet.)
+- (Resolved 2026-11-10: no upstream filing; bug records stay in this repo.)
 - Compute budget: python-formalization needed a 512 GB build machine at 613k lines.
 
 ## See Also

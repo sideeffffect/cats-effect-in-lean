@@ -135,11 +135,11 @@ For an excluded row, check that the reason truly applies.
 - If only an exotic input refutes a property, also state and settle the property for ordinary inputs.
 - Be honest in `likelihood` and `maybe_intended`. Do not inflate priority.
 
-### GitHub is read-only for agents
+### Never open bugs outside this repository
 
-- NEVER create, comment on, or react to issues or pull requests in other repositories, and never contact anyone.
-- Read-only `gh` commands (`gh search`, `gh issue view`, `gh api` GET) are allowed. Record your duplicate searches.
-- A human reads every report before it is filed upstream.
+- NEVER open issues or pull requests, write comments, or add reactions in any repository other than this one (`sideeffffect/cats-effect-in-lean`). This includes `typelevel/cats-effect`. Never contact anyone.
+- All bug records stay in this repository.
+- Read-only `gh` commands on other repositories (`gh search`, `gh issue view`, `gh api` GET) are allowed. Record your duplicate searches.
 
 ## Git
 

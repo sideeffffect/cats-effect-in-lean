@@ -1,7 +1,7 @@
 # Agent workflow and review protocol
 
 > Sources: synthesized from python-formalization AGENTS.md / REVIEW_PROMPT.md and julia-in-lean ARCHITECTURE.md / review prompts (2026-10..11)
-> Raw: [python AGENTS.md](../../raw/python-formalization/2026-11-09-agents-md-current.md); [python REVIEW_PROMPT.md](../../raw/python-formalization/2026-11-01-review-prompt.md); [python orchestration scripts](../../raw/python-formalization/2026-11-05-orchestration-scripts.md); [julia ARCHITECTURE.md](../../raw/julia-formalization/2026-11-07-julia-base-architecture.md); [julia coverage review prompt](../../raw/julia-formalization/2026-10-29-julia-base-coverage-review-prompt.md); [julia memsafety review prompt](../../raw/julia-formalization/2026-10-29-julia-base-memsafety-review-prompt.md)
+> Raw: [User decision: no bugs outside this repo](../../raw/project-decisions/2026-11-10-no-bugs-outside-this-repo.md); [python AGENTS.md](../../raw/python-formalization/2026-11-09-agents-md-current.md); [python REVIEW_PROMPT.md](../../raw/python-formalization/2026-11-01-review-prompt.md); [python orchestration scripts](../../raw/python-formalization/2026-11-05-orchestration-scripts.md); [julia ARCHITECTURE.md](../../raw/julia-formalization/2026-11-07-julia-base-architecture.md); [julia coverage review prompt](../../raw/julia-formalization/2026-10-29-julia-base-coverage-review-prompt.md); [julia memsafety review prompt](../../raw/julia-formalization/2026-10-29-julia-base-memsafety-review-prompt.md)
 
 ## Overview
 
@@ -37,7 +37,7 @@ Breadth-first thin properties (<50% survived review); success-path-only models; 
 - One YAML per defect: id, title, priority, kind, area, files, functions, summary, likelihood, `maybe_intended`, reproducer, output per version, expected, `promised_by`, cause, possible_fix, duplicates (with recorded search queries), lean property/theorem.
 - Exotic-input rule: also state the ordinary-case property.
 - Flip on fix: after an upstream fix, re-mirror and prove the *same* statement.
-- **Agents never write to GitHub** (issues, PRs, comments, reactions). Read-only `gh` is fine. A human reads every report before filing; group related findings; ask maintainers first how they want reports.
+- **Project decision (user, 2026-11-10): never open bugs, PRs, comments or reactions in any repository other than this one** (including `typelevel/cats-effect`). Bug records stay in this repo. Read-only `gh` on other repos is fine. (The precedents filed upstream after human review; we do not.)
 
 ## Orchestration (python-formalization)
 
