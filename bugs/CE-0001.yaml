@@ -90,3 +90,4 @@ lean:
   registry: core.IO.syncStep.syncStepIdentitySyncIO
   counterexample: "reproducer case 4: IO.uncancelable(_ => IO.canceled *> flag.set(true)), limit Int.MaxValue; direct Succeeded(()) with flag = true; stepped Canceled with flag = false"
   model: CatsEffectInLean/Model/SyncIO.lean (SyncIO run loop), CatsEffectInLean/Model/SyncStep.lean (SyncStep.interpret, G = SyncIO)
+  statement: "step-only schedules of the single-fiber driver (no external cancel, decision 26); hypothesis WellFormed (decision 27), and the witness is proven well-formed (cx_wellFormed). Re-run 2026-11-10: REPRODUCED CE-0001 on 3.7.1 (4 / 4 cases differ)."

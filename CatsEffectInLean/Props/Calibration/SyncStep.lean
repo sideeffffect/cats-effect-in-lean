@@ -30,8 +30,15 @@ the law for that method.
 * "stepped" = `fa.syncStep(limit).unsafeRunSync()`, then the selected `IO`
   (`SyncStepObs.steppedObs`); "direct" = `fa` (`SyncStepObs.directObs`). Both `IO` runs are the
   root fiber of the single-fiber driver (`IOFiber` mirror, `counterMaskModel`, default
-  config), under a schedule `cs : List SoloChoice`. A schedule picks the `observe` flag of
-  each step and the points where another fiber cancels the root (external cancel).
+  config), under a schedule `steps bs`: only `step` choices; `bs` picks the `observe` flag of
+  each step. No external cancel (decision 26): the law compares two programs that run alone
+  (decision 22), and with an external cancel a correct `syncStep` also fails the statement
+  (a cancel before `run()` stops `fa`, but the `SyncIO` prefix of the stepped side already
+  ran; `review/2026-11-10-review-batch-1.md`, entry 5). Cancelation from the program itself
+  (`IO.canceled`) stays.
+* The single-fiber driver is enough here (decision 23): `syncStep` is a single-fiber method,
+  and the witness starts no fiber. Limit: a child that `fa` starts never runs, so for a
+  program with `start` the driver can show `suspended` where the real runtime goes on.
 * `<->`: same observations over all schedules, both ways. An observation is
   (summary, `Ref` cells, emitted values). For each run of one side that makes a claim (not
   out of fuel, not a model abort), some run of the other side gives the same observation.
@@ -55,16 +62,22 @@ program starts there are no fibers, `Deferred`s, polls or callbacks of it). -/
 def initialRefsOK (refs : List Val) : Bool :=
   refs.all fun x => x.handles.all fun h => (refHandles refs).contains h
 
+/-- A schedule of the single-fiber driver with no external cancel: one `step` choice per
+`observe` flag. -/
+def steps (bs : List Bool) : List SoloChoice := bs.map .step
+
 /-- `AsyncLaws.syncStepIdentity` (`AsyncLaws.scala:84-88`) for `IO#syncStep` with
-`G = SyncIO`: the stepped program and `fa` have the same observations over all schedules. -/
+`G = SyncIO`: the stepped program and `fa` have the same observations over all schedules
+without an external cancel. -/
 def syncStepIdentitySyncIO : Prop :=
   ∀ (env : UserEnv) (fa : IO) (limit : Int) (refs : List Val),
     initialRefsOK refs = true →
     WellFormed (fun _ => false) (refHandles refs) env fa →
-    (∀ cs : List SoloChoice, isClaim (directObs env fa refs cs).1 = true →
-      ∃ (fuel : Nat) (cs' : List SoloChoice),
-        steppedObs env fa limit refs fuel cs' = directObs env fa refs cs) ∧
-    (∀ (fuel : Nat) (cs : List SoloChoice), isClaim (steppedObs env fa limit refs fuel cs).1 = true →
-      ∃ cs' : List SoloChoice, directObs env fa refs cs' = steppedObs env fa limit refs fuel cs)
+    (∀ bs : List Bool, isClaim (directObs env fa refs (steps bs)).1 = true →
+      ∃ (fuel : Nat) (bs' : List Bool),
+        steppedObs env fa limit refs fuel (steps bs') = directObs env fa refs (steps bs)) ∧
+    (∀ (fuel : Nat) (bs : List Bool),
+      isClaim (steppedObs env fa limit refs fuel (steps bs)).1 = true →
+      ∃ bs' : List Bool, directObs env fa refs (steps bs') = steppedObs env fa limit refs fuel (steps bs))
 
 end CatsEffectInLean.Props.Calibration

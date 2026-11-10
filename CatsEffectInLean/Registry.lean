@@ -87,22 +87,15 @@ def registry : List Entry := [
       emit. Scala code cannot name the root fiber; decide if env must be restricted." },
   { id := "core.IO.syncStep.syncStepIdentitySyncIO"
     rows := ["core.IO.syncStep#2", "core.IO.IOAsync.syncStep", "core.SyncStep.MaxSteps",
-      "core.SyncStep.interpret#2", "core.SyncIO.unsafeRunSync",
-      "core.SyncIO.tag.Pure", "core.SyncIO.tag.Suspend", "core.SyncIO.tag.Error",
-      "core.SyncIO.tag.Map", "core.SyncIO.tag.FlatMap", "core.SyncIO.tag.HandleErrorWith",
-      "core.SyncIO.tag.Success", "core.SyncIO.tag.Failure", "core.SyncIO.tag.Attempt",
-      "core.SyncIO.tag.RealTime", "core.SyncIO.tag.Monotonic",
-      "core.SyncIO.runLoop.Pure", "core.SyncIO.runLoop.Suspend", "core.SyncIO.runLoop.Error",
-      "core.SyncIO.runLoop.Map", "core.SyncIO.runLoop.FlatMap",
-      "core.SyncIO.runLoop.HandleErrorWith", "core.SyncIO.runLoop.Success",
-      "core.SyncIO.runLoop.Failure", "core.SyncIO.runLoop.Attempt",
-      "core.SyncIO.runLoop.RealTime", "core.SyncIO.runLoop.Monotonic"]
+      "core.SyncStep.interpret#2", "core.SyncIO.unsafeRunSync"]
     prop := ``Props.Calibration.syncStepIdentitySyncIO
     status := .refuted
     thm := some ``Proofs.Calibration.syncStepIdentitySyncIO_refuted
     bug := some "bugs/CE-0001.yaml"
-    note := "AsyncLaws.syncStepIdentity for IO#syncStep with G = SyncIO; counterexample = \
-      case 4 of reproducers/CE-0001 (IO.uncancelable(_ => IO.canceled *> flag.set(true)))." },
+    note := "AsyncLaws.syncStepIdentity for IO#syncStep with G = SyncIO, single-fiber driver, \
+      step-only schedules (no external cancel, decision 26), WellFormed fa/env; counterexample = \
+      case 4 of reproducers/CE-0001 (IO.uncancelable(_ => IO.canceled *> flag.set(true))). \
+      Rows: only those the witness exercises; the SyncIO run-loop rows went back to todo." },
   { id := "kernel.Resource.eval.preservesUncancelable"
     rows := ["kernel.Resource.eval", "kernel.Resource.allocatedCase", "kernel.Resource.pure"]
     prop := ``Props.Calibration.resourceEvalPreservesUncancelable

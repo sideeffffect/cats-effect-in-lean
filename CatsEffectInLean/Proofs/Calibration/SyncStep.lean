@@ -19,9 +19,10 @@ IO.uncancelable(_ => IO.canceled *> flag.set(true))     // limit = Int.MaxValue
 Proof. The direct run under 6 `step true` choices gives `(Succeeded(()), [true], [])`. For the
 stepped side, each `SyncIO` fuel below 6 gives "out of fuel", and each fuel `m + 6` gives the
 same rest (`rfl` with a free `m`). The rest starts in state `s0`. The set `reach` of 10 states
-is closed under all choices (`step true`, `step false`, `cancel c` for each `c`; a `cancel` on
-a fiber that is not suspended does not read `c`), and no state in it shows the direct
-observation. So no schedule of the stepped side gives it.
+is closed under all choices (`step true`, `step false`, and also `cancel c` for each `c`; a
+`cancel` on a fiber that is not suspended does not read `c`), and no state in it shows the
+direct observation. So no schedule of the stepped side gives it. The property has only `step`
+schedules (decision 26); the closure under `cancel` is more than the proof needs.
 
 Wrong-function test: a `syncStep` that keeps the mask (upstream fix PR #4700) gives the rest
 `IO.uncancelable(_ => IO.canceled *> ...)`, which shows the direct observation; the proof then
@@ -191,10 +192,11 @@ theorem cx_wellFormed : WellFormed (fun _ => false) (refHandles cxRefs) cxEnv cx
 /-- CE-0001: `syncStepIdentity` fails for `IO#syncStep` with `G = SyncIO`. -/
 theorem syncStepIdentitySyncIO_refuted : ¬ syncStepIdentitySyncIO := by
   intro h
-  obtain ⟨fuel, cs', heq⟩ :=
-    (h cxEnv cxFa cxLimit cxRefs (by decide) cx_wellFormed).1 (List.replicate 6 (.step true))
+  obtain ⟨fuel, bs', heq⟩ :=
+    (h cxEnv cxFa cxLimit cxRefs (by decide) cx_wellFormed).1 (List.replicate 6 true)
       (by decide +kernel)
-  rw [direct_run] at heq
-  exact stepped_ne fuel cs' heq
+  rw [show steps (List.replicate 6 true) = List.replicate 6 (.step true) from rfl,
+    direct_run] at heq
+  exact stepped_ne fuel (steps bs') heq
 
 end CatsEffectInLean.Proofs.Calibration
