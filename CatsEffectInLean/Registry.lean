@@ -8,6 +8,8 @@ import CatsEffectInLean.Props.Calibration.QueueTimeout
 import CatsEffectInLean.Proofs.Calibration.QueueTimeout
 import CatsEffectInLean.Props.Calibration.FatalRaise
 import CatsEffectInLean.Proofs.Calibration.FatalRaise
+import CatsEffectInLean.Props.Phase6.Bracket
+import CatsEffectInLean.Proofs.Phase6.BracketFullTwin
 
 /-!
 # Property registry
@@ -157,7 +159,54 @@ def registry : List Entry := [
     note := "Ordinary inputs of CE-0004 (AGENTS.md section 6). Proven only for the bounded \
       domain e in {nonFatal 0, interrupted 0} (Proofs.Calibration.FatalRaise.v371_nonFatal). \
       A proof for all codes needs a lemma that runs do not depend on the error code (decide \
-      cannot check a free code)." }
+      cannot check a free code)." },
+  -- Phase 6, track G (guarantee, bracket*)
+  { id := "core.IO.bracketFull.kernelDefaultTwin"
+    rows := ["core.IO.bracketFull", "core.IO.IOAsync.bracketFull", "kernel.MonadCancel.bracketFull"]
+    prop := ``Props.Phase6.Bracket.bracketFullIsKernelDefault
+    status := .refuted
+    thm := some ``Proofs.Phase6.bracketFullIsKernelDefault_refuted
+    bug := some "bugs/CE-0005.yaml"
+    note := "Twin: IO.bracketFull (IO.scala:1826-1830) <-> kernel MonadCancel#bracketFull body \
+      (K/MonadCancel.scala:447-456) with the IO operations, EqvP, all user functions. \
+      Counterexample: acquire = IO.canceled, use throws E5: IO {Errored(E5)} (use(a) is called \
+      inside IO.defer before poll unmasks) vs kernel {Canceled}. Reproducer cases A/B (parent \
+      cancel). Fixed twin poll(IO.defer(use(a))) agrees with the kernel body on 8 programs \
+      (Proofs/Phase6/BracketFullFixed.lean)." },
+  { id := "core.IO.bracketFull.kernelDefaultTwin.pureUse"
+    rows := ["core.IO.bracketFull", "core.IO.IOAsync.bracketFull", "kernel.MonadCancel.bracketFull"]
+    prop := ``Props.Phase6.Bracket.bracketFullIsKernelDefaultPureUse
+    status := .«open»
+    note := "Ordinary inputs of CE-0005: use is pure (no effect, no throw when called). \
+      Smoke-tested (Proofs/Phase6/BracketSmoke.lean, twin_pure_*). A proof for all programs needs \
+      a simulation between the two runs: same states up to the closure ids of the two bodies and \
+      one extra run-loop iteration, preserved by Sched.tickP over all of Step.lean." },
+  { id := "laws.MonadCancelLaws.guaranteeIsGuaranteeCase.IO"
+    rows := ["laws.MonadCancelLaws.guaranteeIsGuaranteeCase", "core.IO.guarantee", "core.IO.guaranteeCase",
+      "core.IO.IOAsync.guarantee", "core.IO.IOAsync.guaranteeCase"]
+    prop := ``Props.Phase6.Bracket.guaranteeIsGuaranteeCase
+    status := .«open»
+    note := "Law L/MonadCancelLaws.scala:28-29 at IO: IO#guarantee (IO.scala:496-501) vs \
+      IO#guaranteeCase(_ => fin) (IO.scala:523-530), EqvP, all fa, fin. Believed true: same \
+      structure, both report finalizer errors in the error case. Smoke-tested on 14 pairs \
+      (law_*); a guarantee that never runs fin breaks it (law_wrongFunction). Open: needs a \
+      simulation proof over Step/SchedP for arbitrary fa (closure ids differ, extra user call)." },
+  { id := "core.IO.bracket.releaseOnce"
+    rows := ["core.IO.bracket", "core.IO.bracketCase", "core.IO.bracketFull", "kernel.MonadCancel.bracket"]
+    prop := ``Props.Phase6.Bracket.bracketReleaseOnce
+    status := .«open»
+    note := "Invariant (decision 50): bracket in a child fiber that the parent cancels at any \
+      point and joins; release runs exactly once iff acquire completed, every use outcome, all \
+      schedules. Smoke-tested (rel_*; rel_wrongFunction). Open: a universal proof needs an \
+      invariant on scheduler states (the onCancel release is on the finalizer stack iff the \
+      acquire marker was emitted and the release marker not)." },
+  { id := "core.IO.guarantee.finalizerOnce"
+    rows := ["core.IO.guarantee", "kernel.MonadCancel.guarantee"]
+    prop := ``Props.Phase6.Bracket.guaranteeFinalizerOnce
+    status := .«open»
+    note := "Invariant: guarantee in a child fiber that the parent cancels and joins; the \
+      finalizer runs at most once, and it runs if fa started. Smoke-tested (fin_*). Open: same \
+      missing state invariant as core.IO.bracket.releaseOnce." }
 ]
 
 end CatsEffectInLean

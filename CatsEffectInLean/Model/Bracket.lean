@@ -112,6 +112,9 @@ inductive Src where
   | deferUse (use : Nat) (a : Val) (m p : Nat)
   /-- `poll(unit >> use(a))` of the kernel `bracketFull` (`K/MonadCancel.scala:454`). -/
   | pollUnitThen (use : Nat) (a : Val) (m p : Nat)
+  /-- Not Cats Effect code: `poll(IO.defer(use(a)))` of the fixed twin `fixedBracketFullIO`
+  (decision 39, CE-0005). -/
+  | pollDefer (use : Nat) (a : Val) (m p : Nat)
   deriving DecidableEq, Repr
 
 /-- The code of a source. -/
@@ -119,6 +122,7 @@ def Src.toVal : Src → Val
   | .ext s => .left s
   | .deferUse use a m p => .right (cloVal ns 100 [.nat use, a, .poll m p])
   | .pollUnitThen use a m p => .right (cloVal ns 101 [.nat use, a, .poll m p])
+  | .pollDefer use a m p => .right (cloVal ns 102 [.nat use, a, .poll m p])
 
 /-- The inverse of `Src.toVal`. -/
 def Src.ofVal : Val → Option Src
@@ -127,6 +131,7 @@ def Src.ofVal : Val → Option Src
     match ofCloVal c with
     | some (k, 100, [.nat use, a, .poll m p]) => if k == ns then some (.deferUse use a m p) else none
     | some (k, 101, [.nat use, a, .poll m p]) => if k == ns then some (.pollUnitThen use a m p) else none
+    | some (k, 102, [.nat use, a, .poll m p]) => if k == ns then some (.pollDefer use a m p) else none
     | _ => none
   | _ => none
 
@@ -191,6 +196,10 @@ inductive BLam where
   | dbfK (use rel m p : Nat)
   /-- `_ => use(a)` of `unit >> use(a)` (`cats/syntax/flatMap.scala:54`). -/
   | thenUse (use : Nat) (a : Val)
+  /-- Not Cats Effect code (fixed twin, decision 39): `poll => acquire(poll).flatMap { ... }`. -/
+  | fbfBody (acq use rel : Nat)
+  /-- Not Cats Effect code (fixed twin): `a => poll(IO.defer(use(a))).guaranteeCase(release(a, _))`. -/
+  | fbfK (use rel m p : Nat)
   deriving DecidableEq, Repr
 
 /-- The closure value (`Codec.cloVal`, namespace `ns`). `poll` values are captured as handle
@@ -222,6 +231,8 @@ def BLam.toVal : BLam → Val
   | .dbfBody acq use rel => cloVal ns 23 [.nat acq, .nat use, .nat rel]
   | .dbfK use rel m p => cloVal ns 24 [.nat use, .nat rel, .poll m p]
   | .thenUse use a => cloVal ns 25 [.nat use, a]
+  | .fbfBody acq use rel => cloVal ns 26 [.nat acq, .nat use, .nat rel]
+  | .fbfK use rel m p => cloVal ns 27 [.nat use, .nat rel, .poll m p]
 
 /-- The inverse of `BLam.toVal` on the tag and the fields (namespace already checked). -/
 def BLam.ofFields : Nat → List Val → Option BLam
@@ -251,6 +262,8 @@ def BLam.ofFields : Nat → List Val → Option BLam
   | 23, [.nat acq, .nat use, .nat rel] => some (.dbfBody acq use rel)
   | 24, [.nat use, .nat rel, .poll m p] => some (.dbfK use rel m p)
   | 25, [.nat use, a] => some (.thenUse use a)
+  | 26, [.nat acq, .nat use, .nat rel] => some (.fbfBody acq use rel)
+  | 27, [.nat use, .nat rel, .poll m p] => some (.fbfK use rel m p)
   | _, _ => none
 
 /-- The closure id (odd, `Codec.libFn`). -/
@@ -297,6 +310,11 @@ def defaultGuaranteeIO (src fin : Src) : IO := guaranteeCaseIO src (BLam.constFi
 /-- Kernel `bracketFull` with the `IO` operations (`K/MonadCancel.scala:447-456`). -/
 def defaultBracketFullIO (acq use rel : Nat) : IO := .uncancelable (BLam.dbfBody acq use rel).fn
 
+/-- Not Cats Effect code. The fixed twin of `IO.bracketFull` (decision 39, CE-0005):
+`IO.uncancelable { poll => acquire(poll).flatMap { a => poll(IO.defer(use(a))).guaranteeCase(release(a, _)) } }`.
+`use(a)` runs after the unmask, as in the kernel default. -/
+def fixedBracketFullIO (acq use rel : Nat) : IO := .uncancelable (BLam.fbfBody acq use rel).fn
+
 /-- The `IO` of a source. -/
 def srcIO (ioOf : Val → IO) (c : Val) : IO :=
   match Src.ofVal c with
@@ -305,6 +323,9 @@ def srcIO (ioOf : Val → IO) (c : Val) : IO :=
   | some (.deferUse use a m p) => .flatMap (.delay BLam.deferThunk.fn) (BLam.deferEv use a m p).fn
   -- `poll(unit >> use(a))` = `UnmaskRunLoop(FlatMap(Pure(()), _ => use(a)))`
   | some (.pollUnitThen use a m p) => IO.applyPoll (.flatMap (.pure .unit) (BLam.thenUse use a).fn) m p
+  -- `poll(IO.defer(use(a)))`: `deferEv` with the identity poll (mask id 0), then the poll
+  | some (.pollDefer use a m p) =>
+    IO.applyPoll (.flatMap (.delay BLam.deferThunk.fn) (BLam.deferEv use a 0 0).fn) m p
   | none => .error { code := 999999, kind := .fatal }
 
 /-! ## The closures -/
@@ -434,6 +455,11 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (l : BLa
   -- `guaranteeCase(poll(unit >> use(a)))(release(a, _))`
   | .dbfK use rel m p => prog (guaranteeCaseIO (.pollUnitThen use arg m p) (BLam.relA rel arg).id)
   | .thenUse use a => callFn uc ioOf use a v
+  | .fbfBody acq use rel =>
+    match arg with
+    | .poll m p => andThen (callFn uc ioOf acq (.poll m p) v) fun ia => .flatMap ia (BLam.fbfK use rel m p).fn
+    | _ => illTyped
+  | .fbfK use rel m p => prog (guaranteeCaseIO (.pollDefer use arg m p) (BLam.relA rel arg).id)
 
 /-- A user function id: even (`Codec` convention, `WellFormed`). -/
 def userId (k : Nat) : Bool := k % 2 == 0
@@ -459,8 +485,8 @@ Every closure that the builders and `call` make has this form when the user func
 user ids. -/
 def BLam.good : BLam → Bool
   | .gcBody _ k | .gcOnError k | .gcTap k | .dgcBody _ k | .dgcOnError k | .dgcTap k => fnOK k
-  | .bfBody acq use rel | .dbfBody acq use rel => fnOK acq && fnOK use && leafOK rel
-  | .bfK use rel _ _ | .dbfK use rel _ _ => fnOK use && leafOK rel
+  | .bfBody acq use rel | .dbfBody acq use rel | .fbfBody acq use rel => fnOK acq && fnOK use && leafOK rel
+  | .bfK use rel _ _ | .dbfK use rel _ _ | .fbfK use rel _ _ => fnOK use && leafOK rel
   | .deferEv use _ _ _ | .thenUse use _ => fnOK use
   | .relA rel _ => leafOK rel
   | .dropOc rel => userId rel
@@ -529,7 +555,6 @@ theorem callFn_congr {k : Nat} (hk : fnOK k = true) (a : Val) (v : View) :
   rcases hof : BLam.ofId? k with _ | l
   · have hl : leafOK k = true := by
       unfold fnOK at hk; simpa [hof] using hk
-    simp only [hof]
     exact callLeaf_congr ioOf h hl a v
   · cases l
     case relA rel a' =>
@@ -537,12 +562,10 @@ theorem callFn_congr {k : Nat} (hk : fnOK k = true) (a : Val) (v : View) :
         unfold fnOK leafOK at hk
         simp [hof, BLam.odd_of_ofId? hof] at hk
         unfold leafOK; simpa [Bool.or_eq_true] using hk
-      simp only [hof]
       exact callLeaf_congr ioOf h hl _ v
     all_goals
       have hl : leafOK k = true := by
         unfold fnOK at hk; simpa [hof] using hk
-      simp only [hof]
       exact callLeaf_congr ioOf h hl a v
 
 theorem call_congr {l : BLam} (hl : l.good = true) (a : Val) (v : View) :

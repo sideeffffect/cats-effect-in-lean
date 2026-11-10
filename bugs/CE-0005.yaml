@@ -1,0 +1,89 @@
+id: CE-0005
+title: "IO.bracketFull calls `use` while a cancel is pending; a throwing `use` turns a canceled bracket into Errored (kernel bracketFull gives Canceled)"
+status: draft  # found in Phase 6 track G (2026-11-10); Lean refutation done, waits for review
+priority: low
+kind: twin-divergence
+area: core
+files:
+  - core/shared/src/main/scala/cats/effect/IO.scala:1826   # IO.bracketFull: IO.defer(poll(use(a))).guaranteeCase(...)
+  - core/shared/src/main/scala/cats/effect/IO.scala:2062   # IOAsync.bracketFull override -> IO.bracketFull
+  - core/shared/src/main/scala/cats/effect/IO.scala:338    # IO#bracket -> bracketCase
+  - core/shared/src/main/scala/cats/effect/IO.scala:370    # IO#bracketCase -> IO.bracketFull
+  - kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala:447  # kernel default: guaranteeCase(poll(unit >> use(a)))
+functions:
+  - IO.bracketFull
+  - IO#bracket / IO#bracketCase
+  - IO.asyncForIO.bracket / bracketCase / bracketFull
+summary: >
+  IO.bracketFull builds `IO.defer(poll(use(a)))`. The thunk calls `use(a)` while the fiber is
+  still masked; only the `poll` that it returns unmasks. The kernel default (the body that every
+  other MonadCancel instance uses) builds `poll(unit >> use(a))`: it unmasks first, so a pending
+  cancel is seen before `use(a)` is called. When a cancel is requested during acquire (by the
+  parent fiber, or by IO.canceled inside acquire), IO.bracketFull still calls `use(a)`. If `use`
+  throws, the throw becomes Errored(e): release gets Errored(e) and the fiber ends Errored(e).
+  The kernel body (and a one-line fix) gives release Canceled and the fiber ends Canceled. If
+  `use` has a side effect when it is called, IO runs it and the kernel body does not.
+likelihood: >
+  Low. It needs a cancel during acquire (common: a timeout or a parent cancel around a bracket)
+  and a `use` function that throws or has an effect when it is called (not common in pure code,
+  but Cats Effect handles a throwing `use` on purpose, see the kernel comment and issue #1535).
+  The visible effect is the outcome type (Errored instead of Canceled) and the outcome that
+  release sees.
+maybe_intended: >
+  Partly. PR #2126 (2021) reimplemented IO.bracketFull in terms of guaranteeCase for speed; the
+  defer-before-poll order looks like a performance choice, not a decision about this case. No
+  documentation says that IO and the kernel default may differ here. The kernel comment
+  (MonadCancel.scala:452-453) shows that throwing `use` functions are an expected input.
+reproducer: reproducers/CE-0005/Repro.scala
+output:
+  v3.7.1: |
+    A: acquire = IO.canceled, use throws
+      IO.bracketFull: outcome=Errored(java.lang.RuntimeException: boom), release got Errored(java.lang.RuntimeException: boom), use called=false
+      kernel default: outcome=Canceled(), release got Canceled(), use called=false
+      fixed twin    : outcome=Canceled(), release got Canceled(), use called=false
+    B: parent cancels during acquire, use throws
+      IO.bracketFull: outcome=Errored(java.lang.RuntimeException: boom), release got Errored(java.lang.RuntimeException: boom), use called=true
+      kernel default: outcome=Canceled(), release got Canceled(), use called=false
+      fixed twin    : outcome=Canceled(), release got Canceled(), use called=false
+    C: parent cancels during acquire, use has a side effect
+      IO.bracketFull: outcome=Canceled(), release got Canceled(), use called=true
+      kernel default: outcome=Canceled(), release got Canceled(), use called=false
+    REPRODUCED CE-0005
+  # series/3.x = 3.7.1-89-de84c01 (publishLocal, 2026-11-10): same output (IO.scala:1826-1830 unchanged)
+  series/3.x: |
+    (same lines as v3.7.1)
+    REPRODUCED CE-0005
+  # series/3.7.x = 3.7.1-15-2f94201 (publishLocal, 2026-11-10): same output
+  series/3.7.x: |
+    (same lines as v3.7.1)
+    REPRODUCED CE-0005
+  # Note: case A prints "use called=false" because it does not track the call (constant).
+expected: |
+  IO.bracketFull agrees with the kernel body: in A and B the outcome is Canceled() and release
+  gets Canceled(); in C `use` is not called. The last line is NOT REPRODUCED CE-0005.
+promised_by:
+  - "Twin (AGENTS.md section 3a): IO.asyncForIO overrides MonadCancel#bracketFull (IO.scala:2062-2064) with IO.bracketFull; the override must have the same meaning as the kernel body (K/MonadCancel.scala:447-456). The kernel comment (452-453): 'we need to lazily evaluate `use` so that uncaught exceptions are caught within the effect runtime'."
+  - "Scaladoc of IO#bracketCase / bracket (IO.scala:250-337): release gets the outcome of use; if the task is canceled, release runs with Canceled. Here `use` never runs as an effect; the fiber was canceled first."
+cause: >
+  IO.scala:1829: `IO.defer(poll(use(a)))` puts the call `use(a)` inside the masked region (the
+  `Delay` thunk runs before `poll` unmasks). The kernel default unmasks first:
+  `poll(unit >> use(a))` (MonadCancel.scala:454).
+possible_fix: >
+  `poll(IO.defer(use(a))).guaranteeCase(release(a, _))` in IO.bracketFull. The Lean fixed twin
+  (`Bracket.fixedBracketFullIO`) and the reproducer (`fixedBF`) agree with the kernel body on the
+  witness and on 7 more programs (Proofs/Phase6/BracketFullFixed.lean).
+duplicates:
+  upstream: []
+  related:
+    - "typelevel/cats-effect#1535 (closed, bug) Uncaught error within bracketFull: the throwing-use case that the kernel `unit >> use(a)` fixes; not this defect"
+    - "typelevel/cats-effect#2126 (merged PR) Reimplement IO#guaranteeCase and IO.bracketFull: introduced the current body"
+  queries:
+    - "gh search issues 'bracketFull' -R typelevel/cats-effect (2026-11-10): #4571, #3474, #2013, #1522, #1535; none is this defect"
+    - "gh search issues 'bracket use throws' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'bracket canceled acquire use' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search prs 'bracketFull' -R typelevel/cats-effect (2026-11-10): #4630, #2126, #2074, #1572, #959 and others; none changes the defer/poll order"
+lean:
+  property: CatsEffectInLean.Props.Phase6.Bracket.bracketFullIsKernelDefault
+  theorem: CatsEffectInLean.Proofs.Phase6.bracketFullIsKernelDefault_refuted
+  fixed_twin: CatsEffectInLean/Proofs/Phase6/BracketFullFixed.lean
+  ordinary_inputs: "CatsEffectInLean.Props.Phase6.Bracket.bracketFullIsKernelDefaultPureUse (open; smoke-tested in Proofs/Phase6/BracketSmoke.lean)"

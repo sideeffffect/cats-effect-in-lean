@@ -1164,7 +1164,7 @@ core.IO.race#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1788,
 core.IO.racePair#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1817,todo,,
 core.IO.ref,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1822,todo,,
 core.IO.deferred,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1824,todo,,
-core.IO.bracketFull,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1826,todo,,
+core.IO.bracketFull,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1826,modelled,,core.IO.bracketFull.kernelDefaultTwin
 core.IO.unique,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1836,todo,,
 core.IO.whenA,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1846,todo,,
 core.IO.unlessA,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1857,todo,,
@@ -1206,7 +1206,7 @@ core.IO.IOAsync.cont,core,method,core/shared/src/main/scala/cats/effect/IO.scala
 core.IO.IOAsync.evalOn,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2053,todo,,
 core.IO.IOAsync.executionContext,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2056,todo,,
 core.IO.IOAsync.onCancel,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2059,todo,,
-core.IO.IOAsync.bracketFull,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2062,todo,,
+core.IO.IOAsync.bracketFull,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2062,modelled,,core.IO.bracketFull.kernelDefaultTwin
 core.IO.IOAsync.monotonic,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2066,todo,,
 core.IO.IOAsync.realTime,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2068,todo,,
 core.IO.IOAsync.sleep,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2070,todo,,
@@ -2054,7 +2054,7 @@ kernel.MonadCancel.guarantee,kernel,method,kernel/shared/src/main/scala/cats/eff
 kernel.MonadCancel.guaranteeCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,365,todo,,
 kernel.MonadCancel.bracket,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,397,todo,,
 kernel.MonadCancel.bracketCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,423,todo,,
-kernel.MonadCancel.bracketFull,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,447,todo,,
+kernel.MonadCancel.bracketFull,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,447,modelled,,core.IO.bracketFull.kernelDefaultTwin
 kernel.MonadCancel.apply,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,460,todo,,
 kernel.MonadCancel.apply#2,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,461,todo,,
 kernel.MonadCancel.monadCancelForOptionT,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,463,excluded,"out-of-scope: monad-transformer instance (OptionT, EitherT, Kleisli, ...); user decision Q1 (2026-11-10): ignore monad transformers",

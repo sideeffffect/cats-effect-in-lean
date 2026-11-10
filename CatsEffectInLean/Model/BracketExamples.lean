@@ -4,9 +4,9 @@ import CatsEffectInLean.Model.EnumP
 /-!
 # Examples of the `guarantee`/`bracket` mirror (Phase 6, track G)
 
-Smoke tests of `Model/Bracket.lean` with a small user environment `BEx.env`. Each check is an
-exact outcome set under the preemptive scheduler (`outcomesPList`, `EqvP` sets), evaluated by
-`decide +kernel`.
+A small user environment `env` for `Model/Bracket.lean`. The smoke tests that use it are in
+`Proofs/Phase6/BracketSmoke.lean` (exact `EqvP` outcome sets, `decide +kernel`). Program codes
+of `progOf` are also the external sources (`ioOf`).
 
 User code (`Codec.userFn`, namespace `uns`), so that closures can capture values:
 
@@ -17,6 +17,8 @@ User code (`Codec.userFn`, namespace `uns`), so that closures can capture values
 | 2 `relEmit t` | `(a, oc) => IO.delay(emit (t, oc))` | returns `Delay(emitThunk (t, oc))` |
 | 3 `throwE c` | `_ => throw E(c)` | throws error `c` |
 | 4 `emitThen v p` | `_ => { emit v; p }` (an impure function) | emits `v`, returns `progOf p` |
+| 5 `markA v` | `x => { emit v; IO.pure(x) }` | emits `v`, returns `Pure(x)` |
+| 6 `relMark` | `_ => IO.delay(emit 88) *> IO.unit` | returns that program |
 
 External sources (`ioOf`, `Src.ext`): the same codes as `progOf`.
 -/
@@ -46,6 +48,11 @@ def progOf : Val → IO
   | .nat 5 => .flatMap (emitIO (.nat 5)) (.user (uid 0 [.nat 1]))  -- `emit 5 >> IO.canceled`
   | .nat 6 => .pure (.nat 6)                                -- `IO.pure(6)`
   | .nat 7 => .flatMap (emitIO (.nat 7)) (.user (uid 0 [.nat 6]))  -- `emit 7 >> IO.pure(6)`
+  | .nat 8 => .flatMap (.start (emitIO (.nat 8))) (.user (uid 0 [.nat 3]))  -- `IO.delay(emit 8).start >> emit 3`
+  | .nat 9 => .flatMap .cede (.user (uid 0 [.nat 6]))         -- `IO.cede >> IO.pure(6)`
+  | .nat 10 => .flatMap (emitIO (.nat 88)) (.user (uid 0 [.nat 0]))  -- `IO.delay(emit 88) *> IO.unit`
+  | .pair (.nat 50) a0 => .flatMap (progOf a0) (.user (uid 5 [.nat 77]))  -- `a0.flatMap(markA 77)`
+  | .pair (.nat 51) c => .flatMap (emitIO (.nat 77)) (.user (uid 0 [c]))  -- `IO.delay(emit 77) *> c`
   | _ => .error { code := 999 }
 
 /-- The user code. -/
@@ -58,6 +65,8 @@ def user (id : Nat) (arg : Val) (_v : View) : UserResult :=
     | some (9, 2, [t]) => { out := .prog (.delay (.user (uid 1 [.pair t arg]))) }
     | some (9, 3, [.nat c]) => { out := .throw { code := c } }
     | some (9, 4, [v, p]) => { effects := [.emit v], out := .prog (progOf p) }
+    | some (9, 5, [v]) => { effects := [.emit v], out := .prog (.pure arg) }
+    | some (9, 6, []) => { out := .prog (.flatMap (emitIO (.nat 88)) (.user (uid 0 [.nat 0]))) }
     | _ => { out := .throw { code := 998 } }
   | none => { out := .throw { code := 997 } }
 
@@ -75,29 +84,5 @@ def env : UserEnv where
 
 /-- The exact observation set of a program. -/
 def obs (io : IO) : Option (List Obs) := outcomesPList {} counterMaskModel env 400 io
-
-/-! ## guarantee -/
-
-#eval obs (guaranteeIO (.ext (.nat 0)) (.ext (.nat 3)))
-#eval obs (guaranteeIO (.ext (.nat 2)) (.ext (.nat 3)))
-#eval obs (guaranteeIO (.ext (.nat 1)) (.ext (.nat 3)))
-#eval obs (guaranteeIO (.ext (.nat 2)) (.ext (.nat 4)))
-#eval obs (guaranteeCaseIO (.ext (.nat 2)) (uid 0 [.nat 4]))
-#eval obs (defaultGuaranteeCaseIO (.ext (.nat 2)) (uid 0 [.nat 4]))
-
-/-! ## bracketFull twin -/
-
--- acquire `_ => IO.canceled` (masked self-cancel), use `_ => throw E5`, release emits (t, oc)
-#eval obs (bracketFullIO (uid 0 [.nat 1]) (uid 3 [.nat 5]) (uid 2 [.nat 9]))
-#eval obs (defaultBracketFullIO (uid 0 [.nat 1]) (uid 3 [.nat 5]) (uid 2 [.nat 9]))
--- use `_ => { emit 8; IO.unit }`
-#eval obs (bracketFullIO (uid 0 [.nat 1]) (uid 4 [.nat 8, .nat 0]) (uid 2 [.nat 9]))
-#eval obs (defaultBracketFullIO (uid 0 [.nat 1]) (uid 4 [.nat 8, .nat 0]) (uid 2 [.nat 9]))
--- pure use `_ => emit 7 >> IO.pure 6`
-#eval obs (bracketFullIO (uid 0 [.nat 1]) (uid 0 [.nat 7]) (uid 2 [.nat 9]))
-#eval obs (defaultBracketFullIO (uid 0 [.nat 1]) (uid 0 [.nat 7]) (uid 2 [.nat 9]))
--- ordinary: acquire `IO.pure 6`, use `emit 7 >> pure 6`
-#eval obs (bracketFullIO (uid 0 [.nat 6]) (uid 0 [.nat 7]) (uid 2 [.nat 9]))
-#eval obs (bracketIO (.ext (.nat 6)) (uid 0 [.nat 5]) (uid 0 [.nat 3]))
 
 end CatsEffectInLean.Model.BracketExamples

@@ -38,8 +38,12 @@ final class ScriptedEC extends ExecutionContext:
     ready += r
 
   // A TimeoutException message holds the duration, which the Lean model does not keep (v1).
+  // The value language identifies `UserError(999998)` with `TimeoutException` (`CodeOf`): a
+  // program can raise it with `raise` (fn 3) of a code that `handleErrorWith` bound. The Lean side
+  // cannot tell them apart (same `Err`), so both print as "TimeoutException" (track G, 2026-11-10).
   def reportFailure(t: Throwable): Unit = t match
     case _: java.util.concurrent.TimeoutException => failures += "TimeoutException"
+    case UserError(TimeoutCode) => failures += "TimeoutException"
     case _ => failures += s"${t.getClass.getSimpleName}: ${t.getMessage}"
 
 /** Result of one case, before JSON encoding. */
