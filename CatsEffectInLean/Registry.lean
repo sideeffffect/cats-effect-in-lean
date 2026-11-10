@@ -137,8 +137,9 @@ def registry : List Entry := [
       started fiber; cancel it; join; drain), all xs, d, s and pick schedules. Counterexample: \
       xs = [42], d = 1000, s = 1, FIFO schedule: the take racer completes Succeeded(42) after \
       the consumer is canceled; the racePair finalizer drops the outcome. Row core.IO.timeoutTo \
-      is not listed: the model mirrors timeoutTo only with the TimeoutException fallback of \
-      IO#timeout (review batch 2), so the row stays todo." },
+      is not listed: this property uses only IO#timeout (TimeoutException fallback). Since \
+      Phase 6 track D, Model/Timeout.lean mirrors timeoutTo with any fallback (timeoutToIO), \
+      but no settled entry names core.IO.timeoutTo yet, so the row stays todo." },
   { id := "core.SyncIO.runLoop.Error.fatalTwin"
     rows := ["core.IOFiber.runLoop.Error", "core.SyncIO.runLoop.Error"]
     prop := ``Props.Calibration.raiseErrorTwin
