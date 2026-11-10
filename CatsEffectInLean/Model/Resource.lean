@@ -69,7 +69,7 @@ Not mirrored: `fold`/`use`, `allocated`, `Resource#map` and the other combinator
 
 namespace CatsEffectInLean.Model.Resource
 
-open CatsEffectInLean.Model.Codec
+open CatsEffectInLean.Model.ValCodec
 
 /-- Fatal error code for an ill-typed value (a model limit). -/
 def illTypedCode : Nat := 900001

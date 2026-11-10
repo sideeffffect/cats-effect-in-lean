@@ -94,3 +94,4 @@ With `RacePair` and `Sleep`, every replay op of format v0 runs: 150,000 generate
 - [Difftest program format](../methodology/difftest-program-format.md)
 - [Fairness and liveness](../semantics/fairness-and-liveness.md)
 - [Kernel evaluation of the model](../lean/kernel-evaluation.md)
+- [Queue and timeout model](queue-model.md)

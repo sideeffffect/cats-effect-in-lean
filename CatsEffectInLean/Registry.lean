@@ -4,6 +4,8 @@ import CatsEffectInLean.Props.Calibration.SyncStep
 import CatsEffectInLean.Proofs.Calibration.SyncStep
 import CatsEffectInLean.Props.Calibration.ResourceEval
 import CatsEffectInLean.Proofs.Calibration.ResourceEval
+import CatsEffectInLean.Props.Calibration.QueueTimeout
+import CatsEffectInLean.Proofs.Calibration.QueueTimeout
 
 /-!
 # Property registry
@@ -110,7 +112,22 @@ def registry : List Entry := [
     note := "Scaladoc Resource.scala:986-987 'Preserves interruptibility of fa': for \
       fa = IO.uncancelable(_ => g), Resource.eval(fa).allocatedCase <-> \
       IO.uncancelable(_ => Resource.eval(fa).allocatedCase) (Eqv, F = IO). Counterexample \
-      g = IO.canceled: Canceled vs Succeeded = case C of reproducers/CE-0002." }
+      g = IO.canceled: Canceled vs Succeeded = case C of reproducers/CE-0002." },
+  { id := "std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement"
+    rows := ["std.Queue.unbounded", "std.Queue.UnboundedAsyncQueue.unsafeOffer",
+      "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.take",
+      "std.Queue.UnboundedAsyncQueue.tryTake", "std.UnsafeUnbounded.put",
+      "std.UnsafeUnbounded.take", "std.UnsafeUnbounded.Cell.apply",
+      "core.IO.timeout", "core.IO.timeoutTo", "core.IO.racePair",
+      "core.IOFiber.runLoop.RacePair", "core.IO.asyncCheckAttempt"]
+    prop := ``Props.Calibration.QueueTimeout.takeTimeoutNoLostElement
+    status := .refuted
+    thm := some ``Proofs.Calibration.QueueTimeout.takeTimeoutNoLostElement_refuted
+    bug := some "bugs/CE-0003.yaml"
+    note := "No lost element for program A of reproducers/CE-0003 (offer xs; take.timeout(d) in a \
+      started fiber; cancel it; join; drain), all xs, d, s and pick schedules. Counterexample: \
+      xs = [42], d = 1000, s = 1, FIFO schedule: the take racer completes Succeeded(42) after \
+      the consumer is canceled; the racePair finalizer drops the outcome." }
 ]
 
 end CatsEffectInLean

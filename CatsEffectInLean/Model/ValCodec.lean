@@ -23,7 +23,7 @@ All loops are structural (on a fuel or on the input), so `decide +kernel` can ev
 (`wiki/lean/kernel-evaluation.md`).
 -/
 
-namespace CatsEffectInLean.Model.Codec
+namespace CatsEffectInLean.Model.ValCodec
 
 /-- `true` ↦ 1, `false` ↦ 0. -/
 def bit (b : Bool) : Nat := if b then 1 else 0
@@ -206,4 +206,4 @@ example : natToVal (valToNat (.int (-5))) = some (.int (-5)) := by decide +kerne
 
 example : natToVal 0 = none := by decide +kernel
 
-end CatsEffectInLean.Model.Codec
+end CatsEffectInLean.Model.ValCodec
