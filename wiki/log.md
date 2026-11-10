@@ -148,6 +148,11 @@
 ## [2026-11-10] ingest | Track G merged with tracks R and D
 - Updated: guarantee and bracket model (merged difftest counts, weights, TwinChecks), Difftest program format (one format v2 section; 999998 fix of track D kept, track G Scala text fix dropped)
 
+## [2026-11-10] ingest | Track P: race no-leak invariant design, frame lemmas F1/F2
+- Raw: raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md
+- Created: Race no-leak invariant and frame lemmas
+- Updated: race, both and fiber leaks (why open, 4,441 states), Lean v4.35.0 toolchain (tactic gotchas), Outcome sets (See Also), index
+
 ## [2026-11-10] ingest | Phase 6 track M: memoize, CE-0030
 - Created: memoize model and CE-0030
 - Updated: Bug history (CE-0030, memoize issue history), Difftest program format (ops `memoize`, `memoGet`; `Deferred` and memo handle renumbering)

@@ -37,8 +37,17 @@ The project uses `leanprover/lean4:v4.35.0` (latest stable, 2026-10-12; v4.36.0-
 - Cap memory: `moreLeanArgs = ["-M8000"]` (python-formalization).
 - Kernel evaluation (spike, 2026-11-10): `decide +kernel` is fastest for one concrete run (≥ 5,400 steps in 6 s); `decide_cbv` memoizes equal subterms and is far better for enumerating schedules. `decide_cbv` stops at `cbv.maxSteps` (default 100,000); long runs need `set_option maxRecDepth`. Details: [Kernel evaluation of the model](kernel-evaluation.md).
 - Brittle proofs: prefer `simp`/`grind` with explicit lemma lists over long `rw` chains; generated equation names change between releases.
+- Tactic gotchas from the frame proofs over `Step.lean` (track P, 2026-11-10; [Race no-leak invariant](../semantics/race-invariant.md)):
+  - `h.trans (Foo.of_eq rfl rfl rfl)` fails when the middle state is still a metavariable. Use `refine Foo.trans ?_ (lemma ...)`, then close the rest.
+  - In a macro, `repeat (first ...) <;> t` parses as `repeat ((first ...) <;> t)`. Write `(repeat (first ...)) <;> t`.
+  - `apply` of a lemma about `{ y with fib := _ }` matches any state by structure eta; under `repeat` it loops.
+  - A failing `by` block inside a term does not make a `first` alternative fail (error recovery logs it). Use tactic-level `refine ... ?_ <;> simp <;> done`.
+  - `simp only [f]` unfolds `f` before a lemma `f (g x) = ...` can fire; run them in two passes.
+  - `P s (x).m a b` parses `a b` as arguments of `P`; write `P s (x.m a b)`.
 
 ## See Also
+
+- [Race no-leak invariant and frame lemmas](../semantics/race-invariant.md)
 
 - [Kernel evaluation of the model](kernel-evaluation.md)
 - [Proof hygiene and agent tooling](proof-hygiene-and-agent-tooling.md)

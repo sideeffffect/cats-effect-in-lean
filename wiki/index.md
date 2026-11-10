@@ -46,6 +46,7 @@ Formal modeling approaches for effect systems and concurrency.
 | [Modeling approaches for CE3 in Lean](semantics/modeling-approaches.md) | Small-step + scheduler recommended; ITrees, dejafu, Marlow 2001 compared | 2026-11-10 |
 | [Fairness and liveness](semantics/fairness-and-liveness.md) | Schedule = Nat → Choice; Fair/Terminates definitions; CE 512/1024 thresholds; ranking, decide, lasso refutations | 2026-11-10 |
 | [Outcome sets, Eqv and the IO laws](semantics/outcome-equivalence.md) | outcomes/Eqv over pick schedules (trace, refs, reports); bounded enumerator + soundness; IO ops without a typed instance; 2 IO laws proven, 2 open; auto-yield finding | 2026-11-10 |
+| [Race no-leak invariant and frame lemmas](semantics/race-invariant.md) | Invariant design for the 5 open race entries (NL, S, F3, F4, P1/P2, H, C(r)); F1/F2 frame lemmas proven for all runs; law LHS 4,441 states | 2026-11-10 |
 
 ## lean
 
