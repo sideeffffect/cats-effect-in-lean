@@ -275,16 +275,22 @@ def denv (p : Prog) (id : Nat) (arg : Val) (vw : View) : DResult :=
     | none => DResult.harness
     | some n => runClo (renvOf p) c n arg vw
 
-/-- The source builder of `Timeout.call`: `src` is the code of a `timeoutSrc` closure value;
-the result is `I(e)` of that `timeout` node, built with the snapshot. -/
+/-- The source builder of `Timeout.call`: `src` is the code of a `timeoutSrc` closure value
+(the result is `I(e)` of that `timeout` or `timeoutTo` node) or of a `timeoutFb` closure value
+(the result is `I(fb)` of that `timeoutTo` node), built with the snapshot. -/
 def srcIO (p : Prog) (srcV : Val) : IO :=
+  let build (e : Prog) (n : Nat) (env : List Val) (snap : Val) : IO :=
+    match tr (renvOf p) e n env (snapView snap) with
+    | .ok io => io
+    | .error e => .error e.toErr
   match (match srcV with | .nat src => Clo.decode? src | _ => none) with
   | some { node, lam := .timeoutSrc, vals := snap :: env } =>
     match p.at? node with
-    | some (.timeout e _) =>
-      match tr (renvOf p) e (node + 1) env (snapView snap) with
-      | .ok io => io
-      | .error e => .error e.toErr
+    | some (.timeout e _) | some (.timeoutTo e _ _) => build e (node + 1) env snap
+    | _ => .error harnessErr
+  | some { node, lam := .timeoutFb, vals := snap :: env } =>
+    match p.at? node with
+    | some (.timeoutTo e fb _) => build fb (node + 1 + e.size) env snap
     | _ => .error harnessErr
   | _ => .error harnessErr
 

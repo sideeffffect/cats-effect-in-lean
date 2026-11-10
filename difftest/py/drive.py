@@ -64,6 +64,26 @@ KNOWN_MODEL_BUGS = [
 ]
 
 
+# Format-v1 ops. `run` prints, for each, the number of agreeing cases whose program contains it
+# (AGENTS.md: 50,000 agreeing cases over 3 seeds before a property; Phase 5 gate caveat 4).
+V1_OPS = ('syncStep', 'timeout', 'timeoutTo', 'queueNew', 'queueOffer', 'queueTake', 'queueTryTake',
+          'allocatedCase', 'rPure', 'rEval', 'rMake', 'rFlatMap')
+
+
+def ops_of(p, acc=None):
+    """The set of `op` names in a program."""
+    acc = set() if acc is None else acc
+    if isinstance(p, dict):
+        if isinstance(p.get('op'), str):
+            acc.add(p['op'])
+        for v in p.values():
+            ops_of(v, acc)
+    elif isinstance(p, list):
+        for v in p:
+            ops_of(v, acc)
+    return acc
+
+
 def known_model_bug(case):
     for bid, pred, _ in KNOWN_MODEL_BUGS:
         try:
@@ -382,6 +402,7 @@ def cmd_run(a):
     bins = collections.Counter()
     by_bin = collections.defaultdict(list)
     per_seed = collections.defaultdict(collections.Counter)
+    op_agree = collections.defaultdict(collections.Counter)  # op -> seed -> agreeing cases
     for c in cases:
         if a.lean:
             b, d = compare(c, s.get(c['id']), lo.get(c['id']))
@@ -391,12 +412,20 @@ def cmd_run(a):
         bins[b] += 1
         by_bin[b].append((c, d))
         per_seed[c['id'].split('-', 1)[0][1:]][b] += 1
+        if b == 'agree' and a.lean:
+            for op in ops_of(c['prog']) & set(V1_OPS):
+                op_agree[op][c['id'].split('-', 1)[0][1:]] += 1
     print(f"cases {len(cases)}  gen {t1 - t0:.1f}s  scala {t2 - t1:.1f}s  lean {t3 - t2:.1f}s")
     for b, k in sorted(bins.items(), key=lambda x: -x[1]):
         print(f"  {b:15} {k}")
     if len(per_seed) > 1:
         for sd, cnt in per_seed.items():
             print(f"  seed {sd}: " + "  ".join(f"{b} {k}" for b, k in sorted(cnt.items())))
+    if op_agree:
+        print("  agreeing cases per format-v1 op (total; per seed):")
+        for op in V1_OPS:
+            cnt = op_agree.get(op, collections.Counter())
+            print(f"    {op:13} {sum(cnt.values()):7}  " + " ".join(f"{sd}:{k}" for sd, k in sorted(cnt.items())))
     for b in ('generator-bug', 'harness', 'hang'):
         for c, d in by_bin[b][:5]:
             print(f"  {b}: {c['id']}: {d}")
@@ -420,7 +449,8 @@ def cmd_run(a):
             path = save_corpus(sc, s1, l1, field, meta, Path(a.corpus_dir))
             print(f"  saved {path}")
     if a.json:
-        Path(a.json).write_text(json.dumps({'bins': bins, 'cases': len(cases), 'per_seed': per_seed}, indent=1))
+        Path(a.json).write_text(json.dumps({'bins': bins, 'cases': len(cases), 'per_seed': per_seed,
+                                            'v1_op_agree': op_agree}, indent=1))
     bad = bins['generator-bug'] + bins['harness'] + bins['hang']
     known = 0 if a.allow_known_model_bugs else bins['known-model-bug']
     return 1 if bad or (a.lean and (bins['mismatch'] or known)) else 0

@@ -216,8 +216,18 @@ def vDone : View := { outcomes := [none, some (.succeeded (.nat 3))], deferreds 
 -- The `IdPoll` of `syncStep` (mask id 0) is the identity; a real poll is `UnmaskRunLoop`.
 #guard pollTerm .cede 0 0 == .cede
 #guard pollTerm .cede 1 0 == .unmaskRunLoop .cede 1 0
--- `timeoutTo` is not mirrored; a resource node that reads state is outside the restriction.
-#guard unsupportedOps (.timeoutTo .cede .cede 1) == ["timeoutTo"]
+-- The `runtime` field: the `IORuntimeConfig` thresholds, with the checks of
+-- `IORuntimeConfig.scala:33-40`; only in replay mode.
+#guard (decCase r#"{"v":1,"id":"x","mode":"replay","runtime":{"cancelationCheckThreshold":2,"autoYieldThreshold":6},"prog":{"op":"cede"}}"#).map (fun c => (c.cancelCheck, c.autoYield)) == .ok (2, 6)
+#guard (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"cede"}}"#).map (fun c => (c.cancelCheck, c.autoYield)) == .ok (512, 1024)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","runtime":{"cancelationCheckThreshold":1,"autoYieldThreshold":1},"prog":{"op":"cede"}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","runtime":{"cancelationCheckThreshold":2,"autoYieldThreshold":5},"prog":{"op":"cede"}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","runtime":{"cancelationCheckThreshold":0,"autoYieldThreshold":4},"prog":{"op":"cede"}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"testcontrol","seed":1,"runtime":{"cancelationCheckThreshold":1,"autoYieldThreshold":2},"prog":{"op":"cede"}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","runtime":{"autoYieldThreshold":2},"prog":{"op":"cede"}}"#)
+-- `timeoutTo` runs on `Timeout.timeoutToIO`; a resource node that reads state is outside the
+-- restriction.
+#guard unsupportedOps (.timeoutTo .cede .cede 1) == []
 #guard unsupportedOps (.allocatedCase (.rEval (.join (.lit (.fiber 1))))) == ["resource-reads-state"]
 #guard unsupportedOps (.allocatedCase (.rEval (.bind .cede (.join (.lit (.fiber 1)))))) == []
 -- The queue: `Map(newIO, handle)`; the handle emits `queueH` with the buffer cell.

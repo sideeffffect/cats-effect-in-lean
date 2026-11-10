@@ -61,7 +61,7 @@ Both agent precedents and Cedar require the model to agree with the real impleme
 
 ## Corpus (`difftest/corpus/`)
 
-One JSON file per shrunk mismatch: `case`, `scala` (outcome, trace), `lean`, `field`, `expect` (`agree` by default, or `mismatch` for an accepted difference), `triage`, `note`, `found`. `drive.py corpus [--lean CMD]` fails if the Scala result changed or the Lean result is not `expect`. Format table: `difftest/README.md`. Entries: three known model bugs (`known-idpoll-*.json`, `expect: known-model-bug`); they fail the corpus check when the model is fixed, as a reminder to change `expect`.
+One JSON file per shrunk mismatch: `case`, `scala` (outcome, trace), `lean`, `field`, `expect` (`agree` by default, or `mismatch` for an accepted difference), `triage`, `note`, `found`. `drive.py corpus [--lean CMD]` fails if the Scala result changed or the Lean result is not `expect`. Format table: `difftest/README.md`. Entries: three regression cases of the fixed model bug `idpoll` (`fixed-idpoll-*.json`, `expect: agree`). A `known-model-bug` entry fails the corpus check when the model is fixed, as a reminder to change `expect`.
 
 ## Scala-only results (2026-11-10)
 

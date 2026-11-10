@@ -57,17 +57,19 @@ def processLine (line : String) : Json × Bool × Bool :=
         (Json.mkObj (base ++ [kv "outcome" (.str "unsupported"), kv "size" .null, unsJ,
           kv "reason" (.str s!"{op}: {unsupportedReason op}")]), true, false)
       | .ok io =>
+        let cfg : CatsEffectInLean.Model.Config :=
+          { cancelationCheckThreshold := tc.cancelCheck, autoYieldThreshold := tc.autoYield }
         match tc.mode, uns with
         | .replay choices, [] =>
           match tc.prog with
           | .syncStep _ limit =>
             match syncStepInit tc.prog io limit with
-            | .ok s0 => (Json.mkObj (base ++ replayFields tc.prog choices tc.maxSteps s0), true, true)
+            | .ok s0 => (Json.mkObj (base ++ replayFields cfg tc.prog choices tc.maxSteps s0), true, true)
             | .error sm =>
               (Json.mkObj (base ++ [kv "outcome" (Json.mkObj [kv "t" (.str s!"model:syncStep:{(repr sm).pretty}")]),
                 kv "compare" (Json.arr #[.str "outcome"])]), true, true)
           | _ =>
-            (Json.mkObj (base ++ replayFields tc.prog choices tc.maxSteps
+            (Json.mkObj (base ++ replayFields cfg tc.prog choices tc.maxSteps
               (CatsEffectInLean.Model.Sched.init CatsEffectInLean.Model.counterMaskModel io)), true, true)
         | .testcontrol _, [] =>
           (Json.mkObj (base ++ [kv "outcome" (.str "unsupported"), kv "size" (ioSize io),

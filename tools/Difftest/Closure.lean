@@ -152,6 +152,9 @@ inductive Lam where
   | resAcquire
   /-- `rMake`: `a => I(rel)[x := a].void` (the `REnv.release` code). `vals = env`. -/
   | resRelease
+  /-- `timeoutTo`: not a lambda. The fallback code `c` of `Timeout.timeoutToIO src c ms`: the
+  program `I(fb)`, built when the `timeoutTo` term is built. `vals = snap :: env`. -/
+  | timeoutFb
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -162,7 +165,8 @@ def Lam.all : List Lam :=
    .rpRight, .refGetThunk, .refSetThunk, .refSetThen, .refSetEmit, .refModifyThunk, .asyncEc,
    .asyncBody, .asyncUnc, .asyncReg, .asyncSel, .asyncFinEmit, .asyncFinThen, .neverBody,
    .neverUnc, .neverSel, .refNewThunk, .refHandle, .deferredNewThunk, .deferredHandle, .dcThen,
-   .dcEmit, .queueHandle, .optEither, .allocFst, .timeoutSrc, .resBind, .resAcquire, .resRelease]
+   .dcEmit, .queueHandle, .optEither, .allocFst, .timeoutSrc, .resBind, .resAcquire, .resRelease,
+   .timeoutFb]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?

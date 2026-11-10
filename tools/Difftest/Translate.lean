@@ -33,15 +33,16 @@ captures a snapshot (`snapVal`).
 
 ## Ops the model cannot express yet
 
-None in format v0 (`unsupportedReason`). `racePair` and `sleep` run on the `RacePair` and
-`Sleep` mirrors of the step function. Format v1: `timeoutTo` with a user fallback is not
-mirrored (`Model/Timeout.lean` has only the `TimeoutException` fallback of `timeout`).
+None (`unsupportedReason`). `racePair` and `sleep` run on the `RacePair` and `Sleep` mirrors
+of the step function. Format v1: `timeoutTo` with a user fallback runs on
+`Timeout.timeoutToIO` (since 2026-11-10; before, it was `unsupported`).
 
 ## Format v1: library mirrors
 
 * `timeout e ms` is `Timeout.timeoutIO src ms` (`Model/Timeout.lean`). The source `I(e)` is
   the code `src` of a `timeoutSrc` closure value (node, snapshot, environment); `srcIO`
-  (`Difftest/Env.lean`) builds it.
+  (`Difftest/Env.lean`) builds it. `timeoutTo e ms fb` is `Timeout.timeoutToIO src c ms`; the
+  fallback `I(fb)` is the code `c` of a `timeoutFb` closure value.
 * The queue ops are the `Std/Queue.lean` terms (`newIO`, `offerIO`, `takeIO`, `tryTakeIO`),
   plus the `Map` of the interpreter (`.as(VUnit)`, the `Option` selection, the handle).
 * `allocatedCase res` is `Resource.allocatedCase R res` (`Model/Resource.lean`), then
@@ -202,9 +203,9 @@ inductive TrErr where
   | unsupported (op : String)
   deriving DecidableEq, Repr
 
-/-- What the model lacks for each unsupported op. Every op of format v0 runs on the model. -/
+/-- What the model lacks for each unsupported op. Every op of formats v0 and v1 runs on the
+model. -/
 def unsupportedReason : String → String
-  | "timeoutTo" => "Model/Timeout.lean mirrors only the TimeoutException fallback of timeout"
   | _ => "unknown"
 
 /-- `⟦a⟧`. -/
@@ -360,7 +361,14 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     -- snapshot.
     let _ ← tr R e (node + 1) env vw
     pure (Timeout.timeoutIO (.nat (Clo.encode { node, lam := .timeoutSrc, vals := snapVal vw :: env })) ms)
-  | .timeoutTo .., _, _, _ => throw (.unsupported "timeoutTo")
+  | .timeoutTo e fb ms, node, env, vw => do
+    -- `I(e).timeoutTo(ms.millis, I(fb))` (`IO.scala:850-860`) = `Timeout.timeoutToIO`. Scala
+    -- builds `I(e)`, then `I(fb)`, now; the model builds them in closures from the codes, with
+    -- the snapshot.
+    let _ ← tr R e (node + 1) env vw
+    let _ ← tr R fb (node + 1 + e.size) env vw
+    let code (lam : Lam) : Val := .nat (Clo.encode { node, lam, vals := snapVal vw :: env })
+    pure (Timeout.timeoutToIO (code .timeoutSrc) (code .timeoutFb) ms)
   | .queueNew, node, _, _ =>
     -- `Queue.unbounded[IO, Val].map(q => VQueue(h.newQueue(q)))` (`Queue.scala:160-167`)
     pure (.map CatsEffectInLean.Std.Queue.newIO (clo node .queueHandle []))

@@ -79,7 +79,7 @@ WEIGHTS = {
     'tpl_scenario': 3,  # parent + long-lived child + cancel (decision 17); see tpl_scenario
     'fn_raise': 0.4,  # relative weight of user function 3 (raise) in delay/map; others 1
     # format v1 (decision 30)
-    'timeout': 1.2, 'timeoutTo': 0.35, 'allocatedCase': 2.2,
+    'timeout': 1.2, 'timeoutTo': 1.2, 'allocatedCase': 2.2,
     'queueNew': 2, 'queueOffer': 3, 'queueTake': 3, 'queueTryTake': 6, 'tpl_queue': 2.2, 'tpl_resource': 1,
     'res_pure': 2.5, 'res_eval': 2.5, 'res_make': 3.5, 'res_flatMap': 12,
 }
@@ -103,6 +103,8 @@ CONFIG = {
     # format v1
     'p_syncstep': 0.09,        # the root is `syncStep(prog, limit)`
     'p_queue_type': 0.1,       # bind_type gives a queue type
+    # preempt coverage (Phase 5 gate caveat 3): small IORuntimeConfig thresholds
+    'p_runtime': 0.25,         # replay case gets a `runtime` field (auto-yield every few iterations)
 }
 
 
@@ -1096,6 +1098,13 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
         case['choices'] = cs
     if rng.random() < g.c['p_small_maxsteps']:
         case['maxSteps'] = rng.randint(1, 5)
+    # Preempt coverage: small thresholds put an auto-yield (the effect of a SchedP `preempt`
+    # choice) after every few run-loop iterations. Own RNG, so the other fields do not change.
+    rr = random.Random(f"difftest-runtime:{seed}:{i}")
+    if rr.random() < g.c['p_runtime']:
+        cct = rr.choice([1, 1, 2, 4])
+        case['runtime'] = {'cancelationCheckThreshold': cct,
+                           'autoYieldThreshold': cct * rr.randint(2 if cct == 1 else 1, 8)}
     case['prog'] = prog
     return case
 

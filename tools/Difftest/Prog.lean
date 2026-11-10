@@ -227,6 +227,12 @@ structure TestCase where
   mode : Mode
   prog : Prog
   maxSteps : Nat
+  /-- `IORuntimeConfig.cancelationCheckThreshold` of a replay run (optional case field
+  `runtime`; default 512, `IORuntimeConfig.scala`). -/
+  cancelCheck : Nat := 512
+  /-- `IORuntimeConfig.autoYieldThreshold` of a replay run (default 1024). A small value puts
+  an auto-yield (the effect of a `preempt` choice, `Model/SchedP.lean`) at many points. -/
+  autoYield : Nat := 1024
   deriving Repr
 
 /-- `Json.FormatVersion` in `Json.scala`. Versions 0 and 1 are accepted. -/
@@ -490,7 +496,7 @@ private def choice (j : Json) : D Choice :=
 /-- Decode one test case (`Json.decodeCase`). -/
 def decodeCase (j : Json) : D TestCase := do
   let o ← obj j "case"
-  keys o ["v", "id", "mode", "choices", "seed", "maxSteps", "prog"] "case"
+  keys o ["v", "id", "mode", "choices", "seed", "maxSteps", "runtime", "prog"] "case"
   let v ← nat (← field o "v" "case") "case.v"
   if v > formatVersion then fail s!"case.v: unsupported format version {v}"
   let id ← str (← field o "id" "case") "case.id"
@@ -509,6 +515,20 @@ def decodeCase (j : Json) : D TestCase := do
   let maxSteps ← match get? o "maxSteps" with
     | some x => nat x "case.maxSteps"
     | none => pure defaultMaxSteps
-  pure { version := v, id, mode, prog := ← decodeProg (← field o "prog" "case") v, maxSteps }
+  -- `runtime`: the `IORuntimeConfig` thresholds of a replay run, with the checks of
+  -- `IORuntimeConfig.scala:33-40` (auto-yield > 1, cancelation check > 0, a multiple).
+  let (cancelCheck, autoYield) ← match get? o "runtime" with
+    | none => pure (512, 1024)
+    | some r =>
+      if (get? o "seed").isSome then fail "case: 'runtime' is only for mode replay"
+      let ro ← obj r "case.runtime"
+      keys ro ["cancelationCheckThreshold", "autoYieldThreshold"] "case.runtime"
+      let c ← nat (← field ro "cancelationCheckThreshold" "case.runtime") "case.runtime.cancelationCheckThreshold"
+      let a ← nat (← field ro "autoYieldThreshold" "case.runtime") "case.runtime.autoYieldThreshold"
+      if c == 0 || a ≤ 1 || a % c != 0 || a > maxLimit then
+        fail s!"case.runtime: invalid thresholds {c}, {a}"
+      pure (c, a)
+  pure { version := v, id, mode, prog := ← decodeProg (← field o "prog" "case") v, maxSteps,
+         cancelCheck, autoYield }
 
 end Difftest
