@@ -9,6 +9,8 @@ Design notes: wiki/methodology/differential-testing.md ("Generator").
 - Deterministic: case i of seed s depends only on (s, i) and the weight table.
 - Edge-heavy: templates for escaped poll, poll in finalizers, racePair, Deferred handoff,
   async callbacks (0/1/2/3 calls, sync/later, with a finalizer), external cancel choices.
+- Long-lived scenarios (decision 17, `tpl_scenario`): the root stays alive, so cancels and child
+  steps really run. Run-event coverage: coverage.py.
 
 Usage:
   gen.py --seed 1 --n 1000 [--max-size 40] [--mode replay|testcontrol] [--out FILE]
@@ -22,6 +24,12 @@ import sys
 from typecheck import check_prog
 
 FORMAT_VERSION = 0
+
+# Region markers: `delay fn1 arg nat M` with M = MARK_BASE + kind * MARK_KIND + 2 * id + exit.
+# They only add `call` trace events. coverage.py reads them to see what ran (decision 17).
+MARK_BASE = 7_700_000_000
+MARK_KIND = 1_000_000
+MARK_UNC, MARK_FIN, MARK_ESC_POLL_FIN, MARK_JOIN = 1, 2, 3, 4
 
 UNIT, BOOL, NAT = ('unit',), ('bool',), ('nat',)
 
@@ -61,6 +69,7 @@ WEIGHTS = {
     'async': 4, 'case': 2, 'split': 2,
     'tpl_escapedPoll': 3, 'tpl_race': 1.5, 'tpl_handoff': 1.5, 'tpl_cancelChild': 2.5, 'tpl_finStack': 4,
     'handle_boost': 2.5, 'tpl_ref': 1.5,
+    'tpl_scenario': 3,  # parent + long-lived child + cancel (decision 17); see tpl_scenario
     'fn_raise': 0.4,  # relative weight of user function 3 (raise) in delay/map; others 1
 }
 
@@ -74,6 +83,12 @@ CONFIG = {
     'poll_boost_tpl': 3.0,     # poll weight factor inside the escaped-poll child
     'p_shadow': 0.05,          # reuse an existing value name (shadowing)
     'p_tag_omitted': 0.1,
+    # decision 17: coverage of run events (measured by coverage.py)
+    'p_scenario_root': 0.6,    # root program is a tpl_scenario (keeps the root alive)
+    'p_scenario_ext': 0.4,     # a scenario uses an external {"cancel":h} choice, not `cancel f`
+    'p_cancel_marker': 0.5,    # a generated `cancel f` gets a `delay fn1 f` marker before it
+    'p_fifo_bias': 0.7,        # root scenario: choice list with mostly FIFO picks
+    'p_hint_cancel': 0.95,     # use the scenario hint for external cancel choices
 }
 
 
@@ -84,6 +99,9 @@ class Gen:
         self.c = dict(CONFIG if config is None else config)
         self.names = 0
         self.tags = 0
+        self.rids = 0
+        self.hints = []  # (fiber handle, lowest step, highest step) for external cancel choices
+        self.fifo_bias = False  # root scenario: picks are mostly 0, so the planned timing holds
 
     # ------------------------------------------------------------ helpers
 
@@ -256,7 +274,12 @@ class Gen:
                      (w['sleep'], lambda: {'op': 'sleep', 'ms': self.pick([(3, 0), (3, 1), (2, 10), (1, 100)])})]
             fibs = self.vars_of(env, lambda u: u[0] == 'fiber')
             if fibs:
-                opts.append((w['cancel'] * hb, lambda: {'op': 'cancel', 'f': {'t': 'var', 'x': self.r.choice(fibs)}}))
+                def g_cancel():
+                    fv = {'t': 'var', 'x': self.r.choice(fibs)}
+                    if self.r.random() < self.c['p_cancel_marker']:
+                        return {'op': 'seq', 'ps': self.cancel_req(fv)}
+                    return {'op': 'cancel', 'f': fv}
+                opts.append((w['cancel'] * hb, g_cancel))
             rs = [x for x in self.vars_of(env, lambda u: u[0] == 'ref') if self.atom_possible(env[x][1][1], env)]
             if rs:
                 def g_refset():
@@ -448,6 +471,8 @@ class Gen:
             opts.append((w['tpl_race'], lambda: self.tpl_race(t, env, size, ctx)))
             opts.append((w['tpl_handoff'], lambda: self.tpl_handoff(t, env, size, ctx)))
             opts.append((w['tpl_ref'], lambda: self.tpl_ref(t, env, size, ctx)))
+        if size >= 6:
+            opts.append((w['tpl_scenario'], lambda: self.tpl_scenario(t, env, size, ctx)))
         return opts
 
     # ------------------------------------------------------------ templates
@@ -465,13 +490,16 @@ class Gen:
         if shape == 'poll':
             child = {'op': 'poll', 'poll': p, 'e': self.prog(a, penv, max(1, sc - 1), cctx)}
         elif shape == 'finpoll':
-            child = self.tag({'op': 'onCancel', 'e': self.prog(a, penv, max(1, sc // 2), cctx),
-                              'fin': {'op': 'poll', 'poll': p, 'e': self.prog(UNIT, penv, max(1, sc // 2), cctx)}})
+            body = self.prog(a, penv, max(1, sc // 2), cctx)
+            if self.r.random() < 0.5:  # give the parent's cancel a chance to find the child suspended
+                body = {'op': 'seq', 'ps': [self.suspend_point(penv), body]}
+            child = self.tag({'op': 'onCancel', 'e': body,
+                              'fin': {'op': 'poll', 'poll': p, 'e': self.esc_marked(self.prog(UNIT, penv, max(1, sc // 2), cctx))}})
         elif shape == 'gcpoll':
             x = self.fresh('x')
             fenv = {**penv, x: ('val', outcome(a))}
             child = self.tag({'op': 'guaranteeCase', 'e': self.prog(a, penv, max(1, sc // 2), cctx), 'x': x,
-                              'fin': {'op': 'seq', 'ps': [{'op': 'poll', 'poll': p, 'e': self.prog(UNIT, fenv, 1, cctx)},
+                              'fin': {'op': 'seq', 'ps': [{'op': 'poll', 'poll': p, 'e': self.esc_marked(self.prog(UNIT, fenv, 1, cctx))},
                                                           self.prog(UNIT, fenv, max(1, sc // 2), cctx)]}})
         else:
             child = self.prog(a, penv, sc, cctx)
@@ -482,7 +510,17 @@ class Gen:
             unc['body'] = {'op': 'bind', 'x': g, 'e': {'op': 'start', 'e': child},
                            'k': {'op': 'seq', 'ps': [self.prog(UNIT, {**penv, g: ('val', fiber(a))}, 2, {}),
                                                      {'op': 'pure', 'v': {'t': 'var', 'x': g}}]}}
-        return {'op': 'bind', 'x': f, 'e': unc, 'k': self.prog(t, {**env, f: ('val', fiber(a))}, sk, ctx)}
+        fenv = {**env, f: ('val', fiber(a))}
+        k = self.prog(t, fenv, sk, ctx)
+        if shape in ('finpoll', 'gcpoll') and self.r.random() < 0.7:
+            # keep the parent alive until the child ran (else the finalizer never runs)
+            fv = {'t': 'var', 'x': f}
+            ps = self.cedes(self.pick([(1, 0), (2, 1), (1, 2)]))
+            if shape == 'finpoll' or self.r.random() < 0.3:
+                ps += self.cancel_req(fv)
+            ps.append(self.join_marked(fv, a, k, fenv))
+            k = {'op': 'seq', 'ps': ps}
+        return {'op': 'bind', 'x': f, 'e': unc, 'k': k}
 
     def tpl_cancel_child(self, t, env, size, ctx):
         """bind f = start(child) in seq(maybe cede, cancel f, maybe join f, k)."""
@@ -494,10 +532,19 @@ class Gen:
         ps = []
         for _ in range(self.pick([(2, 0), (2, 1), (1, 2)])):
             ps.append({'op': 'cede'})
-        ps.append({'op': 'cancel', 'f': fv})
-        if self.r.random() < 0.6:
+        if self.r.random() < self.c['p_cancel_marker']:
+            ps += self.cancel_req(fv)
+        else:
+            ps.append({'op': 'cancel', 'f': fv})
+        k = self.prog(t, env2, sk, ctx)
+        x = self.r.random()
+        if x < 0.3:
             ps.append({'op': 'join', 'f': fv})
-        ps.append(self.prog(t, env2, sk, ctx))
+            ps.append(k)
+        elif x < 0.6:
+            ps.append(self.join_marked(fv, a, k, env2))
+        else:
+            ps.append(k)
         if sc >= 3 and self.r.random() < 0.6:
             child = self.tpl_fin_stack(a, env, sc, self.child_ctx(ctx))
         else:
@@ -545,7 +592,10 @@ class Gen:
         if k == 'raise':
             return {'op': 'raise', 'code': self.code()}
         if k == 'suspend':
-            return {'op': 'seq', 'ps': [self.suspend_point(env), self.prog(UNIT, env, max(1, size - 1), self.fin_ctx(ctx))]}
+            sp = [self.suspend_point(env)]
+            if self.r.random() < 0.6:  # markers: coverage.py sees a cancel that lands here
+                sp = self.region(MARK_FIN, sp)
+            return {'op': 'seq', 'ps': sp + [self.prog(UNIT, env, max(1, size - 1), self.fin_ctx(ctx))]}
         return self.prog(self.small_type(), env, size, self.fin_ctx(ctx))
 
     def tpl_race(self, t, env, size, ctx):
@@ -587,7 +637,7 @@ class Gen:
         return {'op': 'bind', 'x': r, 'e': {'op': 'refNew', 'v': self.literal(a)},
                 'k': {'op': 'bind', 'x': f, 'e': {'op': 'start', 'e': child}, 'k': k}}
 
-    def tpl_handoff(self, t, env, size, ctx):
+    def tpl_handoff(self, t, env, size, ctx, force_race=False):
         """bind d = deferredNew in bind f = start(... deferredGet d ...) in k (k may complete d)."""
         a = self.pick([(3, NAT), (1, UNIT), (1, BOOL)])
         sc, sk = self.split_size(size, 2)
@@ -597,12 +647,184 @@ class Gen:
         if self.r.random() < 0.7:
             child = {'op': 'seq', 'ps': [{'op': 'deferredGet', 'd': {'t': 'var', 'x': d}}, child]} if self.r.random() < 0.5 \
                 else {'op': 'deferredGet', 'd': {'t': 'var', 'x': d}}
+        dv = {'t': 'var', 'x': d}
+        race = force_race or self.r.random() < 0.45  # the child also completes d: one `complete` returns false
+        if race:
+            pre = self.cedes(self.pick([(2, 0), (2, 1), (1, 2)]))
+            child = {'op': 'seq', 'ps': pre + [{'op': 'deferredComplete', 'd': dv, 'v': self.literal(a)}, child]}
         kenv = {**denv, f: ('val', fiber(a))}
         k = self.prog(t, kenv, sk, ctx)
-        if self.r.random() < 0.7:
-            k = {'op': 'seq', 'ps': [{'op': 'deferredComplete', 'd': {'t': 'var', 'x': d}, 'v': self.literal(a)}, k]}
+        if race:
+            ps = self.cedes(self.pick([(2, 0), (2, 1), (1, 2)]))
+            ps.append({'op': 'deferredComplete', 'd': dv, 'v': self.literal(a)})
+            if self.r.random() < 0.2:
+                ps.append({'op': 'deferredComplete', 'd': dv, 'v': self.literal(a)})
+            ps.append(self.pick([(2, {'op': 'join', 'f': {'t': 'var', 'x': f}}), (1, {'op': 'deferredGet', 'd': dv}), (1, {'op': 'cede'})]))
+            k = {'op': 'seq', 'ps': ps + [k]}
+        elif self.r.random() < 0.7:
+            k = {'op': 'seq', 'ps': [{'op': 'deferredComplete', 'd': dv, 'v': self.literal(a)}, k]}
         return {'op': 'bind', 'x': d, 'e': {'op': 'deferredNew'},
                 'k': {'op': 'bind', 'x': f, 'e': {'op': 'start', 'e': child}, 'k': k}}
+
+    # ------------------------------------------------- decision 17 helpers
+
+    def mark(self, kind, rid, exit_=False):
+        return {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': MARK_BASE + kind * MARK_KIND + 2 * rid + (1 if exit_ else 0)}}
+
+    def region(self, kind, ps):
+        """seq(enter marker, ps..., exit marker); the value of the region is unit."""
+        self.rids += 1
+        return [self.mark(kind, self.rids)] + ps + [self.mark(kind, self.rids, True)]
+
+    @staticmethod
+    def cedes(n):
+        return [{'op': 'cede'} for _ in range(n)]
+
+    @staticmethod
+    def cancel_req(fv):
+        """`delay fn1 f` (trace event: a cancel request on f follows), then `cancel f`."""
+        return [{'op': 'delay', 'fn': 1, 'arg': fv}, {'op': 'cancel', 'f': fv}]
+
+    def esc_marked(self, p):
+        """An escaped-poll body inside a finalizer: a marker shows that it ran."""
+        self.rids += 1
+        return {'op': 'seq', 'ps': [self.mark(MARK_ESC_POLL_FIN, self.rids), p]}
+
+    def join_marked(self, fv, a, k, env):
+        """bind o = join f in seq(join marker, delay fn1 o, k): the trace shows the join result."""
+        o = self.fresh('x')
+        self.rids += 1
+        return {'op': 'bind', 'x': o, 'e': {'op': 'join', 'f': fv},
+                'k': {'op': 'seq', 'ps': [self.mark(MARK_JOIN, self.rids), {'op': 'delay', 'fn': 1, 'arg': {'t': 'var', 'x': o}}, k]}}
+
+    def tpl_scenario(self, t, env, size, ctx, root_first=False):
+        """Parent starts a long-lived child, cedes n times, then cancels it (`cancel f`, or an
+        external {"cancel":h} choice), and often joins it (decision 17: an external cancel acts
+        only between tasks, so the parent must stay alive). The child has a shape that makes
+        the cancel land at a chosen point. n is in a window [lo, hi] such that, under FIFO
+        (the parent and the child take turns at each cede), the cancel lands at that point:
+        - masked: inside an uncancelable region with cede points (then the region exits);
+        - fin: inside the core (finalizer sees `canceled`) or inside a finalizer with cede points;
+        - cb: while the child waits in an async with a later callback (often with a finalizer);
+        - nested: after the child started a grandchild;
+        - escpoll: the child got an escaped poll and uses it inside its finalizer;
+        - complete: `tpl_handoff` where the parent and the child both complete a Deferred."""
+        kind = self.pick([(4, 'masked'), (6, 'fin'), (4, 'cb'), (3, 'nested'), (3, 'escpoll'), (3, 'complete')])
+        if kind == 'complete':
+            return self.tpl_handoff(t, env, max(size, 5), ctx, force_race=True)
+        a = self.small_type()
+        sc, sk = self.split_size(max(size, 3), 2)
+        cc = self.child_ctx(ctx)
+        f = self.fresh('x')
+        fv = {'t': 'var', 'x': f}
+        env2 = {**env, f: ('val', fiber(a))}
+        small = self.prog(a, env, self.pick([(2, 1), (1, 2)]), cc)
+        start = None
+        if kind == 'masked':
+            q = self.fresh('p')
+            m = self.pick([(2, 1), (2, 2), (1, 3)])
+            inner = self.cedes(m)
+            if self.r.random() < 0.3:
+                inner.insert(0, {'op': 'async', 'cbs': [{'when': 'later', 'ok': {'t': 'unit'}}]})
+                m += 1
+            ps = self.region(MARK_UNC, inner)
+            if self.r.random() < 0.4:
+                ps.append({'op': 'poll', 'poll': q, 'e': self.pick([(2, {'op': 'cede'}), (1, {'op': 'canceled'})])})
+            child = {'op': 'uncancelable', 'poll': q, 'body': {'op': 'seq', 'ps': ps + [small]}}
+            if self.r.random() < 0.5:
+                # a cancel point after the region (the child keeps running after the exit)
+                child = {'op': 'seq', 'ps': [child, self.suspend_point(env), self.prog(a, env, max(1, sc - 4), cc)]}
+            lo, hi = 1, m
+        elif kind in ('fin', 'escpoll'):
+            c = self.pick([(1, 0), (2, 1), (1, 2)]) if kind == 'fin' else self.pick([(2, 1), (1, 2)])
+            if self.r.random() < 0.7:  # a core without suspension keeps the planned timing
+                small = {'op': 'pure', 'v': self.literal(a)} if self.r.random() < 0.5 else self.g_delay(a, env)
+            core = {'op': 'seq', 'ps': self.cedes(c) + [small]}
+            if kind == 'fin' and self.r.random() < 0.3:
+                core = {'op': 'seq', 'ps': [self.tag({'op': 'async', 'cbs': self.pick([(1, []), (1, [{'when': 'later', 'ok': {'t': 'unit'}}])]),
+                                                      'fin': self.g_fin(env, 2, ctx)}), core]}
+                c += 1
+            m = self.pick([(1, 1), (2, 2), (2, 3)])
+            gc = self.r.random() < 0.8
+            x = self.fresh('x', env)
+            fenv = {**env, x: ('val', outcome(a))} if gc else env
+            if kind == 'fin':
+                fin_ps = self.region(MARK_FIN, self.cedes(m))
+                fin_ps.append(self.prog(self.small_type(), fenv, max(1, sc - 4), self.fin_ctx(ctx)))
+            else:
+                p = self.fresh('p')
+                fenv = {**fenv, p: ('poll',)}
+                pe = self.esc_marked({'op': 'seq', 'ps': self.cedes(m)})
+                fin_ps = self.region(MARK_FIN, [{'op': 'poll', 'poll': p, 'e': pe}])
+                fin_ps.append({'op': 'poll', 'poll': p, 'e': self.prog(UNIT, fenv, max(1, sc - 4), {'pboost': 3.0})}
+                              if self.r.random() < 0.5 else self.prog(UNIT, fenv, max(1, sc - 4), {'pboost': 3.0}))
+                start = lambda ch: {'op': 'uncancelable', 'poll': p, 'body': {'op': 'start', 'e': ch}}
+            if gc:
+                child = self.tag({'op': 'guaranteeCase', 'e': core, 'x': x, 'fin': {'op': 'seq', 'ps': fin_ps}})
+            else:
+                child = self.tag({'op': 'onCancel', 'e': core, 'fin': {'op': 'seq', 'ps': fin_ps}})
+            # onCancel: cancel in the core; guaranteeCase: in the core or in the finalizer
+            if gc and self.r.random() < 0.8:
+                lo, hi = c + 1, c + m
+            else:
+                lo, hi = max(1, c), max(1, c)
+        elif kind == 'cb':
+            cbs = [{'when': 'later', 'ok': self.literal(a)}]
+            if self.r.random() < 0.3:
+                cbs.append({'when': 'later', 'err': self.code()} if self.r.random() < 0.5 else {'when': 'later', 'ok': self.literal(a)})
+            asy = {'op': 'async', 'cbs': cbs}
+            if self.r.random() < 0.85:
+                asy['fin'] = self.g_fin(env, 2, ctx)
+                self.tag(asy)
+            c0 = self.pick([(2, 0), (1, 1)])
+            e = {'op': 'seq', 'ps': self.cedes(c0) + [asy]}
+            child = self.tag({'op': 'onCancel', 'e': e, 'fin': self.g_fin(env, max(1, sc - 4), ctx)}) \
+                if self.r.random() < 0.6 else e
+            lo, hi = c0 + 1, c0 + 1
+        else:  # nested
+            g = self.fresh('x')
+            gt = self.small_type()
+            if sc >= 3 and self.r.random() < 0.5:
+                gchild = self.tpl_fin_stack(gt, env, sc // 2 + 1, cc)
+            else:
+                gchild = {'op': 'seq', 'ps': self.cedes(self.pick([(1, 1), (1, 2)])) + [self.prog(gt, env, max(1, sc // 2), cc)]}
+            genv = {**env, g: ('val', fiber(gt))}
+            mm = self.pick([(1, 1), (2, 2), (1, 3)])
+            mid = self.cedes(mm)
+            if self.r.random() < 0.3:
+                mid.append({'op': 'join', 'f': {'t': 'var', 'x': g}})
+            child = {'op': 'bind', 'x': g, 'e': {'op': 'start', 'e': gchild},
+                     'k': {'op': 'seq', 'ps': mid + [self.prog(a, genv, max(1, sc // 2), cc)]}}
+            if self.r.random() < 0.5:
+                child = self.tag({'op': 'onCancel', 'e': child, 'fin': self.g_fin(env, 2, ctx)})
+            lo, hi = 1, mm
+
+        # an external cancel needs a known handle: only for the scenario at the root
+        ext = root_first and self.r.random() < self.c['p_scenario_ext']
+        n = self.pick([(1, self.r.randint(lo, hi)), (0.15, 0), (0.15, hi + 1)])
+        if ext:
+            ps = self.cedes(max(n, hi) + 1)
+            self.hints.append((1, 2 * lo, 2 * hi))
+        else:
+            ps = self.cedes(n)
+            # escpoll with guaranteeCase: the finalizer runs anyway; a cancel is optional
+            if not (kind == 'escpoll' and child['op'] == 'guaranteeCase' and self.r.random() < 0.5):
+                ps += self.cancel_req(fv)
+            if kind == 'fin' and self.r.random() < 0.4:
+                # a second canceler fiber: its cancel can land while the first cancel runs the finalizer
+                j = n + self.r.randint(0, m)
+                helper = {'op': 'seq', 'ps': self.cedes(j) + self.cancel_req(fv) + [{'op': 'pure', 'v': {'t': 'unit'}}]}
+                ps.insert(0, {'op': 'start', 'e': helper})
+        k = self.prog(t, env2, max(1, sk), ctx)
+        tail = self.cedes(self.pick([(1, 0), (1, 1), (1, 2)]) + (2 if kind == 'cb' else 0))
+        if tail:
+            k = {'op': 'seq', 'ps': tail + [k]}
+        if self.r.random() < (0.85 if ext else 0.6):
+            ps.append(self.join_marked(fv, a, k, env2))
+        else:
+            ps.append(k)
+        e = start(child) if start else {'op': 'start', 'e': child}
+        return {'op': 'bind', 'x': f, 'e': e, 'k': {'op': 'seq', 'ps': ps}}
 
 
 # ------------------------------------------------------------------ cases
@@ -633,11 +855,23 @@ def size_of(p):
 
 def gen_choices(g, prog):
     r, c = g.r, g.c
-    if r.random() >= c['p_choices']:
+    hint = bool(g.hints) and r.random() < c['p_hint_cancel']
+    if r.random() >= c['p_choices'] and not hint:
         return []
     n = r.randint(1, c['max_choices'])
-    cs = [g.pick([(5, 0), (4, 1), (2, 2), (1, 3), (0.3, 7)]) for _ in range(n)]
-    if r.random() < c['p_cancel_case']:
+    bias = g.fifo_bias and r.random() < c['p_fifo_bias']
+    cs = [g.pick([(5, 0), (4, 1), (2, 2), (1, 3), (0.3, 7)] if not bias else [(10, 0), (1, 1), (0.3, 2)]) for _ in range(n)]
+    if hint:
+        # decision 17: an external cancel of the scenario child, placed after some child steps
+        # (mostly FIFO picks before it, so the parent and the child take turns as planned)
+        h, lo, hi = g.hints[0]
+        while len(cs) < hi:
+            cs.append(0)
+        for j in range(hi):
+            cs[j] = g.pick([(4, 0), (1, 1)])
+        for _ in range(g.pick([(3, 1), (1, 2)])):
+            cs.insert(r.randint(lo, hi), {'cancel': h})
+    if r.random() < c['p_cancel_case'] * (0.3 if hint else 1):
         nf = count_fibers(prog)
         for _ in range(g.pick([(5, 1), (2, 2), (1, 3)])):
             h = g.pick([(3, 0), (3 if nf > 1 else 0, r.randrange(1, nf) if nf > 1 else 0), (0.2, nf + 2)])
@@ -653,7 +887,11 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
     g = Gen(rng, weights, config)
     size = g.pick([(2, rng.randint(1, 5)), (5, rng.randint(6, 20)), (3, rng.randint(21, max(21, max_size)))])
     t = g.pick([(3, NAT), (2, UNIT), (1, BOOL), (1, either(NAT, NAT)), (1, outcome(NAT)), (1, pair(NAT, BOOL))])
-    prog = g.prog(t, {}, size, {'root_path': True})
+    if size >= 4 and rng.random() < g.c['p_scenario_root']:
+        prog = g.tpl_scenario(t, {}, size, {'root_path': True}, root_first=True)
+        g.fifo_bias = True
+    else:
+        prog = g.prog(t, {}, size, {'root_path': True})
     check_prog(prog)  # raises TypeErr: generator bug
     case = {'v': FORMAT_VERSION, 'id': f"g{seed}-{i}", 'mode': 'replay'}
     cs = gen_choices(g, prog)

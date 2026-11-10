@@ -1,7 +1,7 @@
 # Differential testing of the Lean model against Cats Effect
 
-> Sources: synthesized from wiki articles on python-formalization, julia-in-lean, formalization precedents, CE source layout, Lean tooling (2026-11-10); TestControl spike (2026-11-10); generator and driver build (2026-11-10); first Lean-vs-Scala replay runs (2026-11-10)
-> Raw: [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Generator and driver notes](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [python-formalization difftest harness](../../raw/python-formalization/2026-10-29-lean-core-and-difftest-harness.md); [Harness code copy](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [Cedar DRT + Lean FFI](../../raw/lean-tooling/cedar-spec-drt-and-lean-ffi-readmes.md); [TestControl docs](../../raw/lean-tooling/cats-effect-testcontrol-docs.md); [TestControl spike notes](../../raw/cats-effect/2026-11-10-testcontrol-spike-notes.md); [Netsem](../../raw/formalization-precedents/2018-10-netsem-engineering-with-logic-tcp-test-oracle.md); [SibylFS](../../raw/formalization-precedents/2015-10-sibylfs-formal-spec-oracle-based-testing-posix.md)
+> Sources: synthesized from wiki articles on python-formalization, julia-in-lean, formalization precedents, CE source layout, Lean tooling (2026-11-10); TestControl spike (2026-11-10); generator and driver build (2026-11-10); first Lean-vs-Scala replay runs (2026-11-10); generator coverage work (2026-11-10)
+> Raw: [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Generator coverage notes](../../raw/project-decisions/2026-11-10-generator-coverage-notes.md); [Generator and driver notes](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [python-formalization difftest harness](../../raw/python-formalization/2026-10-29-lean-core-and-difftest-harness.md); [Harness code copy](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [Cedar DRT + Lean FFI](../../raw/lean-tooling/cedar-spec-drt-and-lean-ffi-readmes.md); [TestControl docs](../../raw/lean-tooling/cats-effect-testcontrol-docs.md); [TestControl spike notes](../../raw/cats-effect/2026-11-10-testcontrol-spike-notes.md); [Netsem](../../raw/formalization-precedents/2018-10-netsem-engineering-with-logic-tcp-test-oracle.md); [SibylFS](../../raw/formalization-precedents/2015-10-sibylfs-formal-spec-oracle-based-testing-posix.md)
 
 ## Overview
 
@@ -38,6 +38,15 @@ Both agent precedents and Cedar require the model to agree with the real impleme
 - Edge-case templates: escaped poll (`uncancelable(p => start(child that uses p))`, also poll inside the child's finalizer), finalizer stacks (1-3 onCancel/guaranteeCase layers around a suspend or cancel point; finalizers raise, suspend, or use an outer poll), cancel child, racePair with the loser in scope, Deferred handoff, Ref updates in parent and child. Async: 0-3 callbacks, sync or later, ok or err, 60% with a finalizer.
 - Schedule per case: a choice list (80%), with 1-3 external `{"cancel":h}` choices in 50% of cases (root, a child, or an unknown handle), mostly at steps 1-3. 3% get `maxSteps` 1-5.
 - `to_testcontrol(case, seed)` gives the same program in testcontrol mode (no external cancel there).
+- Long-lived scenarios (decision 17). An external cancel acts only between tasks, and most old programs ended in their first task. So 60% of root programs are a `tpl_scenario`: the parent starts a child, cedes n times, cancels it (`cancel f`, or an external choice at a hinted step), and often joins it. Child kinds: `masked` (uncancelable region with cedes), `fin` (cancel in the core or inside a `guaranteeCase` finalizer with cedes; sometimes a second canceler fiber), `cb` (waits in an async with a later callback and a finalizer), `nested` (started a grandchild), `escpoll` (escaped poll used in its finalizer), `complete` (parent and child both complete a Deferred). n is in a window such that, under FIFO, the cancel lands at the planned point. 70% of these cases get mostly-FIFO picks. The template is also a normal production (internal cancel only). Mean program size went from 14 to 26 nodes.
+- Markers: `delay fn1 arg nat M` (M ≥ 7.7·10^9 encodes kind, region id, enter/exit) around uncancelable bodies and finalizers, in escaped-poll finalizers, and before a join result; `delay fn1 arg f` before `cancel f`. They only add `call` events. They let `coverage.py` see what ran.
+
+## Coverage (`difftest/py/coverage.py`)
+
+- Counts run events of the Scala replay run (not program content). It reruns each case with `maxSteps = 1 .. steps-1`; the prefix traces give the step and the owner fiber of each trace event (0 prefix violations in 161,341 runs).
+- Key events (3 seeds × 10,000 cases, before → after): external cancel of a live child 1.2 → 20.9%; async finalizer runs 0.9 → 6.5%; `complete` false 0.3 → 6.5%; finalizer with canceled outcome 6.7 → 15.8%; choice among > 1 ready 16.3 → 56.7%; cancel while masked then region exit → 6.2%; cancel during a finalizer → 6.6%; escaped poll used in a finalizer → 6.6%; callback after the owner was canceled 1.4 → 8.0%; join on a canceled fiber → 18.9%; cancel of a nested parent 0.04 → 5.9%. Blocked + fuel 19.2 → 20.2%. Full table: [raw note](../../raw/project-decisions/2026-11-10-generator-coverage-notes.md).
+- `selftest.py` asserts each key event in ≥ 3.5% of 600 cases and blocked + fuel < 25%.
+- Seen in Scala runs: the known "masked end" behaviour (a fiber canceled while masked, whose masked region is its last action, completes `Succeeded`; [Scheduler model](../cats-effect/scheduler-model.md)) is now frequent. Docs and laws for it are not checked yet.
 
 ## Driver (`difftest/py/drive.py`)
 
@@ -47,7 +56,7 @@ Both agent precedents and Cedar require the model to agree with the real impleme
 - Compare. Replay: Lean lists the fields it can compare (`compare`); now all nine Scala fields (outcome, trace, steps, time, schedule, fifoFrom, fibers, pending, failures). They must be equal; the first differing field is the detail. Testcontrol: refinement. Proposed Lean output: `"outcomes":[{"outcome","trace"}…]` and `"complete":bool`; not in the set and complete → mismatch; not complete → inconclusive. Scala `inconclusive` (step cap) → inconclusive.
 - Automatic bins: `agree`, `unsupported` (Lean prints `"outcome":"unsupported"`; not a mismatch), `inconclusive`, `mismatch`, `harness`, `generator-bug`, `hang` (a timed-out batch is bisected to the case).
 - Shrinker: greedy delta debugging over well-typed candidates (replace a node by a child or by `raise 0`/`never`/`pure`/`canceled`/`cede`, drop seq elements, callbacks, finalizers, tags; drop choice chunks; picks → 0). A candidate is kept only if it is strictly smaller and the mismatch field is the same (without "strictly smaller" it cycles). One Scala batch and one Lean batch per round.
-- Self-test `difftest/py/selftest.py` (about 15 s, CI job `difftest`): type checker, generator determinism, no generator bug, Scala determinism, bins and shrinking with a fake Lean side (`mock_lean.py`, planted fault: one missing `fin onCancel` event; a 69-node case shrinks to 3 nodes), corpus rerun.
+- Self-test `difftest/py/selftest.py` (about 20 s, CI job `difftest`): type checker, generator determinism, no generator bug, Scala determinism, bins and shrinking with a fake Lean side (`mock_lean.py`, planted fault: one missing `fin onCancel` event; a 113-node case shrinks to 3 nodes), corpus rerun, minimum run-event coverage.
 
 ## Corpus (`difftest/corpus/`)
 
@@ -55,7 +64,7 @@ One JSON file per shrunk mismatch: `case`, `scala` (outcome, trace), `lean`, `fi
 
 ## Scala-only results (2026-11-10)
 
-3 seeds × 10,000 cases in 50 s. 0 generator bugs, 0 hangs. Replay and testcontrol runs are deterministic (30,000 and 12,000 cases, each run twice). TestControl outcome in the replay outcome set: 99.8% with 9 schedules per case; every outcome miss was found with more schedules (sampling gap, not a runtime difference). Weak coverage: async finalizer runs 0.9%, external cancel of a child 1.9%. Full histogram: [raw note](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md).
+3 seeds × 10,000 cases in 50 s. 0 generator bugs, 0 hangs. Replay and testcontrol runs are deterministic (30,000 and 12,000 cases, each run twice). TestControl outcome in the replay outcome set: 99.8% with 9 schedules per case; every outcome miss was found with more schedules (sampling gap, not a runtime difference). Weak coverage then: async finalizer runs 0.9%, external cancel of a child 1.9%. Full histogram: [raw note](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md). Fixed by the scenario template (section Coverage). After it: 0 generator bugs, replay and testcontrol still deterministic; TestControl outcome in the replay outcome set 99.2% (outcome and trace 87.4%: more steps per program, so 9 schedules sample less of the space).
 
 ## Lean vs Scala results (2026-11-10)
 
@@ -86,4 +95,5 @@ model bug · harness/glue bug · deliberate model simplification · intended CE 
 - [Modeling approaches](../semantics/modeling-approaches.md)
 - [Source layout](../cats-effect/source-layout.md)
 - [TestControl and schedule replay](../cats-effect/testcontrol.md)
+- [Scheduler model (multi-fiber, replay)](../cats-effect/scheduler-model.md)
 - [Formalization precedents](../precedents/formalization-precedents.md)
