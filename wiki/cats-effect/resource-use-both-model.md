@@ -48,6 +48,8 @@ Why open: a proof for all programs needs a state invariant over `Step`/`SchedP` 
 
 Hypothesis note: `UserMarkersOnly` restricts only user ids (even). `Bracket.MarkersOnly` also restricts library ids; a library closure that calls a marker function makes it false, so the track G statements that use it may be vacuous (review batch 4).
 
+**Review batch 5 (2026-11-10):** `UserMarkersOnly` is forgeable. `usesId` does not look into library closure fields, so user code can run a marker through `ULam.allocFn (.user m)` and `WellFormed` accepts it. So `use.releaseOnce` and `flatMap.releaseOrder` are false for every implementation (HOLLOW), and CE-0020 is HOLLOW as registered (the bug and its witness are real; a correct `both` also refutes the statement). Fix: harness-only markers (decision 54). `eval.preservesCancelable` is FAITHFUL as a statement. See [review batch 5](../../review/2026-11-10-review-batch-5.md).
+
 ## Difftest (format v2)
 
 Ops `rUse`, `rAllocated`, `rBoth` ([format](../methodology/difftest-program-format.md)). Fixed cases `cases/resuse.jsonl` (228, all agree; case `res-both-relfail-sched5-1` shows CE-0020 on both sides). `opcount.py` seeds 21-23, 240,000 cases, all agree: rUse 87,130, rAllocated 51,777, rBoth 54,462 agreeing cases. After the merge with track M the default weights are `rUse` 0.5, `rAllocated` 0.4, `tpl_resBoth` 0.5, `res_both` 2.0 (so `race` keeps its 5 % selftest minimum).

@@ -174,3 +174,16 @@
 ## [2026-11-10] ingest | Track Res merged with track M
 - Updated: Resource use, allocated, both (generator weights after the merge)
 - Raw: raw/cats-effect/2026-11-10-track-res-merge-m-notes.md
+
+## [2026-11-10] ingest | Phase 6 merge notes (orchestration)
+- Updated: Agent workflow (orchestration)
+## [2026-11-10] ingest | Review batch 4 (13 Phase 6 entries; 2 HOLLOW)
+- Updated: Agent workflow (review log: CE-0030 and CE-0005 FAITHFUL; bracket.releaseOnce and guarantee.finalizerOnce vacuous; satisfiability-witness check)
+- Raw: raw/project-decisions/2026-11-10-review-batch-4-notes.md
+
+## [2026-11-10] ingest | Decisions 53-54 (satisfiability witness, harness-only markers)
+- Updated: Agent workflow
+
+## [2026-11-10] ingest | Review batch 5 (4 track Res entries; 3 HOLLOW)
+- Updated: Agent workflow (review log: CE-0020 HOLLOW as registered, bug real; use.releaseOnce and flatMap.releaseOrder HOLLOW; eval.preservesCancelable FAITHFUL; UserMarkersOnly forgeable through library closures)
+- Raw: raw/project-decisions/2026-11-10-review-batch-5-notes.md
