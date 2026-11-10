@@ -166,3 +166,6 @@
 
 ## [2026-11-10] ingest | Decisions 53-54 (satisfiability witness, harness-only markers)
 - Updated: Agent workflow
+
+## [2026-11-10] ingest | Track G review fixes (review batch 4, decisions 53-54)
+- Updated: guarantee and bracket model (restated invariants with harness markers, satisfiability witnesses, smoke with hypotheses), race and both model (GenSpawnLaws citation :146-147)

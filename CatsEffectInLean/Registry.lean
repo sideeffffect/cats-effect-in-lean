@@ -242,7 +242,8 @@ def registry : List Entry := [
     note := "Ordinary inputs of CE-0005: use is pure (no effect, no throw when called). \
       Smoke-tested (Proofs/Phase6/BracketSmoke.lean, twin_pure_*). A proof for all programs needs \
       a simulation between the two runs: same states up to the closure ids of the two bodies and \
-      one extra run-loop iteration, preserved by Sched.tickP over all of Step.lean." },
+      one extra run-loop iteration, preserved by Sched.tickP over all of Step.lean. \
+      Satisfiable (decision 53): Proofs.Phase6.BracketWitness.bracketFullIsKernelDefaultPureUse_satisfiable." },
   { id := "laws.MonadCancelLaws.guaranteeIsGuaranteeCase.IO"
     rows := ["laws.MonadCancelLaws.guaranteeIsGuaranteeCase", "core.IO.guarantee", "core.IO.guaranteeCase",
       "core.IO.IOAsync.guarantee", "core.IO.IOAsync.guaranteeCase"]
@@ -252,22 +253,35 @@ def registry : List Entry := [
       IO#guaranteeCase(_ => fin) (IO.scala:523-530), EqvP, all fa, fin. Believed true: same \
       structure, both report finalizer errors in the error case. Smoke-tested on 14 pairs \
       (law_*); a guarantee that never runs fin breaks it (law_wrongFunction). Open: needs a \
-      simulation proof over Step/SchedP for arbitrary fa (closure ids differ, extra user call)." },
+      simulation proof over Step/SchedP for arbitrary fa (closure ids differ, extra user call). \
+      Satisfiable (decision 53): Proofs.Phase6.BracketWitness.guaranteeIsGuaranteeCase_satisfiable." },
   { id := "core.IO.bracket.releaseOnce"
     rows := ["core.IO.bracket", "core.IO.bracketCase", "core.IO.bracketFull", "kernel.MonadCancel.bracket"]
     prop := ``Props.Phase6.Bracket.bracketReleaseOnce
     status := .«open»
     note := "Invariant (decision 50): bracket in a child fiber that the parent cancels at any \
       point and joins; release runs exactly once iff acquire completed, every use outcome, all \
-      schedules. Smoke-tested by #guard (test/Phase6/BracketSmokeParent.lean: rel_*, wrong function). Open: a universal proof needs an \
-      invariant on scheduler states (the onCancel release is on the finalizer stack iff the \
-      acquire marker was emitted and the release marker not)." },
+      schedules. Restated after review batch 4 (decisions 53, 54): the first form had a marker \
+      hypothesis (MarkersOnly) that never held with the others, so it was vacuous. Now the test \
+      program is a harness (henv, HLam) with counter cells that only the harness holds; user \
+      code u and acquire a0 are arbitrary WellFormed code; hypotheses: use, rel even and \
+      WellFormed a0. This fixes the statement, it does not weaken it: it quantifies over the \
+      same user code and schedules, and a broken bracket breaks it. Satisfiable: \
+      Proofs.Phase6.BracketWitness.bracketReleaseOnce_satisfiable (acquire done, release run, \
+      child canceled). Smoke by #guard with the hypotheses checked \
+      (test/Phase6/BracketSmokeParent.lean: 18 inputs; a bracket without release breaks it). \
+      Open: a universal proof needs an invariant on scheduler states (the onCancel release is on \
+      the finalizer stack iff counter 0 > counter 1)." },
   { id := "core.IO.guarantee.finalizerOnce"
-    rows := ["core.IO.guarantee", "kernel.MonadCancel.guarantee"]
+    rows := ["core.IO.guarantee"]
     prop := ``Props.Phase6.Bracket.guaranteeFinalizerOnce
     status := .«open»
-    note := "Invariant: guarantee in a child fiber that the parent cancels and joins; the \
-      finalizer runs at most once, and it runs if fa started. Smoke-tested by #guard (test/Phase6/BracketSmokeParent.lean). Open: same \
+    note := "Invariant: IO#guarantee in a child fiber that the parent cancels and joins; the \
+      finalizer runs at most once, and it runs if fa started. Restated after review batch 4 \
+      like core.IO.bracket.releaseOnce (harness markers, decisions 53, 54); row \
+      kernel.MonadCancel.guarantee removed (not mirrored here). Satisfiable: \
+      Proofs.Phase6.BracketWitness.guaranteeFinalizerOnce_satisfiable. Smoke by #guard with the \
+      hypotheses checked (12 inputs; a guarantee without finalizer breaks it). Open: same \
       missing state invariant as core.IO.bracket.releaseOnce." },
   -- Phase 6, track M (memoize)
   { id := "core.IO.memoize.noStuckGet"

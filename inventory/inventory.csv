@@ -1018,8 +1018,8 @@ core.IO.attemptTap,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2
 core.IO.option,core,method,core/shared/src/main/scala/cats/effect/IO.scala,215,todo,,
 core.IO.bothOutcome,core,method,core/shared/src/main/scala/cats/effect/IO.scala,228,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak
 core.IO.both,core,method,core/shared/src/main/scala/cats/effect/IO.scala,243,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak
-core.IO.bracket,core,method,core/shared/src/main/scala/cats/effect/IO.scala,338,todo,,
-core.IO.bracketCase,core,method,core/shared/src/main/scala/cats/effect/IO.scala,370,todo,,
+core.IO.bracket,core,method,core/shared/src/main/scala/cats/effect/IO.scala,338,todo,,core.IO.bracket.releaseOnce
+core.IO.bracketCase,core,method,core/shared/src/main/scala/cats/effect/IO.scala,370,todo,,core.IO.bracket.releaseOnce
 core.IO.evalOn,core,method,core/shared/src/main/scala/cats/effect/IO.scala,384,todo,,
 core.IO.evalOnExecutor,core,method,core/shared/src/main/scala/cats/effect/IO.scala,392,todo,,
 core.IO.startOn,core,method,core/shared/src/main/scala/cats/effect/IO.scala,395,todo,,
@@ -1031,8 +1031,8 @@ core.IO.forceR,core,method,core/shared/src/main/scala/cats/effect/IO.scala,452,t
 core.IO.flatMap,core,method,core/shared/src/main/scala/cats/effect/IO.scala,469,todo,,
 core.IO.flatten,core,method,core/shared/src/main/scala/cats/effect/IO.scala,472,todo,,
 core.IO.flatTap,core,method,core/shared/src/main/scala/cats/effect/IO.scala,474,todo,,
-core.IO.guarantee,core,method,core/shared/src/main/scala/cats/effect/IO.scala,496,todo,,
-core.IO.guaranteeCase,core,method,core/shared/src/main/scala/cats/effect/IO.scala,523,todo,,
+core.IO.guarantee,core,method,core/shared/src/main/scala/cats/effect/IO.scala,496,todo,,laws.MonadCancelLaws.guaranteeIsGuaranteeCase.IO;core.IO.guarantee.finalizerOnce
+core.IO.guaranteeCase,core,method,core/shared/src/main/scala/cats/effect/IO.scala,523,todo,,laws.MonadCancelLaws.guaranteeIsGuaranteeCase.IO
 core.IO.handleError,core,method,core/shared/src/main/scala/cats/effect/IO.scala,532,todo,,
 core.IO.orElse,core,method,core/shared/src/main/scala/cats/effect/IO.scala,541,todo,,
 core.IO.handleErrorWith,core,method,core/shared/src/main/scala/cats/effect/IO.scala,549,todo,,
@@ -1164,7 +1164,7 @@ core.IO.race#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1788,
 core.IO.racePair#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1817,todo,,
 core.IO.ref,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1822,todo,,
 core.IO.deferred,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1824,todo,,
-core.IO.bracketFull,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1826,modelled,,core.IO.bracketFull.kernelDefaultTwin
+core.IO.bracketFull,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1826,modelled,,core.IO.bracketFull.kernelDefaultTwin;core.IO.bracketFull.kernelDefaultTwin.pureUse;core.IO.bracket.releaseOnce
 core.IO.unique,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1836,todo,,
 core.IO.whenA,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1846,todo,,
 core.IO.unlessA,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1857,todo,,
@@ -1194,8 +1194,8 @@ core.IO.IOAsync.attempt,core,method,core/shared/src/main/scala/cats/effect/IO.sc
 core.IO.IOAsync.forceR,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2014,todo,,
 core.IO.IOAsync.pure,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2017,todo,,
 core.IO.IOAsync.unit,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2020,todo,,
-core.IO.IOAsync.guarantee,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2023,todo,,
-core.IO.IOAsync.guaranteeCase,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2026,todo,,
+core.IO.IOAsync.guarantee,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2023,todo,,laws.MonadCancelLaws.guaranteeIsGuaranteeCase.IO
+core.IO.IOAsync.guaranteeCase,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2026,todo,,laws.MonadCancelLaws.guaranteeIsGuaranteeCase.IO
 core.IO.IOAsync.handleError,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2029,todo,,
 core.IO.IOAsync.onError,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2032,todo,,
 core.IO.IOAsync.timeout,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2035,todo,,
@@ -1206,7 +1206,7 @@ core.IO.IOAsync.cont,core,method,core/shared/src/main/scala/cats/effect/IO.scala
 core.IO.IOAsync.evalOn,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2053,todo,,
 core.IO.IOAsync.executionContext,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2056,todo,,
 core.IO.IOAsync.onCancel,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2059,todo,,
-core.IO.IOAsync.bracketFull,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2062,modelled,,core.IO.bracketFull.kernelDefaultTwin
+core.IO.IOAsync.bracketFull,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2062,modelled,,core.IO.bracketFull.kernelDefaultTwin;core.IO.bracketFull.kernelDefaultTwin.pureUse
 core.IO.IOAsync.monotonic,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2066,todo,,
 core.IO.IOAsync.realTime,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2068,todo,,
 core.IO.IOAsync.sleep,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2070,todo,,
@@ -2052,9 +2052,9 @@ kernel.MonadCancel.canceled,kernel,method,kernel/shared/src/main/scala/cats/effe
 kernel.MonadCancel.onCancel,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,324,todo,,
 kernel.MonadCancel.guarantee,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,344,todo,,
 kernel.MonadCancel.guaranteeCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,365,todo,,
-kernel.MonadCancel.bracket,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,397,todo,,
+kernel.MonadCancel.bracket,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,397,todo,,core.IO.bracket.releaseOnce
 kernel.MonadCancel.bracketCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,423,todo,,
-kernel.MonadCancel.bracketFull,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,447,modelled,,core.IO.bracketFull.kernelDefaultTwin
+kernel.MonadCancel.bracketFull,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,447,modelled,,core.IO.bracketFull.kernelDefaultTwin;core.IO.bracketFull.kernelDefaultTwin.pureUse
 kernel.MonadCancel.apply,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,460,todo,,
 kernel.MonadCancel.apply#2,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,461,todo,,
 kernel.MonadCancel.monadCancelForOptionT,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,463,excluded,"out-of-scope: monad-transformer instance (OptionT, EitherT, Kleisli, ...); user decision Q1 (2026-11-10): ignore monad transformers",
@@ -2563,7 +2563,7 @@ laws.GenTemporalLaws.sleepRaceMinimum,laws,law,laws/shared/src/main/scala/cats/e
 laws.GenTemporalLaws.startSleepMaximum,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenTemporalLaws.scala,35,todo,,
 laws.GenTemporalLaws.apply,laws,method,laws/shared/src/main/scala/cats/effect/laws/GenTemporalLaws.scala,42,excluded,"trivial: law-trait plumbing (instance parameter or factory), not a law",
 laws.MonadCancelLaws.F,laws,method,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,26,excluded,"trivial: law-trait plumbing (instance parameter or factory), not a law",
-laws.MonadCancelLaws.guaranteeIsGuaranteeCase,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,28,todo,,
+laws.MonadCancelLaws.guaranteeIsGuaranteeCase,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,28,todo,,laws.MonadCancelLaws.guaranteeIsGuaranteeCase.IO
 laws.MonadCancelLaws.uncancelablePollIsIdentity,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,32,todo,,laws.MonadCancelLaws.uncancelablePollIsIdentity.IO
 laws.MonadCancelLaws.uncancelableIgnoredPollEliminatesNesting,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,35,todo,,
 laws.MonadCancelLaws.uncancelablePollInverseNestIsUncancelable,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,39,todo,,

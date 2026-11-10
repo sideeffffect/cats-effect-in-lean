@@ -6,17 +6,16 @@ import CatsEffectInLean.Model.EnumP
 # Smoke tests of the `guarantee`/`bracket` properties (Phase 6, track G)
 
 Not registered. Exact outcome sets (`EqvP`, `exploreP`, `decide +kernel`) on concrete programs
-of `Model/BracketExamples.lean`, plus the parent lambdas of `Props/Phase6/Bracket.lean`.
+of `Model/BracketExamples.lean`.
 They support the `open` entries; they prove nothing for all programs.
 
 * `guaranteeIsGuaranteeCase`: holds for 14 pairs `(fa, fin)`; a broken `guarantee` that never
   runs the finalizer breaks it (`law_wrongFunction`).
 * `bracketFullIsKernelDefaultPureUse`: holds for 4 pure `use` functions with a self-cancel in
   acquire (the CE-0005 situation) and without it.
-* `bracketReleaseOnce`, `guaranteeFinalizerOnce`: the parent-cancel programs have about 3,000
-  states each; `decide +kernel` needs about 19 GB per module. These checks are `#guard`s
-  (compiled evaluation, not kernel-checked) in `test/Phase6/BracketSmokeParent.lean`; run them
-  with `lake env lean test/Phase6/BracketSmokeParent.lean`.
+* `bracketReleaseOnce`, `guaranteeFinalizerOnce`: see `Proofs/Phase6/BracketWitness.lean`
+  (satisfiability witnesses, kernel-checked) and `test/Phase6/BracketSmokeParent.lean`
+  (`#guard` smoke tests on the harness, which evaluate the hypotheses too).
 -/
 
 namespace CatsEffectInLean.Proofs.Phase6.BracketSmoke
@@ -26,23 +25,6 @@ open CatsEffectInLean.Model.Codec
 open CatsEffectInLean.Model.Bracket
 open CatsEffectInLean.Model.BracketExamples
 open CatsEffectInLean.Props.Phase6.Bracket
-
-/-- `BracketExamples.env` plus the parent lambdas. -/
-def disp2 (id : Nat) (a : Val) (v : View) : UserResult :=
-  match BLam.ofId? id with
-  | some l => call user progOf l a v
-  | none =>
-    match cloOfId id with
-    | some c =>
-      match ofCloVal c with
-      | some (8, 0, []) => PLam.cancelJoin.call a v
-      | some (8, 1, [.fiber f]) => (PLam.thenJoin f).call a v
-      | _ => user id a v
-    | none => user id a v
-
-def env2 : UserEnv where
-  call id a refs := disp2 id a { refs }
-  callV := disp2
 
 /-! ## The law `guaranteeIsGuaranteeCase` -/
 

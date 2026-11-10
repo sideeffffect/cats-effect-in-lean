@@ -187,7 +187,7 @@ def raceOutcomeIsWinnerOutcome : Prop :=
 
 /-! ## A closed `GenSpawn` law for `IO`
 
-`laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala:121-122`:
+`laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala:146-147`:
 `F.uncancelable(_ => F.race(F.never[Unit], F.canceled)).void <-> F.never[Unit]`.
 
 The law has no input: no `fa`, no user code. Its lambda `_ => F.race(...)` is part of the law
