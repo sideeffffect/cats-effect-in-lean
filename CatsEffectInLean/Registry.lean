@@ -104,7 +104,10 @@ def registry : List Entry := [
       (decision 37), non-fatal errors only (NonFatalOnly, decision 38; fatal errors are CE-0004), \
       observations up to Poll identity (eraseObs); counterexample = \
       case 4 of reproducers/CE-0001 (IO.uncancelable(_ => IO.canceled *> flag.set(true))). \
-      Rows: only those the witness exercises; the SyncIO run-loop rows went back to todo." },
+      Rows: only those the witness exercises; the SyncIO run-loop rows went back to todo. \
+      Fixed twin (decision 39): Model/SyncStepFixed.lean mirrors upstream PR #4700; it satisfies \
+      the statement on 10 bounded programs (Proofs.Calibration.SyncStepTwin.fixed_twin), v3.7.1 \
+      fails 5 of them (v371_fails)." },
   { id := "kernel.Resource.eval.preservesUncancelable"
     rows := ["kernel.Resource.eval", "kernel.Resource.allocatedCase", "kernel.Resource.pure"]
     prop := ``Props.Calibration.resourceEvalPreservesUncancelable

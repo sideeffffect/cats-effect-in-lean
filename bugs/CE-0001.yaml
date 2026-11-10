@@ -70,9 +70,20 @@ cause: >
   The laws do not catch it: syncStepIdentity is checked with G = F = IO (cancelable root scope),
   which never takes these branches.
 possible_fix: >
-  Re-wrap the Left result: for OnCancel, map Left(io) to Left(io.onCancel(fin)); for
-  Uncancelable, return Left of IO.uncancelable(poll => ...) that keeps the mask for the rest of
-  the body (upstream PR #4700 "Keep uncancelable and onCancel on the syncStep remainder").
+  Upstream PR #4700 "Keep uncancelable and onCancel on the syncStep remainder" (open, head
+  0c6f3c05, base series/3.7.x; read 2026-11-10). For OnCancel it maps Left(rest) to
+  Left(rest.onCancel(fin)). For Uncancelable it does not keep IdPoll: the body gets a
+  DeferredPoll whose poll(io) is IO.Local(Unmask).flatten, which applies the real Poll that is
+  bound in the running fiber's IOLocal state (or runs io unchanged if none is bound); the rest
+  becomes Uncancelable(Bind(deferred, rest)), and Bind binds the real Poll of that run while the
+  rest runs (rest.attempt <* restore).rethrow. A separate commit wraps the body call in a try
+  (non-fatal throw -> IO.raiseError), as the run loop does. Note: a fix that only re-wraps the
+  rest in uncancelable and keeps IdPoll in the continuation is incomplete (review batch 2): for
+  IO.uncancelable(p => IO.cede *> p(IO.canceled)) its rest ignores the cancel. PR #4700 does not
+  have this gap. Lean fixed twin (decision 39): Model/SyncStepFixed.lean mirrors PR #4700; it
+  satisfies the property on a bounded domain of 10 non-fatal programs, including polls after an
+  async boundary, an escaped poll and nested regions (Proofs/Calibration/SyncStepTwin.lean,
+  fixed_twin), and v3.7.1 fails 5 of them (v371_fails).
 duplicates:
   upstream:
     - "typelevel/cats-effect#4687 (open, bug) - this defect"
@@ -90,4 +101,5 @@ lean:
   registry: core.IO.syncStep.syncStepIdentitySyncIO
   counterexample: "reproducer case 4: IO.uncancelable(_ => IO.canceled *> flag.set(true)), limit Int.MaxValue; direct Succeeded(()) with flag = true; stepped Canceled with flag = false"
   model: CatsEffectInLean/Model/SyncIO.lean (SyncIO run loop), CatsEffectInLean/Model/SyncStep.lean (SyncStep.interpret, G = SyncIO)
+  fixed_twin: "CatsEffectInLean.Proofs.Calibration.SyncStepTwin.fixed_twin (PR #4700 twin satisfies StepIdentityFor on programs 1-10 of SyncStepTwinFamily.lean) and v371_fails (v3.7.1 fails programs 1, 4, 5, 6, 10). Program 10 (a throwing uncancelable body) is a second difference that the PR fixes: in v3.7.1 the throw leaves interpret (Scala: it leaves the syncStep call itself)."
   statement: "step-only schedules of the single-fiber driver (no external cancel, decision 26); hypotheses WellFormed (decisions 27 and 37: poll values are opaque to user code, no user UnmaskRunLoop with mask id 0) and NonFatalOnly (decision 38: only non-fatal errors; the fatal-error difference between the IO and SyncIO run loops is CE-0004); observations compared up to Poll identity (eraseObs). The witness is proven well-formed (cx_wellFormed) and non-fatal (cx_nonFatal). Re-run 2026-11-10: REPRODUCED CE-0001 on 3.7.1 (4 / 4 cases differ)."

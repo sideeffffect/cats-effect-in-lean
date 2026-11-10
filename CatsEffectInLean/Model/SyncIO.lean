@@ -27,6 +27,17 @@ JVM stack. `null` values do not exist in Lean.
 
 namespace CatsEffectInLean.Model
 
+/-- Not Cats Effect v3.7.1: the rewraps of a `Left` rest in the fixed twin of `syncStep`
+(upstream PR #4700, `Model/SyncStepFixed.lean`). -/
+inductive Rewrap where
+  /-- `Left(IO.Uncancelable(DeferredPoll.Bind(deferred d, rest)))`. -/
+  | unc (d : Nat)
+  /-- `Left(rest.onCancel(fin))`. -/
+  | onCancel (fin : IO)
+  /-- `Left(deferred d (rest))` (a `poll(rest)` of `DeferredPoll` `d`). -/
+  | deferred (d : Nat)
+  deriving DecidableEq, Repr
+
 /-- A pure function `g` inside `SFn.pureMap`. -/
 inductive SMap where
   /-- `a => Right((a, limit))` (`IO.scala:2358-2360`). -/
@@ -42,6 +53,9 @@ inductive SMap where
   | hewSel (f : Fn)
   /-- `_.map(_._1)` of `asyncForIO.syncStep` (`IO.scala:2177`). -/
   | dropLimit
+  /-- Not Cats Effect v3.7.1: `{ case Left(rest) => Left(k(rest)); case r => r }` of the fixed
+  twin (`Model/SyncStepFixed.lean`). The v3.7.1 `interpret` never builds it. -/
+  | rewrap (k : Rewrap)
   deriving DecidableEq, Repr
 
 /-- A closure inside a `SyncIO` node. Each case is one Scala lambda. The meaning is

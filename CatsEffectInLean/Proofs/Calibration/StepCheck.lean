@@ -153,4 +153,60 @@ theorem not_stepIdentity_of_check (env : UserEnv) (fa : IO) (refs : List Val)
     simp only [obsOfRest] at hcl heq
     simp_all
 
+
+/-! ### Variants with the rest computed (no literal rest in the statement) -/
+
+/-- The states reachable in `k` rounds from the root fiber of the rest `r` (empty for a stop). -/
+def reachOf (env : UserEnv) (r : Except Summary (IO × Heap)) (k : Nat) : List S :=
+  match r with
+  | .ok (p, h) => grow env k [rootOn counterMaskModel p h]
+  | .error _ => []
+
+/-- The root fiber of the rest `r` is in `reach`. -/
+def startIn (r : Except Summary (IO × Heap)) (reach : List S) : Bool :=
+  match r with
+  | .ok (p, h) => reach.contains (rootOn counterMaskModel p h)
+  | .error _ => false
+
+theorem stepIdentity_of_check' (env : UserEnv) (fa : IO) (refs : List Val)
+    (R : Nat → Except Summary (IO × Heap)) (F : Nat) (o : Obs)
+    (reachD reachS : List S) (nD nS : Nat)
+    (hsmall : ∀ k, k < F → restClaims (R k) = false)
+    (hbig : ∀ m, R (m + F) = R F)
+    (hD : Solo.init counterMaskModel fa refs ∈ reachD) (hDc : closed env reachD = true)
+    (hDo : claimsAre reachD o = true)
+    (hS : startIn (R F) reachS = true) (hSc : closed env reachS = true)
+    (hSo : claimsAre reachS o = true)
+    (hDw : isClaim (directObs env fa refs (steps (List.replicate nD true))).1 = true ∧
+      eraseObs (directObs env fa refs (steps (List.replicate nD true))) = o)
+    (hSw : isClaim (obsOfRest env refs (R F) (steps (List.replicate nS true))).1 = true ∧
+      eraseObs (obsOfRest env refs (R F) (steps (List.replicate nS true))) = o) :
+    StepIdentityFor (fun fuel cs => obsOfRest env refs (R fuel) cs) env fa refs := by
+  cases hR : R F with
+  | error s => simp [startIn, hR] at hS
+  | ok ph =>
+    obtain ⟨p, h⟩ := ph
+    simp only [startIn, hR, List.contains_iff_mem] at hS
+    rw [hR] at hSw
+    exact stepIdentity_of_check env fa refs R F p h o reachD reachS nD nS hsmall
+      (fun m => (hbig m).trans hR) hD hDc hDo hS hSc hSo hDw hSw
+
+theorem not_stepIdentity_of_check' (env : UserEnv) (fa : IO) (refs : List Val)
+    (R : Nat → Except Summary (IO × Heap)) (F : Nat) (oD : Obs)
+    (reachS : List S) (nD : Nat)
+    (hsmall : ∀ k, k < F → restClaims (R k) = false)
+    (hbig : ∀ m, R (m + F) = R F)
+    (hS : startIn (R F) reachS = true) (hSc : closed env reachS = true)
+    (hSo : claimsAvoid reachS oD = true)
+    (hDw : isClaim (directObs env fa refs (steps (List.replicate nD true))).1 = true ∧
+      eraseObs (directObs env fa refs (steps (List.replicate nD true))) = oD) :
+    ¬ StepIdentityFor (fun fuel cs => obsOfRest env refs (R fuel) cs) env fa refs := by
+  cases hR : R F with
+  | error s => simp [startIn, hR] at hS
+  | ok ph =>
+    obtain ⟨p, h⟩ := ph
+    simp only [startIn, hR, List.contains_iff_mem] at hS
+    exact not_stepIdentity_of_check env fa refs R F p h oD reachS nD hsmall
+      (fun m => (hbig m).trans hR) hS hSc hSo hDw
+
 end CatsEffectInLean.Proofs.Calibration.StepCheck

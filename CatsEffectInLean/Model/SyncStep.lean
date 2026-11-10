@@ -174,6 +174,8 @@ def applyMap (g : SMap) (arg : SVal) (x : Exec M) : MRes M :=
     | .left l => .ok (.left l) x
     | .right (.pair a _) => .ok (.right a) x
     | _ => .abort .illTyped
+  -- not in v3.7.1 (only the fixed twin, `Model/SyncStepFixed.lean`, builds it)
+  | .rewrap _ => .abort .illTyped
 
 /-- `IRes` as the result of a `SyncIO` closure that returns a `SyncIO`. -/
 @[inline] def IRes.toCall : IRes M → SCall M
