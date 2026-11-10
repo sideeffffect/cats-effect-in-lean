@@ -259,6 +259,10 @@ def valJson (hOf : Ren) : Val → Json
   | .deferred i => Json.mkObj [("t", "deferred"), ("id", toJson i)]
   | v => Json.mkObj [("t", .str s!"model:{(repr v).pretty}")]
 
+/-- The `op` of a format v2 `fin` event. -/
+def v2FinOp : Nat → String
+  | 0 => "guarantee" | 1 => "bracket" | 2 => "bracketCase" | 3 => "bracketFull" | _ => "?"
+
 /-- A trace event (`Interp.scala` `ev`). -/
 def evJson (hOf : Ren) : TraceEv → Json
   | .call fn arg => Json.mkObj [("ev", "call"), ("fn", toJson fn), ("arg", valJson hOf arg)]
@@ -272,6 +276,10 @@ def evJson (hOf : Ren) : TraceEv → Json
     Json.mkObj [("ev", "complete"), ("deferred", toJson d), ("v", valJson hOf v), ("ok", .bool ok)]
   | .asyncReg a => Json.mkObj [("ev", "asyncReg"), ("async", toJson a)]
   | .cb a i => Json.mkObj [("ev", "cb"), ("async", toJson a), ("i", toJson i)]
+  | .finV2 op tag none =>
+    Json.mkObj [("ev", "fin"), ("op", .str (v2FinOp op)), ("tag", toJson tag)]
+  | .finV2 op tag (some oc) =>
+    Json.mkObj [("ev", "fin"), ("op", .str (v2FinOp op)), ("tag", toJson tag), ("oc", valJson hOf oc)]
   | e => Json.mkObj [("ev", .str s!"internal:{(repr e).pretty}")]
 
 /-- The outcome of a run. A model result that is not a Cats Effect result prints as

@@ -11,6 +11,9 @@ Design notes: wiki/methodology/differential-testing.md ("Generator").
   async callbacks (0/1/2/3 calls, sync/later, with a finalizer), external cancel choices.
 - Long-lived scenarios (decision 17, `tpl_scenario`): the root stays alive, so cancels and child
   steps really run. Run-event coverage: coverage.py.
+- Format v2 (decision 51, track G): `guarantee`, `bracket`, `bracketCase`, `bracketFull` at any
+  position, and `tpl_bracket` (the bracket in a started child that the parent cancels, so a
+  cancel can land in acquire, use or release).
 - Format v1 (decision 30): a root `syncStep` (`CONFIG['p_syncstep']`), `timeout`/`timeoutTo`
   around any program, `Queue.unbounded` ops (`tpl_queue`: producer/consumer, `take.timeout`, the
   CE-0003 shape), and `allocatedCase` of `Resource` trees (`g_res`). Programs inside resource
@@ -28,7 +31,7 @@ import sys
 
 from typecheck import check_prog
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 MAX_LIMIT = 2**31 - 1  # Int.MaxValue: the largest syncStep limit
 
 # Region markers: `delay fn1 arg nat M` with M = MARK_BASE + kind * MARK_KIND + 2 * id + exit.
@@ -82,6 +85,8 @@ WEIGHTS = {
     'timeout': 1.2, 'timeoutTo': 0.35, 'allocatedCase': 2.2,
     'queueNew': 2, 'queueOffer': 3, 'queueTake': 3, 'queueTryTake': 6, 'tpl_queue': 2.2, 'tpl_resource': 1,
     'res_pure': 2.5, 'res_eval': 2.5, 'res_make': 3.5, 'res_flatMap': 12,
+    # format v2 (track G)
+    'guarantee': 1.5, 'bracket': 1.2, 'bracketCase': 1.2, 'bracketFull': 1.2, 'tpl_bracket': 1.5,
 }
 
 # Other knobs (probabilities and ranges).
@@ -467,6 +472,17 @@ class Gen:
                              'fin': self.prog(self.small_type(), {**env, x: ('val', outcome(t))}, sf, self.fin_ctx(ctx))})
         opts.append((w['guaranteeCase'], g_gc))
 
+        # ---- format v2 (track G)
+        def g_guarantee():
+            se, sf = self.split_size(size, 2)
+            return self.tag({'op': 'guarantee', 'e': self.prog(t, env, se, cc),
+                             'fin': self.prog(self.small_type(), env, sf, self.fin_ctx(ctx))})
+        opts.append((w['guarantee'], g_guarantee))
+        for op in ('bracket', 'bracketCase', 'bracketFull'):
+            opts.append((w[op], (lambda op=op: self.g_bracket(op, t, env, size, ctx))))
+        if size >= 5:
+            opts.append((w['tpl_bracket'], lambda: self.tpl_bracket(t, env, size, ctx)))
+
         if t[0] == 'either' and t[1][0] == 'pair' and t[1][1][0] == 'outcome' and t == race_type(t[1][1][1], t[2][1][1]):
             def g_race():
                 sa, sb = self.split_size(size, 2)
@@ -531,6 +547,59 @@ class Gen:
         if size >= 4 and self.res_ok(t):
             opts.append((w['tpl_resource'], lambda: self.tpl_resource(t, env, size, cc)))
         return opts
+
+    # ------------------------------------------------------- format v2
+
+    def g_bracket(self, op, t, env, size, ctx, acq=None, acq_type=None):
+        """`bracket`, `bracketCase` or `bracketFull` of type `t`: acquire of a bind type, use of
+        type `t`, release of a small type (it sees `x`, and `y` = the outcome of use)."""
+        cc = self.child_ctx(ctx)
+        sa, su, sr = self.split_size(size, 3)
+        a = self.bind_type() if acq is None else acq_type
+        p = {'op': op}
+        if op == 'bracketFull':
+            q = self.fresh('p')
+            p['poll'] = q
+            actx = dict(cc)
+            actx['pboost'] = max(actx.get('pboost', 1.0), self.c['poll_boost_fin'])
+            p['acq'] = acq if acq is not None else self.prog(a, {**env, q: ('poll',)}, sa, actx)
+        else:
+            p['acq'] = acq if acq is not None else self.prog(a, env, sa, cc)
+        x = self.fresh('x', env)
+        p['x'] = x
+        uenv = {**env, x: ('val', a)}
+        p['use'] = self.prog(t, uenv, su, cc)
+        renv = dict(uenv)
+        if op != 'bracket':
+            y = self.fresh('x', renv)
+            p['y'] = y
+            renv[y] = ('val', outcome(t))
+        p['rel'] = self.prog(self.small_type(), renv, sr, self.fin_ctx(ctx))
+        return self.tag(p)
+
+    def tpl_bracket(self, t, env, size, ctx):
+        """bind f = start(bracket*(acq, use, rel)) in seq(cedes, cancel f, maybe join f, k). The
+        acquire and the use often suspend first (cede, sleep), so the cancel can land in either."""
+        a = self.small_type()
+        sc, sk = self.split_size(size, 2)
+        op = self.pick([(1, 'bracket'), (1, 'bracketCase'), (1.3, 'bracketFull')])
+        acq = None
+        if self.r.random() < 0.6:
+            wait = self.pick([(3, {'op': 'cede'}), (2, {'op': 'sleep', 'ms': self.pick([(1, 0), (2, 1), (1, 10)])}),
+                              (1, {'op': 'canceled'})])
+            acq = {'op': 'seq', 'ps': [wait, {'op': 'pure', 'v': self.nat_lit()}]}
+        child = self.g_bracket(op, a, env, max(3, sc), ctx, acq=acq, acq_type=NAT)
+        f = self.fresh('x')
+        fv = {'t': 'var', 'x': f}
+        env2 = {**env, f: ('val', fiber(a))}
+        ps = [{'op': 'cede'} for _ in range(self.pick([(2, 0), (2, 1), (2, 2), (1, 4)]))]
+        ps.append({'op': 'cancel', 'f': fv})
+        k = self.prog(t, env2, sk, ctx)
+        if self.r.random() < 0.6:
+            ps.append(self.join_marked(fv, a, k, env2))
+        else:
+            ps.append(k)
+        return {'op': 'bind', 'x': f, 'e': {'op': 'start', 'e': child}, 'k': {'op': 'seq', 'ps': ps}}
 
     # ------------------------------------------------------- format v1
 

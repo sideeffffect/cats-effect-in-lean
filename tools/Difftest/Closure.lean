@@ -152,6 +152,36 @@ inductive Lam where
   | resAcquire
   /-- `rMake`: `a => I(rel)[x := a].void` (the `REnv.release` code). `vals = env`. -/
   | resRelease
+  -- format v2 (track G): `guarantee`, `bracket`, `bracketCase`, `bracketFull`. The ops run on
+  -- the mirror `Model/Bracket.lean`; these are the program lambdas and the source codes.
+  /-- `guarantee`: source code of `I(e)` (built with the op). `vals = snap :: env`. -/
+  | gSrcE
+  /-- `guarantee`: source code of the finalizer `IO.delay(emit fin) *> I(fin).void`. -/
+  | gSrcFin
+  /-- `guarantee`: the `emit fin` thunk. -/
+  | gFinEmit
+  /-- `guarantee`: `_ => I(fin).void` (the `*>`). `vals = snap :: env`. -/
+  | gFinThen
+  /-- `bracket`/`bracketCase`: source code of `I(acq)` (built with the op). `vals = snap :: env`. -/
+  | brAcqSrc
+  /-- `bracket*`: `x => I(use)`. -/
+  | brUse
+  /-- `bracket`: `x => IO.delay(emit fin) *> I(rel).void`. -/
+  | brRel
+  /-- `bracket`: the `emit fin` thunk. -/
+  | brFinEmit
+  /-- `bracket`: `_ => I(rel).void`. `vals = snap :: a :: env`. -/
+  | brRelThen
+  /-- `bracketCase`/`bracketFull`: `(x, oc) => ocVal(oc).flatMap(...)` (one argument `pair a oc`). -/
+  | brcRel
+  /-- `bracketCase`/`bracketFull`: `y => IO.delay(emit fin) *> I(rel).void`. `vals = a :: env`. -/
+  | brcFinK
+  /-- `bracketCase`/`bracketFull`: the `emit fin` thunk. `vals = [o]`. -/
+  | brcFinEmit
+  /-- `bracketCase`/`bracketFull`: `_ => I(rel).void`. `vals = snap :: o :: a :: env`. -/
+  | brcFinThen
+  /-- `bracketFull`: `poll => I(acq)`. -/
+  | bfAcq
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -162,7 +192,9 @@ def Lam.all : List Lam :=
    .rpRight, .refGetThunk, .refSetThunk, .refSetThen, .refSetEmit, .refModifyThunk, .asyncEc,
    .asyncBody, .asyncUnc, .asyncReg, .asyncSel, .asyncFinEmit, .asyncFinThen, .neverBody,
    .neverUnc, .neverSel, .refNewThunk, .refHandle, .deferredNewThunk, .deferredHandle, .dcThen,
-   .dcEmit, .queueHandle, .optEither, .allocFst, .timeoutSrc, .resBind, .resAcquire, .resRelease]
+   .dcEmit, .queueHandle, .optEither, .allocFst, .timeoutSrc, .resBind, .resAcquire, .resRelease,
+   .gSrcE, .gSrcFin, .gFinEmit, .gFinThen, .brAcqSrc, .brUse, .brRel, .brFinEmit, .brRelThen,
+   .brcRel, .brcFinK, .brcFinEmit, .brcFinThen, .bfAcq]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?
@@ -314,5 +346,9 @@ def cloOfId? (id : Nat) : Option Clo :=
 
 /-- Shorthand: `Fn` of lambda `lam` at node `node` with captured `vals`. -/
 def clo (node : Nat) (lam : Lam) (vals : List Val) : Fn := Clo.fn { node, lam, vals }
+
+/-- The `Fn.user` id of `clo node lam vals`. -/
+def cloId (node : Nat) (lam : Lam) (vals : List Val) : Nat :=
+  2 * CatsEffectInLean.Model.Codec.valToNat (.nat (Clo.encode { node, lam, vals }))
 
 end Difftest

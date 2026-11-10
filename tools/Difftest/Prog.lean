@@ -133,6 +133,17 @@ inductive Prog where
   | rEval (e : Prog)
   | rMake (acq rel : Prog)
   | rFlatMap (res k : Prog)
+  -- format v2 (Phase 6, track G)
+  /-- `I(e).guarantee(IO.delay(emit fin) *> I(fin).void)`. -/
+  | guarantee (e fin : Prog) (tag : Nat)
+  /-- `I(acq).bracket(x => I(use))(x => IO.delay(emit fin) *> I(rel).void)`; `use` and `rel`
+  bind `x`. -/
+  | bracket (acq use rel : Prog) (tag : Nat)
+  /-- `I(acq).bracketCase(x => I(use))((x, oc) => ocVal(oc).flatMap(y => …))`; `use` binds `x`,
+  `rel` binds `x` and `y` (`y` is index 0). -/
+  | bracketCase (acq use rel : Prog) (tag : Nat)
+  /-- `IO.bracketFull(poll => I(acq))(x => I(use))((x, oc) => …)`; `acq` binds the poll. -/
+  | bracketFull (acq use rel : Prog) (tag : Nat)
   deriving DecidableEq, Repr
 
 /-- Number of nodes. Nodes are numbered in pre-order from 0; the children of a node with
@@ -142,6 +153,8 @@ def Prog.size : Prog → Nat
   | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k => 1 + e.size + k.size
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => 1 + e.size
+  | .guarantee e k _ => 1 + e.size + k.size
+  | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => 1 + a.size + u.size + r.size
   | _ => 1
 
 /-- The node with pre-order number `i`. -/
@@ -154,6 +167,11 @@ def Prog.at? : Prog → Nat → Option Prog
       if i < e.size then e.at? i else k.at? (i - e.size)
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => e.at? i
+    | .guarantee e k _ => if i < e.size then e.at? i else k.at? (i - e.size)
+    | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
+      if i < a.size then a.at? i
+      else if i - a.size < u.size then u.at? (i - a.size)
+      else r.at? (i - a.size - u.size)
     | _ => none
 
 /-- The op name of the root node (JSON `op`). -/
@@ -172,6 +190,8 @@ def Prog.opName : Prog → String
   | .queueNew => "queueNew" | .queueOffer .. => "queueOffer" | .queueTake .. => "queueTake"
   | .queueTryTake .. => "queueTryTake" | .allocatedCase .. => "allocatedCase"
   | .rPure .. => "rPure" | .rEval .. => "rEval" | .rMake .. => "rMake" | .rFlatMap .. => "rFlatMap"
+  | .guarantee .. => "guarantee" | .bracket .. => "bracket" | .bracketCase .. => "bracketCase"
+  | .bracketFull .. => "bracketFull"
 
 /-- All op names that occur in the program (pre-order, with repeats). -/
 def Prog.ops (p : Prog) : List String :=
@@ -180,6 +200,8 @@ def Prog.ops (p : Prog) : List String :=
     | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k => e.ops ++ k.ops
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => e.ops
+    | .guarantee e k _ => e.ops ++ k.ops
+    | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => a.ops ++ u.ops ++ r.ops
     | _ => []
 
 /-- Does building `I(p)` read mutable state (`fib.join`, `fib.cancel`, `deferred.get` at a
@@ -193,6 +215,9 @@ def Prog.eagerReads : Prog → Bool
   | .onCancel e k _ | .racePair e k | .timeoutTo e k _ | .case _ e k | .rMake e k
   | .rFlatMap e k => e.eagerReads || k.eagerReads
   | .split _ k => k.eagerReads
+  -- format v2: `guarantee` builds `e` and `fin` at once; `bracket`/`bracketCase` build `acq`
+  | .guarantee e k _ => e.eagerReads || k.eagerReads
+  | .bracket a _ _ _ | .bracketCase a _ _ _ => a.eagerReads
   | _ => false
 
 /-- The resource restriction: no `IO` program inside a resource node reads state when it is
@@ -205,6 +230,9 @@ def Prog.resViewFree : Prog → Bool
   | .racePair e k | .case _ e k | .timeoutTo e k _ | .rFlatMap e k => e.resViewFree && k.resViewFree
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e => e.resViewFree
+  | .guarantee e k _ => e.resViewFree && k.resViewFree
+  | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
+    a.resViewFree && u.resViewFree && r.resViewFree
   | _ => true
 
 /-- One replay choice. -/
@@ -221,22 +249,24 @@ inductive Mode where
 
 /-- One test case (one input line). -/
 structure TestCase where
-  /-- The format version of the line (0 or 1). -/
-  version : Nat := 1
+  /-- The format version of the line (0, 1 or 2). -/
+  version : Nat := 2
   id : String
   mode : Mode
   prog : Prog
   maxSteps : Nat
   deriving Repr
 
-/-- `Json.FormatVersion` in `Json.scala`. Versions 0 and 1 are accepted. -/
-def formatVersion : Nat := 1
+/-- `Json.FormatVersion` in `Json.scala`. Versions 0, 1 and 2 are accepted. -/
+def formatVersion : Nat := 2
 /-- `Json.MaxLimit`: `Int.MaxValue`, the largest `syncStep` limit. -/
 def maxLimit : Nat := 2147483647
 /-- Ops of format v1 (`Json.V1Ops`). -/
 def v1Ops : List String :=
   ["syncStep", "timeout", "timeoutTo", "queueNew", "queueOffer", "queueTake", "queueTryTake",
    "allocatedCase", "rPure", "rEval", "rMake", "rFlatMap"]
+/-- Ops of format v2 (`Json.V2Ops`). -/
+def v2Ops : List String := ["guarantee", "bracket", "bracketCase", "bracketFull"]
 /-- The resource ops. -/
 def resOps : List String := ["rPure", "rEval", "rMake", "rFlatMap"]
 /-- `Json.DefaultMaxSteps` in `Json.scala`. -/
@@ -355,18 +385,19 @@ inductive Pos where
   deriving DecidableEq
 
 /-- Decode a program (`Json.prog`) or, at a resource position, a resource (`Json.res`).
-`v1`: the case is format v1. -/
-partial def decodeProgIn (j : Json) (scope : Scope) (v1 : Bool) (pos : Pos := .io) : D Prog := do
+`ver`: the format version of the case. -/
+partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .io) : D Prog := do
   let o ← obj j "prog"
   let op ← str (← field o "op" "prog") "prog.op"
   let ctx := s!"op '{op}'"
-  if !v1 && v1Ops.contains op then fail s!"{ctx}: not in format v0 (use v 1)"
+  if ver < 1 && v1Ops.contains op then fail s!"{ctx}: not in format v0 (use v 1)"
+  if ver < 2 && v2Ops.contains op then fail s!"{ctx}: not in format v{ver} (use v 2)"
   if pos == .res && !resOps.contains op then
     fail s!"{ctx}: not a resource op (expected rPure, rEval, rMake or rFlatMap)"
   if pos == .io && resOps.contains op then fail s!"{ctx}: a resource op outside a resource position"
   let only (ks : List String) : D Unit := keys o ("op" :: ks) ctx
-  let p (k : String) (s : Scope := scope) : D Prog := do decodeProgIn (← field o k ctx) s v1
-  let r (k : String) (s : Scope := scope) : D Prog := do decodeProgIn (← field o k ctx) s v1 .res
+  let p (k : String) (s : Scope := scope) : D Prog := do decodeProgIn (← field o k ctx) s ver
+  let r (k : String) (s : Scope := scope) : D Prog := do decodeProgIn (← field o k ctx) s ver .res
   let a (k : String) : D Atom := do atom (← field o k ctx) scope s!"{ctx}.{k}"
   let n (k : String) : D Nat := do nat (← field o k ctx) s!"{ctx}.{k}"
   let s (k : String) : D String := do str (← field o k ctx) s!"{ctx}.{k}"
@@ -396,8 +427,8 @@ partial def decodeProgIn (j : Json) (scope : Scope) (v1 : Bool) (pos : Pos := .i
       match ps.toList with
       | [] => fail s!"{ctx}.ps: expected a non-empty array, got []"
       | q :: qs =>
-        let first ← decodeProgIn q scope v1
-        qs.foldlM (fun acc r => do pure (Prog.seq acc (← decodeProgIn r scope v1))) first
+        let first ← decodeProgIn q scope ver
+        qs.foldlM (fun acc r => do pure (Prog.seq acc (← decodeProgIn r scope ver))) first
     | x => fail s!"{ctx}.ps: expected a non-empty array, got {x.compress}"
   | "map" => only ["e", "fn"]; pure (.map (← p "e") (← fn "fn"))
   | "handleErrorWith" =>
@@ -437,7 +468,7 @@ partial def decodeProgIn (j : Json) (scope : Scope) (v1 : Bool) (pos : Pos := .i
       | .arr cs => cs.toList.mapM cb
       | x => fail s!"{ctx}.cbs: expected an array, got {x.compress}"
     match get? o "fin" with
-    | some f => pure (.asyncFin cbs (← decodeProgIn f scope v1) (← tag))
+    | some f => pure (.asyncFin cbs (← decodeProgIn f scope ver) (← tag))
     | none => pure (.async cbs (← tag))
   | "case" =>
     only ["on", "l", "lk", "r", "rk"]; let l ← s "l"; let r ← s "r"
@@ -463,6 +494,19 @@ partial def decodeProgIn (j : Json) (scope : Scope) (v1 : Bool) (pos : Pos := .i
   | "rFlatMap" =>
     only ["res", "x", "k"]; let x ← s "x"
     pure (.rFlatMap (← r "res") (← r "k" ((x, .v) :: scope)))
+  -- format v2
+  | "guarantee" => only ["e", "fin", "tag"]; pure (.guarantee (← p "e") (← p "fin") (← tag))
+  | "bracket" =>
+    only ["acq", "x", "use", "rel", "tag"]; let x ← s "x"
+    pure (.bracket (← p "acq") (← p "use" ((x, .v) :: scope)) (← p "rel" ((x, .v) :: scope)) (← tag))
+  | "bracketCase" =>
+    only ["acq", "x", "use", "y", "rel", "tag"]; let x ← s "x"; let y ← s "y"
+    pure (.bracketCase (← p "acq") (← p "use" ((x, .v) :: scope))
+      (← p "rel" ((y, .v) :: (x, .v) :: scope)) (← tag))
+  | "bracketFull" =>
+    only ["poll", "acq", "x", "use", "y", "rel", "tag"]; let q ← s "poll"; let x ← s "x"; let y ← s "y"
+    pure (.bracketFull (← p "acq" ((q, .p) :: scope)) (← p "use" ((x, .v) :: scope))
+      (← p "rel" ((y, .v) :: (x, .v) :: scope)) (← tag))
   | _ => fail s!"unknown op '{op}'"
 
 /-- Decode a closed program. `syncStep` is allowed only here, at the root. -/
@@ -475,8 +519,8 @@ def decodeProg (j : Json) (version : Nat := formatVersion) : D Prog := do
     keys o ["op", "e", "limit"] "op 'syncStep'"
     let limit ← nat (← field o "limit" "op 'syncStep'") "op 'syncStep'.limit"
     if limit > maxLimit then fail s!"op 'syncStep'.limit: more than Int.MaxValue: {limit}"
-    pure (.syncStep (← decodeProgIn (← field o "e" "op 'syncStep'") [] v1) limit)
-  | _ => decodeProgIn j [] v1
+    pure (.syncStep (← decodeProgIn (← field o "e" "op 'syncStep'") [] version) limit)
+  | _ => decodeProgIn j [] version
 
 private def choice (j : Json) : D Choice :=
   match j with

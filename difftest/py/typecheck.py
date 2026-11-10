@@ -260,6 +260,20 @@ class Checker:
             return ('either', ('unit',), a)
         if op == 'allocatedCase':
             return self.res(p['res'], env)
+        # ---- format v2 (track G)
+        if op == 'guarantee':
+            t = self.prog(p['e'], env)
+            self.prog(p['fin'], env)
+            return t
+        if op in ('bracket', 'bracketCase', 'bracketFull'):
+            aenv = {**env, p['poll']: ('poll',)} if op == 'bracketFull' else env
+            a = self.prog(p['acq'], aenv)
+            t = self.prog(p['use'], {**env, p['x']: ('val', a)})
+            renv = {**env, p['x']: ('val', a)}
+            if op != 'bracket':
+                renv[p['y']] = ('val', ('outcome', t))
+            self.prog(p['rel'], renv)
+            return t
         if op == 'syncStep':
             raise TypeErr("syncStep below the root")
         if op in RES_OPS:

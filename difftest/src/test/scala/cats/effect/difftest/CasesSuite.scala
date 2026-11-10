@@ -68,11 +68,14 @@ class CasesSuite extends munit.FunSuite:
         """{"v":0,"id":"b","mode":"replay","prog":{"op":"pure","v":{"t":"unit"},"extra":1}}""",
         """{"v":0,"id":"c","mode":"replay","prog":{"op":"pure","v":{"t":"fiber","id":0}}}""",
         """{"v":0,"id":"d","mode":"replay","prog":{"op":"poll","poll":"p","e":{"op":"cede"}}}""",
-        """{"v":2,"id":"e","mode":"replay","prog":{"op":"cede"}}""",
+        """{"v":3,"id":"e","mode":"replay","prog":{"op":"cede"}}""",
         """{"v":0,"id":"f","mode":"replay","prog":{"op":"queueNew"}}""",
         """{"v":1,"id":"g","mode":"replay","prog":{"op":"seq","ps":[{"op":"syncStep","limit":1,"e":{"op":"cede"}}]}}""",
         """{"v":1,"id":"h","mode":"replay","prog":{"op":"rPure","v":{"t":"unit"}}}""",
-        """{"v":1,"id":"i","mode":"replay","prog":{"op":"pure","v":{"t":"queue","id":0}}}"""
+        """{"v":1,"id":"i","mode":"replay","prog":{"op":"pure","v":{"t":"queue","id":0}}}""",
+        """{"v":1,"id":"j","mode":"replay","prog":{"op":"guarantee","e":{"op":"cede"},"fin":{"op":"cede"}}}""",
+        """{"v":2,"id":"k","mode":"replay","prog":{"op":"bracket","acq":{"op":"pure","v":{"t":"var","x":"a"}},"x":"a","use":{"op":"cede"},"rel":{"op":"cede"}}}""",
+        """{"v":2,"id":"l","mode":"replay","prog":{"op":"bracketFull","poll":"p","acq":{"op":"cede"},"x":"a","use":{"op":"poll","poll":"p","e":{"op":"cede"}},"y":"o","rel":{"op":"cede"}}}"""
       )
     do assert(ujson.read(Main.runLine(bad)).obj.contains("error"), bad)
   }

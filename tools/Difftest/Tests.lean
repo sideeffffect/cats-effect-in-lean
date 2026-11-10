@@ -53,7 +53,7 @@ def sampleClos : List Clo :=
 #guard isErr (dec r#"{"op":"sleep","ms":1.5}"#)
 #guard isErr (dec r#"{"op":"sleep","ms":-1}"#)
 #guard isErr (dec r#"{"op":"async","cbs":[{"when":"sync","ok":{"t":"unit"},"err":1}]}"#)
-#guard isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"cede"}}"#)
+#guard isErr (decCase r#"{"v":3,"id":"x","mode":"replay","prog":{"op":"cede"}}"#)
 #guard isErr (decCase r#"{"v":0,"id":"x","mode":"replay","seed":1,"prog":{"op":"cede"}}"#)
 #guard isErr (decCase r#"{"v":0,"id":"x","mode":"testcontrol","choices":[],"seed":1,"prog":{"op":"cede"}}"#)
 
@@ -227,5 +227,27 @@ def vDone : View := { outcomes := [none, some (.succeeded (.nat 3))], deferreds 
 #guard rootTerm (.allocatedCase (.rPure (.lit (.nat 3)))) ==
   .ok (.map (.pure (.pair (.nat 3) (CatsEffectInLean.Model.Resource.RelFn.unit.toVal))) (clo 0 .allocFst []))
 #guard [TraceEv.refH 3, .queueH 4].all fun e => TraceEv.ofVal? e.toVal == some e
+
+/-! ## Format v2 (track G: `guarantee`, `bracket*`) -/
+
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"guarantee","e":{"op":"cede"},"fin":{"op":"cede"}}}"#)
+#guard !isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"guarantee","e":{"op":"cede"},"fin":{"op":"cede"}}}"#)
+-- `use` and `rel` of `bracket` bind `x`; `acq` does not
+#guard (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"bracket","acq":{"op":"pure","v":{"t":"nat","v":1}},"x":"a","use":{"op":"pure","v":{"t":"var","x":"a"}},"rel":{"op":"pure","v":{"t":"var","x":"a"}}}}"#).map (·.prog) ==
+  .ok (.bracket (.pure (.lit (.nat 1))) (.pure (.var 0)) (.pure (.var 0)) 0)
+#guard isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"bracket","acq":{"op":"pure","v":{"t":"var","x":"a"}},"x":"a","use":{"op":"cede"},"rel":{"op":"cede"}}}"#)
+-- `rel` of `bracketCase` binds `x` (index 1) and `y` (index 0); `use` does not see `y`
+#guard (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"bracketCase","acq":{"op":"cede"},"x":"a","use":{"op":"cede"},"y":"o","rel":{"op":"pure","v":{"t":"var","x":"a"}}}}"#).map (·.prog) ==
+  .ok (.bracketCase .cede .cede (.pure (.var 1)) 0)
+#guard isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"bracketCase","acq":{"op":"cede"},"x":"a","use":{"op":"pure","v":{"t":"var","x":"o"}},"y":"o","rel":{"op":"cede"}}}"#)
+-- `acq` of `bracketFull` binds the poll, `use` does not
+#guard !isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"bracketFull","poll":"p","acq":{"op":"poll","poll":"p","e":{"op":"cede"}},"x":"a","use":{"op":"cede"},"y":"o","rel":{"op":"cede"}}}"#)
+#guard isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"bracketFull","poll":"p","acq":{"op":"cede"},"x":"a","use":{"op":"poll","poll":"p","e":{"op":"cede"}},"y":"o","rel":{"op":"cede"}}}"#)
+-- the ops run on the mirror
+#guard rootTerm (.bracketFull .cede .cede .cede 0) ==
+  .ok (CatsEffectInLean.Model.Bracket.bracketFullIO (cloId 0 .bfAcq []) (cloId 0 .brUse []) (cloId 0 .brcRel []))
+#guard unsupportedOps (.guarantee .cede .cede 0) == []
+#guard [TraceEv.finV2 0 1 none, .finV2 3 2 (some .ocCanceled)].all fun e => TraceEv.ofVal? e.toVal == some e
+#guard (cloId 3 .brUse [.nat 1]) % 2 == 0 && cloOfId? (cloId 3 .brUse [.nat 1]) == some ⟨3, .brUse, [.nat 1]⟩
 
 end Difftest.Tests

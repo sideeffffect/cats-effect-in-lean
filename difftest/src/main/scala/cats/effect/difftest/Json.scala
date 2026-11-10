@@ -8,8 +8,8 @@ import ujson.Value
   * all decode errors.
   */
 object Json:
-  val FormatVersion = 1
-  val Versions = Set(0L, 1L)
+  val FormatVersion = 2
+  val Versions = Set(0L, 1L, 2L)
   /** `Int.MaxValue`: the largest `syncStep` limit. */
   val MaxLimit = 2147483647L
   val DefaultMaxSteps = 10000
@@ -100,26 +100,31 @@ object Json:
       "allocatedCase", "rPure", "rEval", "rMake", "rFlatMap")
   private val ResOps = Set("rPure", "rEval", "rMake", "rFlatMap")
 
+  /** Ops of format v2 (a decode error in a v0 or v1 case). */
+  val V2Ops: Set[String] = Set("guarantee", "bracket", "bracketCase", "bracketFull")
+
   /** Decode a closed program. `syncStep` is allowed only here, at the root. */
   def decodeProg(j: Value, version: Long = FormatVersion): Prog =
     val v1 = version >= 1
+    val ver = version
     obj(j, "prog").get("op") match
       case Some(ujson.Str("syncStep")) if v1 =>
         val o = obj(j, "prog")
         keys(o, Set("op", "e", "limit"), "op 'syncStep'")
         val limit = nat(field(o, "limit", "op 'syncStep'"), "op 'syncStep'.limit")
         if limit > MaxLimit then fail(s"op 'syncStep'.limit: more than Int.MaxValue: $limit")
-        Prog.SyncStep(prog(field(o, "e", "op 'syncStep'"), Map.empty, v1), limit.toInt)
-      case _ => prog(j, Map.empty, v1)
+        Prog.SyncStep(prog(field(o, "e", "op 'syncStep'"), Map.empty, ver), limit.toInt)
+      case _ => prog(j, Map.empty, ver)
 
-  private def opOf(j: Value, v1: Boolean): (collection.Map[String, Value], String) =
+  private def opOf(j: Value, ver: Long): (collection.Map[String, Value], String) =
     val o = obj(j, "prog")
     val op = str(field(o, "op", "prog"), "prog.op")
-    if !v1 && V1Ops.contains(op) then fail(s"op '$op': not in format v0 (use \"v\":1)")
+    if ver < 1 && V1Ops.contains(op) then fail(s"op '$op': not in format v0 (use \"v\":1)")
+    if ver < 2 && V2Ops.contains(op) then fail(s"op '$op': not in format v$ver (use \"v\":2)")
     (o, op)
 
   /** A resource position (format v1). */
-  private def res(j: Value, scope: Scope, v1: Boolean): Res =
+  private def res(j: Value, scope: Scope, v1: Long): Res =
     val (o, op) = opOf(j, v1)
     val ctx = s"op '$op'"
     def only(ks: String*) = keys(o, Set("op") ++ ks, ctx)
@@ -135,7 +140,7 @@ object Json:
         Res.RFlatMap(res(field(o, "res", ctx), scope, v1), x, res(field(o, "k", ctx), scope + (x -> Kind.V), v1))
       case _ => fail(s"$ctx: not a resource op (expected rPure, rEval, rMake or rFlatMap)")
 
-  private def prog(j: Value, scope: Scope, v1: Boolean): Prog =
+  private def prog(j: Value, scope: Scope, v1: Long): Prog =
     val (o, op) = opOf(j, v1)
     val ctx = s"op '$op'"
     def only(ks: String*) = keys(o, Set("op") ++ ks, ctx)
@@ -212,6 +217,19 @@ object Json:
       case "queueTake" => only("q"); Prog.QueueTake(a("q"))
       case "queueTryTake" => only("q"); Prog.QueueTryTake(a("q"))
       case "allocatedCase" => only("res"); Prog.AllocatedCase(res(field(o, "res", ctx), scope, v1))
+      // ---- format v2
+      case "guarantee" => only("e", "fin", "tag"); Prog.Guarantee(p("e"), p("fin"), tag)
+      case "bracket" =>
+        only("acq", "x", "use", "rel", "tag"); val x = s("x")
+        Prog.Bracket(p("acq"), x, p("use", scope + (x -> Kind.V)), p("rel", scope + (x -> Kind.V)), tag)
+      case "bracketCase" =>
+        only("acq", "x", "use", "y", "rel", "tag"); val x = s("x"); val y = s("y")
+        Prog.BracketCase(p("acq"), x, p("use", scope + (x -> Kind.V)), y,
+          p("rel", scope + (x -> Kind.V) + (y -> Kind.V)), tag)
+      case "bracketFull" =>
+        only("poll", "acq", "x", "use", "y", "rel", "tag"); val q = s("poll"); val x = s("x"); val y = s("y")
+        Prog.BracketFull(q, p("acq", scope + (q -> Kind.P)), x, p("use", scope + (x -> Kind.V)), y,
+          p("rel", scope + (x -> Kind.V) + (y -> Kind.V)), tag)
       case "syncStep" => fail(s"$ctx: only at the root of a program")
       case r if ResOps.contains(r) => fail(s"$ctx: a resource op outside a resource position")
       case _ => fail(s"unknown op '$op'")

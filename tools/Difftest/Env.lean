@@ -265,6 +265,54 @@ def runClo (R : Resource.REnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DR
     match arg with
     | .pair b _ => ret b
     | _ => DResult.harness
+  -- format v2 (`Model/Bracket.lean` runs the library lambdas; these are the program lambdas)
+  | .gFinEmit, .guarantee _ _ tag => ret .unit [.finV2 0 tag none]
+  | .gFinThen, .guarantee e fin _ =>
+    match env with
+    | snap :: env0 =>
+      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr R fin (node + 1 + e.size) env0 (snapView snap))
+    | [] => DResult.harness
+  -- `x => run(use, env + x)`
+  | .brUse, .bracket acq use _ _ | .brUse, .bracketCase acq use _ _ | .brUse, .bracketFull acq use _ _ =>
+    ofTr (tr R use (node + 1 + acq.size) (arg :: env) vw)
+  -- `poll => run(acq, env + poll)`
+  | .bfAcq, .bracketFull acq _ _ _ => ofTr (tr R acq (node + 1) (arg :: env) vw)
+  -- `a => IO.delay(emit fin) *> run(rel, env + x).void`: `run(rel)` is built now (snapshot)
+  | .brRel, .bracket acq use rel _ =>
+    match tr R rel (node + 1 + acq.size + use.size) (arg :: env) vw with
+    | .error e => ofTr (.error e)
+    | .ok _ =>
+      prog (.flatMap (.delay (clo node .brFinEmit [])) (clo node .brRelThen (snapVal vw :: arg :: env)))
+  | .brFinEmit, .bracket _ _ _ tag => ret .unit [.finV2 1 tag none]
+  | .brRelThen, .bracket acq use rel _ =>
+    match env with
+    | snap :: env0 =>
+      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$>
+        tr R rel (node + 1 + acq.size + use.size) env0 (snapView snap))
+    | [] => DResult.harness
+  -- `(a, oc) => ocVal(oc).flatMap(o => …)`
+  | .brcRel, .bracketCase .. | .brcRel, .bracketFull .. =>
+    match arg with
+    | .pair a oc => prog (.flatMap (ocValTerm node oc) (clo node .brcFinK (a :: env)))
+    | _ => DResult.harness
+  -- `o => IO.delay(emit fin) *> run(rel, env + x + y).void`: `run(rel)` is built now (snapshot)
+  | .brcFinK, .bracketCase acq use rel _ | .brcFinK, .bracketFull acq use rel _ =>
+    match tr R rel (node + 1 + acq.size + use.size) (arg :: env) vw with
+    | .error e => ofTr (.error e)
+    | .ok _ =>
+      prog (.flatMap (.delay (clo node .brcFinEmit [arg])) (clo node .brcFinThen (snapVal vw :: arg :: env)))
+  | .brcFinEmit, .bracketCase _ _ _ tag => match env with
+    | [o] => ret .unit [.finV2 2 tag (some o)]
+    | _ => DResult.harness
+  | .brcFinEmit, .bracketFull _ _ _ tag => match env with
+    | [o] => ret .unit [.finV2 3 tag (some o)]
+    | _ => DResult.harness
+  | .brcFinThen, .bracketCase acq use rel _ | .brcFinThen, .bracketFull acq use rel _ =>
+    match env with
+    | snap :: env0 =>
+      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$>
+        tr R rel (node + 1 + acq.size + use.size) env0 (snapView snap))
+    | [] => DResult.harness
   | _, _ => DResult.harness
 
 /-- The difftest closures of program `p`, with trace and failure lists. -/
@@ -288,11 +336,32 @@ def srcIO (p : Prog) (srcV : Val) : IO :=
     | _ => .error harnessErr
   | _ => .error harnessErr
 
+/-- The external sources of `Bracket.call` (format v2): `I(e)` and the finalizer of
+`guarantee`, `I(acq)` of `bracket`/`bracketCase`, each built with the snapshot of the op. -/
+def bracketSrcIO (p : Prog) (srcV : Val) : IO :=
+  match (match srcV with | .nat src => Clo.decode? src | _ => none) with
+  | some { node, lam, vals := snap :: env } =>
+    let R := renvOf p
+    let res : Except TrErr IO :=
+      match lam, p.at? node with
+      | .gSrcE, some (.guarantee e _ _) => tr R e (node + 1) env (snapView snap)
+      -- `IO.delay(emit fin) *> run(fin).void`; `*>` = `flatMap(_ => that)` (`IO.scala:138-139`)
+      | .gSrcFin, some (.guarantee _ _ _) =>
+        .ok (.flatMap (.delay (clo node .gFinEmit [])) (clo node .gFinThen (snap :: env)))
+      | .brAcqSrc, some (.bracket acq _ _ _) | .brAcqSrc, some (.bracketCase acq _ _ _) =>
+        tr R acq (node + 1) env (snapView snap)
+      | _, _ => .error (.unsupported "bracket-src")
+    match res with
+    | .ok io => io
+    | .error e => .error e.toErr
+  | _ => .error harnessErr
+
 /-- A library closure of the mirrors. -/
 inductive LibClo where
   | queue (l : CatsEffectInLean.Std.Queue.QLam)
   | timeout (l : Timeout.TLam)
   | resource (c : Resource.Clo)
+  | bracket (l : Bracket.BLam)
 
 /-- The library closure of an id that is not a difftest closure id, if exactly one mirror
 decodes it. -/
@@ -307,6 +376,7 @@ def libClo? (id : Nat) : Option LibClo :=
           if k == CatsEffectInLean.Std.Queue.ns then
             (CatsEffectInLean.Std.Queue.QLam.ofFields tag fs).map .queue
           else if k == Timeout.ns then (Timeout.TLam.ofFields tag fs).map .timeout
+          else if k == Bracket.ns then (Bracket.BLam.ofFields tag fs).map .bracket
           else none
         | none => none
       match res, lib with
@@ -316,19 +386,27 @@ def libClo? (id : Nat) : Option LibClo :=
     | none => none
   else none
 
-/-- All closures of program `p`: difftest closures (with trace and failures) and library
-closures (module doc). -/
-def dispatch (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
+/-- The difftest closures of program `p` as model results (the user functions that the
+`Bracket` mirror calls). -/
+def dispatchDt (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
   match cloOfId? id with
   | some c =>
     match p.at? c.node with
     | some n => (runClo (renvOf p) c n arg vw).toUser
     | none => DResult.harness.toUser
+  | none => DResult.harness.toUser
+
+/-- All closures of program `p`: difftest closures (with trace and failures) and library
+closures (module doc). -/
+def dispatch (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
+  match cloOfId? id with
+  | some _ => dispatchDt p id arg vw
   | none =>
     match libClo? id with
     | some (.queue l) => CatsEffectInLean.Std.Queue.call l arg vw
     | some (.timeout l) => Timeout.call (srcIO p) l arg vw
     | some (.resource c) => Resource.cloCall (renvOf p) c arg vw
+    | some (.bracket l) => Bracket.call (dispatchDt p) (bracketSrcIO p) l arg vw
     | none => DResult.harness.toUser
 
 /-- The `Model.UserEnv` of program `p` (see module doc). -/

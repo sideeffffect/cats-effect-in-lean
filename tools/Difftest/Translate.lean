@@ -2,6 +2,7 @@ import Difftest.Closure
 import CatsEffectInLean.Model.Syntax
 import CatsEffectInLean.Model.Resource
 import CatsEffectInLean.Model.Timeout
+import CatsEffectInLean.Model.Bracket
 import CatsEffectInLean.Std.Queue
 
 /-!
@@ -86,6 +87,9 @@ inductive TraceEv where
   | refH (ref : Nat)
   /-- Internal (not printed): `h.newQueue` gives the queue with buffer cell `buf` its handle. -/
   | queueH (buf : Nat)
+  /-- Format v2: a `guarantee` (`op = 0`), `bracket` (1), `bracketCase` (2) or `bracketFull` (3)
+  finalizer starts; `oc` for the last two. -/
+  | finV2 (op : Nat) (tag : Nat) (oc : Option Val)
   deriving DecidableEq, Repr
 
 /-- A trace event as a model value, for `UserEffect.emit`. Tag first. -/
@@ -103,6 +107,8 @@ def TraceEv.toVal : TraceEv → Val
   | .failure e => .pair (.nat 10) (.err e)
   | .refH r => .pair (.nat 11) (.nat r)
   | .queueH b => .pair (.nat 12) (.nat b)
+  | .finV2 op tag oc => .pair (.nat 13) (.pair (.nat op) (.pair (.nat tag)
+      (match oc with | some o => .some o | none => .none)))
 
 /-- The inverse of `TraceEv.toVal`. -/
 def TraceEv.ofVal? : Val → Option TraceEv
@@ -119,6 +125,8 @@ def TraceEv.ofVal? : Val → Option TraceEv
   | .pair (.nat 10) (.err e) => some (.failure e)
   | .pair (.nat 11) (.nat r) => some (.refH r)
   | .pair (.nat 12) (.nat b) => some (.queueH b)
+  | .pair (.nat 13) (.pair (.nat op) (.pair (.nat tag) .none)) => some (.finV2 op tag none)
+  | .pair (.nat 13) (.pair (.nat op) (.pair (.nat tag) (.some o))) => some (.finV2 op tag (some o))
   | _ => none
 
 /-! ## Construction-time snapshot
@@ -383,6 +391,28 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     | .error _ => throw .typeError
   | .rPure _, _, _, _ | .rEval _, _, _, _ | .rMake _ _, _, _, _ | .rFlatMap _ _, _, _, _ =>
     throw .typeError -- a resource node at an `IO` position: the decoder prevents this
+  -- format v2: the mirror `Model/Bracket.lean`
+  | .guarantee e fin _, node, env, vw => do
+    -- `run(e).guarantee(IO.delay(emit) *> run(fin).void)` (`IO.scala:496-501`): both built now;
+    -- the source codes capture the snapshot (`Env.bracketSrcIO` rebuilds them)
+    let _ ← tr R e (node + 1) env vw
+    let _ ← tr R fin (node + 1 + e.size) env vw
+    let sv := snapVal vw :: env
+    pure (Bracket.guaranteeIO (.ext (.nat (Clo.encode { node, lam := .gSrcE, vals := sv })))
+      (.ext (.nat (Clo.encode { node, lam := .gSrcFin, vals := sv }))))
+  | .bracket acq _ _ _, node, env, vw => do
+    -- `run(acq).bracket(use)(release)` (`IO.scala:338-339`); `run(acq)` is built now
+    let _ ← tr R acq (node + 1) env vw
+    pure (Bracket.bracketIO (.ext (.nat (Clo.encode { node, lam := .brAcqSrc, vals := snapVal vw :: env })))
+      (cloId node .brUse env) (cloId node .brRel env))
+  | .bracketCase acq _ _ _, node, env, vw => do
+    -- `run(acq).bracketCase(use)(release)` (`IO.scala:370-371`)
+    let _ ← tr R acq (node + 1) env vw
+    pure (Bracket.bracketCaseIO (.ext (.nat (Clo.encode { node, lam := .brAcqSrc, vals := snapVal vw :: env })))
+      (cloId node .brUse env) (cloId node .brcRel env))
+  | .bracketFull _ _ _ _, node, env, _ =>
+    -- `IO.bracketFull(acquire)(use)(release)` (`IO.scala:1826-1830`)
+    pure (Bracket.bracketFullIO (cloId node .bfAcq env) (cloId node .brUse env) (cloId node .brcRel env))
 
 /-- `I_R(r)`: the `Resource` term of a resource node (`Interp.scala` `res`). The `IO` programs
 inside are built with an empty view (the resource restriction, `Prog.resViewFree`). -/

@@ -39,6 +39,9 @@ V1_OPS = ('syncStep', 'timeout', 'timeoutTo', 'queueNew', 'queueOffer', 'queueTa
           'allocatedCase', 'rPure', 'rEval', 'rMake', 'rFlatMap')
 V1_MIN = 0.03
 V1_MIN_TIMEOUTTO = 0.005
+# Static coverage of the format v2 ops (track G)
+V2_OPS = ('guarantee', 'bracket', 'bracketCase', 'bracketFull')
+V2_MIN = 0.03
 
 
 def check(cond, msg):
@@ -50,7 +53,7 @@ def check(cond, msg):
 def main():
     t0 = time.time()
     # 1. type checker
-    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue')
+    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'bracket')
              for x in (drive.REPO / f'difftest/cases/{f}.jsonl').read_text().splitlines() if x.strip()]
     check(all(well_typed(c['prog']) for c in basic), f"type checker accepts all {len(basic)} golden cases")
     N1 = {'t': 'nat', 'v': 1}
@@ -68,6 +71,13 @@ def main():
         {'op': 'bind', 'x': 'q', 'e': {'op': 'queueNew'}, 'k': {'op': 'seq', 'ps': [
             {'op': 'queueOffer', 'q': {'t': 'var', 'x': 'q'}, 'v': N1},
             {'op': 'queueOffer', 'q': {'t': 'var', 'x': 'q'}, 'v': {'t': 'unit'}}]}},
+        # format v2: `use` does not see `y`; `use` does not see the poll of `bracketFull`; `y` is an outcome
+        {'op': 'bracketCase', 'acq': {'op': 'cede'}, 'x': 'a', 'use': {'op': 'pure', 'v': {'t': 'var', 'x': 'o'}},
+         'y': 'o', 'rel': {'op': 'cede'}},
+        {'op': 'bracketFull', 'poll': 'p', 'acq': {'op': 'cede'}, 'x': 'a',
+         'use': {'op': 'poll', 'poll': 'p', 'e': {'op': 'cede'}}, 'y': 'o', 'rel': {'op': 'cede'}},
+        {'op': 'bracketCase', 'acq': {'op': 'cede'}, 'x': 'a', 'use': {'op': 'cede'}, 'y': 'o',
+         'rel': {'op': 'map', 'e': {'op': 'pure', 'v': {'t': 'var', 'x': 'o'}}, 'fn': 2}},
     ]
     for p in bad:
         try:
@@ -85,6 +95,9 @@ def main():
     v1cov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V1_OPS}
     low = {op: f for op, f in v1cov.items() if f < (V1_MIN_TIMEOUTTO if op == 'timeoutTo' else V1_MIN)}
     check(not low, f"each format v1 op in >= {V1_MIN:.0%} of {N} cases (timeoutTo {V1_MIN_TIMEOUTTO:.1%}) {low}")
+    v2cov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2_OPS}
+    low = {op: f for op, f in v2cov.items() if f < V2_MIN}
+    check(not low, f"each format v2 op in >= {V2_MIN:.0%} of {N} cases {low}")
 
     # 3 + 4. Scala runs: no generator bug, deterministic
     tcs = [gen.to_testcontrol(c, t) for c in a[:N // 2] for t in (1, 2)]

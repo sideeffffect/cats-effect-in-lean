@@ -77,6 +77,15 @@ enum Prog:
   case QueueTake(q: Atom)
   case QueueTryTake(q: Atom)
   case AllocatedCase(r: Res)
+  // ---- format v2 (Phase 6, track G)
+  /** `e.guarantee(IO.delay(emit fin) *> fin.void)`. */
+  case Guarantee(e: Prog, fin: Prog, tag: Long)
+  /** `acq.bracket(x => use)(x => IO.delay(emit fin) *> rel.void)`. */
+  case Bracket(acq: Prog, x: String, use: Prog, rel: Prog, tag: Long)
+  /** `acq.bracketCase(x => use)((x, oc) => ocVal(oc).flatMap(y => IO.delay(emit fin) *> rel.void))`. */
+  case BracketCase(acq: Prog, x: String, use: Prog, y: String, rel: Prog, tag: Long)
+  /** `IO.bracketFull(poll => acq)(x => use)((x, oc) => ...)` (release as in `BracketCase`). */
+  case BracketFull(poll: String, acq: Prog, x: String, use: Prog, y: String, rel: Prog, tag: Long)
 
 /** A `Resource[IO, Val]` (format v1). It occurs only under `AllocatedCase`. */
 enum Res:

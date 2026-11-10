@@ -251,6 +251,27 @@ final class Interp(h: Harness):
         case None => VLeft(VUnit)
       }
     case Prog.AllocatedCase(r) => res(r, env).allocatedCase.map(_._1)
+    // ---- format v2 (Phase 6, track G)
+    case Prog.Guarantee(e, fin, tag) =>
+      run(e, env).guarantee(IO.delay(h.emit(ev("fin", "op" -> "guarantee", "tag" -> tag.toDouble))) *> run(fin, env).void)
+    case Prog.Bracket(acq, x, use, rel, tag) =>
+      run(acq, env).bracket(a => run(use, env + (x -> Bound.V(a)))) { a =>
+        IO.delay(h.emit(ev("fin", "op" -> "bracket", "tag" -> tag.toDouble))) *> run(rel, env + (x -> Bound.V(a))).void
+      }
+    case Prog.BracketCase(acq, x, use, y, rel, tag) =>
+      run(acq, env).bracketCase(a => run(use, env + (x -> Bound.V(a))))(caseRelease("bracketCase", x, y, rel, tag, env))
+    case Prog.BracketFull(q, acq, x, use, y, rel, tag) =>
+      IO.bracketFull[Val, Val](poll => run(acq, env + (q -> Bound.P(poll))))(a => run(use, env + (x -> Bound.V(a))))(
+        caseRelease("bracketFull", x, y, rel, tag, env))
+
+  /** `(a, oc) => ocVal(oc).flatMap(o => IO.delay(emit fin) *> run(rel, env + x + y).void)` (format v2). */
+  private def caseRelease(op: String, x: String, y: String, rel: Prog, tag: Long, env: Env)
+      : (Val, Outcome[IO, Throwable, Val]) => IO[Unit] =
+    (a, oc) =>
+      ocVal(oc).flatMap { o =>
+        IO.delay(h.emit(ev("fin", "op" -> op, "tag" -> tag.toDouble, "oc" -> Json.encodeVal(o)))) *>
+          run(rel, env + (x -> Bound.V(a)) + (y -> Bound.V(o))).void
+      }
 
   /** A `Resource[IO, Val]`. Each case is one fixed `Resource` term. */
   private def res(r: Res, env: Env): Resource[IO, Val] = r match
