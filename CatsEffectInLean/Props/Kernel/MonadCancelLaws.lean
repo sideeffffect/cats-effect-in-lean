@@ -16,11 +16,11 @@ equivalence `Eqv`.
   `M.map`.
 - Scala law type parameters and arguments (`[A]`, `fa: F[A]`) become `∀`. Scala's
   `Arbitrary` generators are not a restriction here.
-- These are law schemas with parameters. They are not registered. A registered property
-  is a closed `Prop`, for example (later)
-  `def io_guaranteeIsGuaranteeCase : Prop := guaranteeIsGuaranteeCase IO.asyncOps IO.eqv`.
-  PLACEHOLDER: the `IO` instance of `MonadCancelOps` (from `CatsEffectInLean.Model`) and the
-  outcome-set `Eqv` do not exist yet. Do not add a fake instance.
+- These are law schemas with parameters. They are not registered. The registered `IO`
+  laws are closed `Prop`s in `CatsEffectInLean/Props/IO/MonadCancelLaws.lean`, with the same
+  calls. They do not use these schemas: a typed `MonadCancelOps` instance of the untyped
+  model is not possible (`CatsEffectInLean/Model/IOInstance.lean`, module doc). Do not add a
+  fake instance.
 - `MonadCancelTests.scala:138-152` checks the last five laws only for one root scope:
   `Cancelable` (three laws) or `Uncancelable` (two laws). `lawsFor` gives the full set.
 - The inherited `MonadErrorLaws` (cats) are not stated here.

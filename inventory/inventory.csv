@@ -2564,20 +2564,20 @@ laws.GenTemporalLaws.startSleepMaximum,laws,law,laws/shared/src/main/scala/cats/
 laws.GenTemporalLaws.apply,laws,method,laws/shared/src/main/scala/cats/effect/laws/GenTemporalLaws.scala,42,excluded,"trivial: law-trait plumbing (instance parameter or factory), not a law",
 laws.MonadCancelLaws.F,laws,method,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,26,excluded,"trivial: law-trait plumbing (instance parameter or factory), not a law",
 laws.MonadCancelLaws.guaranteeIsGuaranteeCase,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,28,todo,,
-laws.MonadCancelLaws.uncancelablePollIsIdentity,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,32,todo,,
+laws.MonadCancelLaws.uncancelablePollIsIdentity,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,32,modelled,,laws.MonadCancelLaws.uncancelablePollIsIdentity.IO
 laws.MonadCancelLaws.uncancelableIgnoredPollEliminatesNesting,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,35,todo,,
 laws.MonadCancelLaws.uncancelablePollInverseNestIsUncancelable,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,39,todo,,
 laws.MonadCancelLaws.uncancelableEliminatesOnCancel,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,44,todo,,
-laws.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,61,todo,,
+laws.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,61,modelled,,laws.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary.IO
 laws.MonadCancelLaws.onCancelImpliesUncancelable,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,64,todo,,
 laws.MonadCancelLaws.forceRDiscardsPure,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,69,todo,,
 laws.MonadCancelLaws.forceRDiscardsError,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,72,todo,,
-laws.MonadCancelLaws.forceRCanceledShortCircuits,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,75,todo,,
+laws.MonadCancelLaws.forceRCanceledShortCircuits,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,75,modelled,,laws.MonadCancelLaws.forceRCanceledShortCircuits.IO
 laws.MonadCancelLaws.forceRAssociativity,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,78,todo,,
 laws.MonadCancelLaws.uncancelableFinalizers,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,81,todo,,
 laws.MonadCancelLaws.canceledSequencesOnCancelInOrder,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,86,todo,,
 laws.MonadCancelLaws.uncancelableCanceledAssociatesRightOverFlatMapAttempt,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,90,todo,,
-laws.MonadCancelLaws.canceledAssociatesLeftOverFlatMap,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,94,todo,,
+laws.MonadCancelLaws.canceledAssociatesLeftOverFlatMap,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,94,modelled,,laws.MonadCancelLaws.canceledAssociatesLeftOverFlatMap.IO
 laws.MonadCancelLaws.uncancelableIdentity,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,99,todo,,
 laws.MonadCancelLaws.canceledUnitIdentity,laws,law,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,102,todo,,
 laws.MonadCancelLaws.apply,laws,method,laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala,107,excluded,"trivial: law-trait plumbing (instance parameter or factory), not a law",
