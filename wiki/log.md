@@ -187,3 +187,6 @@
 ## [2026-11-10] ingest | Review batch 5 (4 track Res entries; 3 HOLLOW)
 - Updated: Agent workflow (review log: CE-0020 HOLLOW as registered, bug real; use.releaseOnce and flatMap.releaseOrder HOLLOW; eval.preservesCancelable FAITHFUL; UserMarkersOnly forgeable through library closures)
 - Raw: raw/project-decisions/2026-11-10-review-batch-5-notes.md
+
+## [2026-11-10] ingest | Track R witnesses (decision 53)
+- Updated: race, both and fiber leaks (witnesses, decision 54 check, citation fix)
