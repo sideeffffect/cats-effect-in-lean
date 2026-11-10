@@ -38,8 +38,6 @@ import CatsEffectInLean.Props.Calibration.ResourceEval
 import CatsEffectInLean.Proofs.Calibration.ResourceEval
 import CatsEffectInLean.Model.ResourceFixed
 import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedFamily
-import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed
-import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedOld
 import CatsEffectInLean.Model.Codec
 import CatsEffectInLean.Model.WellFormed
 import CatsEffectInLean.Std.Queue

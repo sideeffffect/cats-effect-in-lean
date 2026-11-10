@@ -51,7 +51,7 @@ Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effe
 - Review batch 1: 3 FAITHFUL, 2 HOLLOW (CE-0001 property, `uncancelablePollIsIdentity` statement). Gate not passed yet. Fixes: decisions 26–31.
 - Review-1 fixes done: one codec, `WellFormed` hypothesis on all entries, CE-0001 without external cancel (rows 27 → 5), stricter audit (open entries mark no rows; 23 rows `modelled`).
 - Difftest v1 (`syncStep`, `Resource`, `Queue`, `timeout`): 58,957 cases agree; idpoll model bug fixed (decisions 32–34). Review batch 2: **gate FAILED** (CE-0001, CE-0002 HOLLOW; CE-0003 FAITHFUL). Fixes: decisions 35–39.
-- Review-2 fixes done: `EqvP` (preemption at any iteration); CE-0002 re-proven, fixed twin of PR #4630 passes 9/9; opaque polls in `WellFormed`; CE-0001 non-fatal only, fixed twin of PR #4700 passes 10/10; new candidate CE-0004 (refuted, reproduced on all 3 branches). Decisions 40–43. Next: review batch 3.
+- Review-2 fixes done: `EqvP` (preemption at any iteration); CE-0002 re-proven, fixed twin of PR #4630 passes 9/9; opaque polls in `WellFormed`; CE-0001 non-fatal only, fixed twin of PR #4700 passes 10/10; new candidate CE-0004 (refuted, reproduced on all 3 branches). Decisions 40–43. Review batch 3: all 9 entries FAITHFUL, **gate PASS** ([Phase 5 gate report](phase5-gate-report.md)). Waiting for the user review.
 - Phase 3 steps 1–2 (Scala runner) done: [Difftest program format v0](difftest-program-format.md). sbt is not in CI yet.
 - Later decisions: generator programs are well-typed (a `TypeError` is a generator bug); `Val` and `IO` stay separate until a combinator needs `IO` in a value.
 

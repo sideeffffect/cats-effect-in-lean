@@ -1,4 +1,12 @@
-import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedFamily
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Fixed_canceled
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Fixed_emit
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Fixed_error
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Fixed_canceledThenEmit
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Fixed_childEmit
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Fixed_childCancel
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Fixed_childJoin
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Fixed_childCanceled
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Fixed_childEmitEmit
 
 /-!
 # Fixed-twin check of CE-0002: the fixed twin satisfies the equation
@@ -12,28 +20,6 @@ namespace CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed
 open CatsEffectInLean.Model
 open CatsEffectInLean.Model.Resource
 open CatsEffectInLean.Model.ResourceFixed
-
-/-- The fixed-twin check for one `g`. -/
-abbrev fixedCheck (g : IO) : Bool :=
-  checkEqvP {} counterMaskModel (env g) bound (allocatedCaseFixed 0) (.uncancelable (uid 1))
-
-theorem fixed_canceled : fixedCheck (gFamily.getD 0 .canceled) = true := by decide +kernel
-
-theorem fixed_emit : fixedCheck (gFamily.getD 1 .canceled) = true := by decide +kernel
-
-theorem fixed_error : fixedCheck (gFamily.getD 2 .canceled) = true := by decide +kernel
-
-theorem fixed_canceledThenEmit : fixedCheck (gFamily.getD 3 .canceled) = true := by decide +kernel
-
-theorem fixed_childEmit : fixedCheck (gFamily.getD 4 .canceled) = true := by decide +kernel
-
-theorem fixed_childCancel : fixedCheck (gFamily.getD 5 .canceled) = true := by decide +kernel
-
-theorem fixed_childJoin : fixedCheck (gFamily.getD 6 .canceled) = true := by decide +kernel
-
-theorem fixed_childCanceled : fixedCheck (gFamily.getD 7 .canceled) = true := by decide +kernel
-
-theorem fixed_childEmitEmit : fixedCheck (gFamily.getD 8 .canceled) = true := by decide +kernel
 
 /-- The fixed twin of PR #4630 satisfies the CE-0002 equation for every `g` of the family:
 `allocatedCaseFixed <-> IO.uncancelable(_ => allocatedCaseFixed)` under `EqvP`. -/

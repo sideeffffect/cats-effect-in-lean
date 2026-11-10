@@ -11,10 +11,10 @@ A refuted property is a bug candidate. It becomes a bug only when a Scala reprod
 The method comes from two earlier projects: [python-formalization](https://github.com/Broyojo/python-formalization) and [julia-in-lean](https://github.com/MilesCranmer/julia-in-lean).
 Read `wiki/methodology/lessons-for-cats-effect.md` before you plan any work.
 
-## Current phase: formalization started (Phases 0–5 autonomous)
+## Current phase: waiting for the user review at the Phase 5 gate
 
-The user said "start the process" on 2026-11-10. Agents now run Phase 0 (spikes) and then Phases 1–5 of `wiki/methodology/project-plan.md` without a user gate.
-Stop at any failed gate. The next user review is the Phase 5 calibration gate.
+The user said "start the process" on 2026-11-10. Agents ran Phases 0–5 of `wiki/methodology/project-plan.md`. The Phase 5 gate passed in review batch 3 (`wiki/methodology/phase5-gate-report.md`).
+Do not start Phase 6 until the user approves the gate. Fixes to existing rows, CI and the wiki are allowed.
 Write questions for the user to `QUESTIONS.md`. Ask only the non-obvious ones; decide the rest and record the decision in the wiki.
 
 ## Pinned versions

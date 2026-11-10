@@ -99,7 +99,7 @@ jobs:
       # every case that the model can run must agree on all compared fields. Testcontrol-mode
       # cases are `unsupported` (decision 15); all replay ops run except `timeoutTo` (format v1:
       # not mirrored). Any mismatch, harness error or hang fails the job. A mismatch of a known
-      # model bug (drive.py KNOWN_MODEL_BUGS, pinned in the corpus) is printed only. Installs only the Lean
+      # model bug fails the job too (decision 32: CI never passes --allow-known-model-bugs). Installs only the Lean
       # toolchain; `cediff` needs the model, not the proofs.
       - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
         with:
@@ -111,6 +111,21 @@ jobs:
           python3 difftest/py/drive.py check --lean "lake exe cediff" difftest/cases/basic.jsonl difftest/cases/sched.jsonl difftest/cases/deferred.jsonl difftest/cases/racesleep.jsonl difftest/cases/syncstep.jsonl difftest/cases/resource.jsonl difftest/cases/queue.jsonl
           python3 difftest/py/drive.py corpus --lean "lake exe cediff"
           python3 difftest/py/drive.py run --seeds 1 2 3 --n 2000 --modes replay --lean "lake exe cediff"
+
+  twin-checks:
+    # CE-0002 fixed-twin checks (lean_lib TwinChecks; decision 39). One `decide +kernel` needs up
+    # to 13 GB, so this job builds one module per Lean process and nothing else in parallel.
+    # It also checks the axioms of the three result theorems.
+    name: Fixed-twin checks (heavy, sequential)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          auto-config: "false"
+      - name: Build twin checks one module at a time, check axioms
+        run: scripts/check_twin_checks.sh
 
   inventory:
     name: Inventory check

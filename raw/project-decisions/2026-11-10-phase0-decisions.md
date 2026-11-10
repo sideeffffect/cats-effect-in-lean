@@ -76,3 +76,9 @@ Decisions after the review-2 fixes:
 41. The cancelable direction of CE-0002 ("a cancelable `fa` stays cancelable") becomes a separate property in Phase 6 (Resource), not part of the calibration row.
 42. Cost watch: full `lake build` now ~4 min and up to 13 GB peak with parallel jobs; `lake check` ~10 min. The `EnumP` proofs are split one declaration per program and side to stay under 8 GB per process. If CI runs out of memory, split further; never drop a proof.
 43. Next: review batch 3 of all entries. Gate passes only when CE-0001, CE-0002, CE-0003 are FAITHFUL.
+
+Decisions at the Phase 5 gate:
+
+44. Review batch 3 (`review/2026-11-10-review-batch-3.md`): all 9 entries FAITHFUL; Phase 5 gate PASS (CE-0001 with confidence 0.75, CE-0003 without a fixed twin).
+45. The CE-0002 fixed-twin checks moved to `lean_lib TwinChecks` with a separate sequential CI job, because one check needs 13 GB ([CI memory notes](2026-11-10-ci-memory-split-notes.md)).
+46. Autonomous work stops here. The next step is the user review at the Phase 5 gate (AGENTS.md, "Current phase").

@@ -1,4 +1,12 @@
-import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedFamily
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Old_canceled
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Old_emit
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Old_error
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Old_canceledThenEmit
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Old_childEmit
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Old_childCancel
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Old_childJoin
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Old_childCanceled
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedParts.Old_childEmitEmit
 
 /-!
 # Fixed-twin check of CE-0002: v3.7.1 on the same domain
@@ -13,32 +21,6 @@ namespace CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed
 
 open CatsEffectInLean.Model
 open CatsEffectInLean.Model.Resource
-
-/-- The v3.7.1 equation fails for `g` (exact and different outcome sets). -/
-abbrev oldFails (g : IO) : Bool :=
-  checkNotEqvP {} counterMaskModel (env g) bound allocOld (.uncancelable (uid 2))
-
-/-- The v3.7.1 equation holds for `g` (exact and equal outcome sets). -/
-abbrev oldHolds (g : IO) : Bool :=
-  checkEqvP {} counterMaskModel (env g) bound allocOld (.uncancelable (uid 2))
-
-theorem old_canceled : oldFails (gFamily.getD 0 .canceled) = true := by decide +kernel
-
-theorem old_emit : oldHolds (gFamily.getD 1 .canceled) = true := by decide +kernel
-
-theorem old_error : oldHolds (gFamily.getD 2 .canceled) = true := by decide +kernel
-
-theorem old_canceledThenEmit : oldFails (gFamily.getD 3 .canceled) = true := by decide +kernel
-
-theorem old_childEmit : oldHolds (gFamily.getD 4 .canceled) = true := by decide +kernel
-
-theorem old_childCancel : oldHolds (gFamily.getD 5 .canceled) = true := by decide +kernel
-
-theorem old_childJoin : oldHolds (gFamily.getD 6 .canceled) = true := by decide +kernel
-
-theorem old_childCanceled : oldFails (gFamily.getD 7 .canceled) = true := by decide +kernel
-
-theorem old_childEmitEmit : oldHolds (gFamily.getD 8 .canceled) = true := by decide +kernel
 
 /-- v3.7.1 fails the equation for `g = IO.canceled` (the CE-0002 witness). -/
 theorem v371_fails :

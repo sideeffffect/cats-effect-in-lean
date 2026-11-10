@@ -39,3 +39,11 @@ lean_lib Difftest where
 lean_exe cediff where
   srcDir := "tools"
   root := `Difftest.Main
+
+-- CE-0002 fixed-twin checks (review rule "fixed twin", decision 39). Supporting evidence, not a
+-- registered property. One `decide +kernel` here needs up to 13 GB, so these modules are not in
+-- the default target: CI builds them in a separate job, one module per Lean process
+-- (`scripts/check_twin_checks.sh`), with its own axiom check.
+lean_lib TwinChecks where
+  roots := #[`CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed,
+    `CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedOld]
