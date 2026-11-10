@@ -190,8 +190,8 @@ that never runs release (`acquire.flatMap(use)`), a guarantee that never runs th
 def childOf (g use rel : Nat) (c0 c1 : Nat) : IO :=
   if g == 0 then Bracket.bracketIO (.ext (srcAcq c0)) use (HLam.relW c1 rel).id
   else if g == 1 then Bracket.guaranteeIO (.ext (srcFa c0 use)) (.ext (srcFin c1 rel))
-  else if g == 2 then .flatMap (.flatMap (.pure .unit) (BLam.constThis (srcAcq c0)).fn) (.user use)
-  else .flatMap (.pure .unit) (BLam.constThis (srcFa c0 use)).fn
+  else if g == 2 then .flatMap (.flatMap (.pure .unit) (BLam.constThis (Src.ext (srcAcq c0)).toVal).fn) (.user use)
+  else .flatMap (.pure .unit) (BLam.constThis (Src.ext (srcFa c0 use)).toVal).fn
 
 private def hprog (p : IO) : UserResult := { out := .prog p }
 
