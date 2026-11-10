@@ -2,3 +2,8 @@
 -- Import modules here that should be built as part of the library.
 import CatsEffectInLean.Basic
 import CatsEffectInLean.Registry
+import CatsEffectInLean.Model.Val
+import CatsEffectInLean.Model.Syntax
+import CatsEffectInLean.Model.Fiber
+import CatsEffectInLean.Model.State
+import CatsEffectInLean.Model.Examples

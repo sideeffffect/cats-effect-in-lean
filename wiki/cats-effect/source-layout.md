@@ -46,3 +46,4 @@ Hierarchy: `MonadCancel ⊂ GenSpawn (+Unique) ⊂ GenConcurrent ⊂ GenTemporal
 - [Bug history](bug-history.md)
 - [Differential testing against Scala](../methodology/differential-testing.md)
 - [TestControl and schedule replay](testcontrol.md)
+- [IO ADT and fiber state (model data)](io-adt-and-fiber-state.md)
