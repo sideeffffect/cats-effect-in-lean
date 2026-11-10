@@ -9,7 +9,7 @@ The registry lists each stated property. The audit checks each entry mechanicall
 
 ## Registry
 
-`CatsEffectInLean/Registry.lean` defines `registry : List Entry`. It is empty now.
+`CatsEffectInLean/Registry.lean` defines `registry : List Entry`. First entry (2026-11-10): `core.IO.syncStep.syncStepIdentitySyncIO`, refuted, bug CE-0001 (see [SyncIO and syncStep model](../cats-effect/syncio-and-syncstep-model.md)). `Registry.lean` imports the `Props` and `Proofs` modules that its entries name.
 
 | Field | Meaning |
 |---|---|

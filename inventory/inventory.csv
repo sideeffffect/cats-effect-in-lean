@@ -1093,7 +1093,7 @@ core.IO.unsafeToFutureCancelable,core,method,core/shared/src/main/scala/cats/eff
 core.IO.unsafeRunCancelable,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1114,todo,,
 core.IO.unsafeRunFiber,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1117,excluded,internal: private helper; modelled as part of its public caller,
 core.IO.syncStep,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1151,excluded,trivial: @deprecated binary-compatibility shim; the current API has its own row,
-core.IO.syncStep#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1161,todo,,
+core.IO.syncStep#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1161,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
 core.IO.foreverM,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1171,todo,,
 core.IO.whileM,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1173,todo,,
 core.IO.whileM_,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1176,todo,,
@@ -1231,7 +1231,7 @@ core.IO.IOAsync.redeemWith,core,method,core/shared/src/main/scala/cats/effect/IO
 core.IO.IOAsync.ref,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2161,todo,,
 core.IO.IOAsync.deferred,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2163,todo,,
 core.IO.IOAsync.map2Eval,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2165,todo,,
-core.IO.IOAsync.syncStep,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2173,todo,,
+core.IO.IOAsync.syncStep,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2173,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
 core.IO.asyncForIO,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2181,todo,,
 core.IO._parallelForIO,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2183,excluded,internal: private helper; modelled as part of its public caller,
 core.IO.parallelForIO,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2186,todo,,
@@ -1240,9 +1240,9 @@ core.IO.envForIO,core,method,core/shared/src/main/scala/cats/effect/IO.scala,219
 core.IO.systemPropertiesForIO,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2193,todo,,
 core.IO._never,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2198,excluded,internal: private helper; modelled as part of its public caller,
 core.IO.secureRandom,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2200,todo,,
-core.SyncStep.MaxSteps,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2341,todo,,
+core.SyncStep.MaxSteps,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2341,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
 core.SyncStep.interpret,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2344,excluded,trivial: @deprecated binary-compatibility shim; the current API has its own row,
-core.SyncStep.interpret#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2348,todo,,
+core.SyncStep.interpret#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,2348,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
 core.IO.tag.Pure,core,constructor,core/shared/src/main/scala/cats/effect/IO.scala,2205,todo,,
 core.IO.tag.Error,core,constructor,core/shared/src/main/scala/cats/effect/IO.scala,2210,todo,,
 core.IO.tag.Delay,core,constructor,core/shared/src/main/scala/cats/effect/IO.scala,2214,todo,,
@@ -1439,7 +1439,7 @@ core.SyncIO.redeemWith,core,method,core/shared/src/main/scala/cats/effect/SyncIO
 core.SyncIO.void,core,method,core/shared/src/main/scala/cats/effect/SyncIO.scala,185,todo,,
 core.SyncIO.toString,core,method,core/shared/src/main/scala/cats/effect/SyncIO.scala,188,excluded,no-behaviour: string rendering only,
 core.SyncIO.to,core,method,core/shared/src/main/scala/cats/effect/SyncIO.scala,193,todo,,
-core.SyncIO.unsafeRunSync,core,method,core/shared/src/main/scala/cats/effect/SyncIO.scala,226,todo,,
+core.SyncIO.unsafeRunSync,core,method,core/shared/src/main/scala/cats/effect/SyncIO.scala,226,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
 core.SyncIOLowPriorityImplicits.semigroupForIO,core,method,core/shared/src/main/scala/cats/effect/SyncIO.scala,390,todo,,
 core.SyncIOLowPriorityImplicits.SyncIOSemigroup.combine,core,method,core/shared/src/main/scala/cats/effect/SyncIO.scala,395,todo,,
 core.SyncIO.Delay,core,method,core/shared/src/main/scala/cats/effect/SyncIO.scala,402,excluded,internal: private helper; modelled as part of its public caller,
@@ -1476,28 +1476,28 @@ core.SyncIO.SyncIOSync.redeemWith,core,method,core/shared/src/main/scala/cats/ef
 core.SyncIO.SyncIOSync.unit,core,method,core/shared/src/main/scala/cats/effect/SyncIO.scala,626,todo,,
 core.SyncIO.SyncIOSync.forceR,core,method,core/shared/src/main/scala/cats/effect/SyncIO.scala,629,todo,,
 core.SyncIO.syncForSyncIO,core,method,core/shared/src/main/scala/cats/effect/SyncIO.scala,633,todo,,
-core.SyncIO.tag.Pure,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,637,todo,,
-core.SyncIO.tag.Suspend,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,642,todo,,
-core.SyncIO.tag.Error,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,646,todo,,
-core.SyncIO.tag.Map,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,650,todo,,
-core.SyncIO.tag.FlatMap,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,654,todo,,
-core.SyncIO.tag.HandleErrorWith,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,658,todo,,
-core.SyncIO.tag.Success,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,663,todo,,
-core.SyncIO.tag.Failure,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,667,todo,,
-core.SyncIO.tag.Attempt,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,671,todo,,
-core.SyncIO.tag.RealTime,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,675,todo,,
-core.SyncIO.tag.Monotonic,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,679,todo,,
-core.SyncIO.runLoop.Pure,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,237,todo,,
-core.SyncIO.runLoop.Suspend,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,241,todo,,
-core.SyncIO.runLoop.Error,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,257,todo,,
-core.SyncIO.runLoop.Map,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,261,todo,,
-core.SyncIO.runLoop.FlatMap,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,269,todo,,
-core.SyncIO.runLoop.HandleErrorWith,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,277,todo,,
-core.SyncIO.runLoop.Success,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,285,todo,,
-core.SyncIO.runLoop.Failure,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,289,todo,,
-core.SyncIO.runLoop.Attempt,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,293,todo,,
-core.SyncIO.runLoop.RealTime,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,299,todo,,
-core.SyncIO.runLoop.Monotonic,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,302,todo,,
+core.SyncIO.tag.Pure,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,637,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.tag.Suspend,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,642,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.tag.Error,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,646,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.tag.Map,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,650,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.tag.FlatMap,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,654,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.tag.HandleErrorWith,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,658,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.tag.Success,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,663,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.tag.Failure,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,667,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.tag.Attempt,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,671,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.tag.RealTime,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,675,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.tag.Monotonic,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,679,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.runLoop.Pure,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,237,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.runLoop.Suspend,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,241,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.runLoop.Error,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,257,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.runLoop.Map,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,261,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.runLoop.FlatMap,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,269,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.runLoop.HandleErrorWith,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,277,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.runLoop.Success,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,285,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.runLoop.Failure,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,289,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.runLoop.Attempt,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,293,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.runLoop.RealTime,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,299,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
+core.SyncIO.runLoop.Monotonic,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,302,modelled,,core.IO.syncStep.syncStepIdentitySyncIO
 core.Trace.renderStackTraceElement,core,method,core/shared/src/main/scala/cats/effect/Trace.scala,23,excluded,"deferred: phase 9 (app, tracing, metrics or runtime support, not the IO semantics)",
 core.Trace.pretty,core,method,core/shared/src/main/scala/cats/effect/Trace.scala,27,excluded,"deferred: phase 9 (app, tracing, metrics or runtime support, not the IO semantics)",
 core.Trace.compact,core,method,core/shared/src/main/scala/cats/effect/Trace.scala,50,excluded,"deferred: phase 9 (app, tracing, metrics or runtime support, not the IO semantics)",

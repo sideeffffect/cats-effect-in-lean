@@ -1,6 +1,6 @@
 id: CE-0001
 title: "IO#syncStep drops uncancelable and onCancel from the IO it returns in Left"
-status: draft  # calibration bug; known upstream; Lean refutation not done yet
+status: draft  # calibration bug; known upstream; Lean refutation done (2026-11-10), waits for review
 priority: medium
 kind: law
 area: core
@@ -20,7 +20,8 @@ summary: >
   finalizer). If the walk then stops at an async boundary, it returns the inner IO in Left
   without the mask and without the finalizer. When that remainder runs on IO and is canceled,
   masked regions are interrupted and onCancel finalizers do not run. Resource.use is built from
-  these two nodes, so its release is skipped.
+  these two nodes, so its release is skipped. With no external cancel at all, an IO.canceled
+  inside an uncancelable region (a no-op) becomes a self-cancel of the remainder.
 likelihood: >
   Low to medium. Only code that calls syncStep and then runs the Left remainder on a cancelable
   IO is affected (for example libraries that run an IO synchronously "as far as possible", such
@@ -37,21 +38,24 @@ output:
     Resource.use release runs on cancel: direct=true stepped=false DIFFERENT
     uncancelable body completes before cancel: direct=true stepped=false DIFFERENT
     onCancel finalizer runs on cancel: direct=true stepped=false DIFFERENT
-    cases that differ: 3 / 3
+    canceled inside uncancelable is a no-op: direct=true stepped=false DIFFERENT
+    cases that differ: 4 / 4
     REPRODUCED CE-0001
-  # series/3.x = 3.7.1-89-de84c01 (origin/series/3.x de84c01f76), publishLocal, 2026-11-10
+  # series/3.x = 3.7.1-89-de84c01 (origin/series/3.x de84c01f76), publishLocal, 2026-11-10 (case 4 added and rerun the same day)
   series/3.x: |
     Resource.use release runs on cancel: direct=true stepped=false DIFFERENT
     uncancelable body completes before cancel: direct=true stepped=false DIFFERENT
     onCancel finalizer runs on cancel: direct=true stepped=false DIFFERENT
-    cases that differ: 3 / 3
+    canceled inside uncancelable is a no-op: direct=true stepped=false DIFFERENT
+    cases that differ: 4 / 4
     REPRODUCED CE-0001
   # series/3.7.x = 3.7.1-15-2f94201 (origin/series/3.7.x 2f9420145f), publishLocal, 2026-11-10
   series/3.7.x: |
     Resource.use release runs on cancel: direct=true stepped=false DIFFERENT
     uncancelable body completes before cancel: direct=true stepped=false DIFFERENT
     onCancel finalizer runs on cancel: direct=true stepped=false DIFFERENT
-    cases that differ: 3 / 3
+    canceled inside uncancelable is a no-op: direct=true stepped=false DIFFERENT
+    cases that differ: 4 / 4
     REPRODUCED CE-0001
 expected: |
   Each case: direct and stepped give the same value (true), so the last line is
@@ -81,5 +85,8 @@ duplicates:
     - "gh search issues 'syncStep' -R typelevel/cats-effect (2026-11-10)"
     - "gh search prs 'syncStep' -R typelevel/cats-effect (2026-11-10)"
 lean:
-  property: syncStep_identity_SyncIO   # planned name
-  theorem: open                        # syncStep_identity_SyncIO_refuted, when the model exists
+  property: CatsEffectInLean.Props.Calibration.syncStepIdentitySyncIO   # CatsEffectInLean/Props/Calibration/SyncStep.lean
+  theorem: CatsEffectInLean.Proofs.Calibration.syncStepIdentitySyncIO_refuted   # CatsEffectInLean/Proofs/Calibration/SyncStep.lean
+  registry: core.IO.syncStep.syncStepIdentitySyncIO
+  counterexample: "reproducer case 4: IO.uncancelable(_ => IO.canceled *> flag.set(true)), limit Int.MaxValue; direct Succeeded(()) with flag = true; stepped Canceled with flag = false"
+  model: CatsEffectInLean/Model/SyncIO.lean (SyncIO run loop), CatsEffectInLean/Model/SyncStep.lean (SyncStep.interpret, G = SyncIO)
