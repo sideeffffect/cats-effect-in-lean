@@ -57,3 +57,6 @@
 - Updated: Project plan
 
 ## [2026-11-10] lint | 0 issues found, 0 auto-fixed
+
+## [2026-11-10] ingest | Start signal (formalization started)
+- Updated: Project plan

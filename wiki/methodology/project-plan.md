@@ -1,11 +1,11 @@
 # Project plan: Cats Effect v3.7.1 in Lean
 
 > Sources: own plan, written 2026-11-10 from all wiki articles; user asked for "a detailed step by step plan how to do this whole thing"
-> Raw: [Project plan draft note](../../raw/project-decisions/2026-11-10-project-plan-draft.md); [User decisions on the plan](../../raw/project-decisions/2026-11-10-plan-decisions.md)
+> Raw: [Project plan draft note](../../raw/project-decisions/2026-11-10-project-plan-draft.md); [User decisions on the plan](../../raw/project-decisions/2026-11-10-plan-decisions.md); [Start signal](../../raw/project-decisions/2026-11-10-start-signal.md)
 
 ## Overview
 
-The end-to-end plan, from research to bug records. Status: **draft; 4 design decisions made by the user (see below)**. The formalization starts only when the user says so (`AGENTS.md`, "Current phase").
+The end-to-end plan, from research to bug records. Status: **started 2026-11-10** (user: "Start the process"). Phase 0 runs now; Phases 1–5 follow without a user gate. Work in small steps; push each green step. Open questions for the user: `QUESTIONS.md`.
 Each phase has an exit gate. Do not start a phase before the gate of the phase before it passes, except where noted.
 Time estimates assume agents do the work and the user reviews at gates. Confidence in the estimates: 0.4.
 Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effect.md) synthesis).

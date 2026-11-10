@@ -8,7 +8,7 @@ How this project works: synthesis, agent loop, difftest design. Start here.
 |---------|---------|---------|
 | [Lessons for Cats Effect in Lean](methodology/lessons-for-cats-effect.md) | Top-level synthesis: what to copy, what is new for CE, order of work | 2026-11-10 |
 | [Agent workflow and review protocol](methodology/agent-workflow.md) | Inventory → mirror → difftest → prove/refute → review; rubric; bug records; no upstream filing | 2026-11-10 |
-| [Project plan](methodology/project-plan.md) | Draft step-by-step plan: phases 0–9, gates, estimates, risks, user decisions | 2026-11-10 |
+| [Project plan](methodology/project-plan.md) | Step-by-step plan: phases 0–9, gates, risks, user decisions; started 2026-11-10 | 2026-11-10 |
 | [Differential testing](methodology/differential-testing.md) | Planned Lean-vs-CE difftest harness, nondeterminism handling, triage bins | 2026-11-10 |
 
 ## cats-effect
