@@ -1,7 +1,7 @@
 # Lean v4.35.0 toolchain facts
 
-> Sources: Lean FRO release notes, 2026-10-12; Lean reference manual (recursive definitions, tactics); local experiments, 2026-11-10
-> Raw: [lake check after fix](../../raw/lean-tooling/2026-11-10-lake-check-after-apparmor-fix-note.md); [lake check bwrap note](../../raw/lean-tooling/2026-11-10-lake-check-bwrap-apparmor-note.md); [v4.35.0 release notes](../../raw/lean-tooling/2026-10-12-lean-v4-35-0-release-notes.md); [v4.29–v4.34 highlights](../../raw/lean-tooling/lean-v4-29-to-v4-34-release-highlights.md); [Recursive definitions](../../raw/lean-tooling/lean-reference-recursive-definitions.md); [decide / cbv / vcgen](../../raw/lean-tooling/lean-reference-tactics-decide-cbv-vcgen.md); [Local experiments](../../raw/lean-tooling/2026-11-10-local-experiments-lean-v4-35-0.md)
+> Sources: Lean FRO release notes, 2026-10-12; Lean reference manual (recursive definitions, tactics); local experiments, 2026-11-10; kernel-evaluation spike, 2026-11-10
+> Raw: [lake check after fix](../../raw/lean-tooling/2026-11-10-lake-check-after-apparmor-fix-note.md); [lake check bwrap note](../../raw/lean-tooling/2026-11-10-lake-check-bwrap-apparmor-note.md); [v4.35.0 release notes](../../raw/lean-tooling/2026-10-12-lean-v4-35-0-release-notes.md); [v4.29–v4.34 highlights](../../raw/lean-tooling/lean-v4-29-to-v4-34-release-highlights.md); [Recursive definitions](../../raw/lean-tooling/lean-reference-recursive-definitions.md); [decide / cbv / vcgen](../../raw/lean-tooling/lean-reference-tactics-decide-cbv-vcgen.md); [Local experiments](../../raw/lean-tooling/2026-11-10-local-experiments-lean-v4-35-0.md); [Kernel-eval spike](../../raw/lean-tooling/2026-11-10-kernel-eval-spike-notes.md)
 
 ## Overview
 
@@ -20,7 +20,7 @@ The project uses `leanprover/lean4:v4.35.0` (latest stable, 2026-10-12; v4.36.0-
 
 | Style | Executable | Provable | Notes |
 |---|---|---|---|
-| Fuel (structural on `Nat`) | yes | yes; `decide`/`rfl` use no axioms | Fuel-out is a separate outcome, never a CE outcome. Precedents use this. |
+| Fuel (structural on `Nat`) | yes | yes; `decide`/`rfl` use no axioms | Fuel-out is a separate outcome, never a CE outcome. Precedents use this. Kernel-evaluable at 5,000+ steps. |
 | `partial_fixpoint` | yes | yes; `decide_cbv`, `simp [f]`, `grind [f]` work; generates `f.partial_correctness` | Recursive call must be under `do`/bind; `Option.map` around it fails the monotonicity check. |
 | `partial def` | yes | **no** (opaque: `rfl`, `decide`, `unfold` fail) | Use only for the difftest `main` loop. |
 
@@ -34,10 +34,12 @@ The project uses `leanprover/lean4:v4.35.0` (latest stable, 2026-10-12; v4.36.0-
 ## Pitfalls
 
 - Monthly releases break things (`Decidable` redefined, `rwa`, `mvcgen`). Upgrade on purpose, in one change, never casually.
-- Cap memory: `moreLeanArgs = ["-M8000"]` (python-formalization). Avoid big kernel `decide`; use `decide_cbv`.
+- Cap memory: `moreLeanArgs = ["-M8000"]` (python-formalization).
+- Kernel evaluation (spike, 2026-11-10): `decide +kernel` is fastest for one concrete run (≥ 5,400 steps in 6 s); `decide_cbv` memoizes equal subterms and is far better for enumerating schedules. `decide_cbv` stops at `cbv.maxSteps` (default 100,000); long runs need `set_option maxRecDepth`. Details: [Kernel evaluation of the model](kernel-evaluation.md).
 - Brittle proofs: prefer `simp`/`grind` with explicit lemma lists over long `rw` chains; generated equation names change between releases.
 
 ## See Also
 
+- [Kernel evaluation of the model](kernel-evaluation.md)
 - [Proof hygiene and agent tooling](proof-hygiene-and-agent-tooling.md)
 - [Differential testing](../methodology/differential-testing.md)

@@ -24,6 +24,7 @@ Recommendation (confidence 0.8): a **small-step operational semantics with an ex
 - Interleavings: a relation, or a step function indexed by a scheduler choice list. Cancel observation: a nondeterministic choice at each boundary, not the literal 512-step threshold.
 - User code (thunks, finalizers, callbacks) as parameters that can raise, suspend and re-enter.
 - Model both the real IOFiber (counter + poll ids) and the spec (fresh mask ids) to compare them.
+- Kernel evaluation (toy spike, 2026-11-10): this shape (non-recursive `step`, structural fuel, `Nat` ids, `List` state, user code as a parameter) is kernel-evaluable. Refutation witnesses check in seconds; bounded "all schedules" proofs use `decide_cbv` plus one soundness lemma. See [Kernel evaluation of the model](../lean/kernel-evaluation.md).
 
 ## Properties to state
 
@@ -58,6 +59,7 @@ Recommendation (confidence 0.8): a **small-step operational semantics with an ex
 
 ## See Also
 
+- [Kernel evaluation of the model](../lean/kernel-evaluation.md)
 - [Semantics of CE3](../cats-effect/semantics.md)
 - [Differential testing](../methodology/differential-testing.md)
 - [Lean v4.35.0 toolchain](../lean/toolchain-v4-35.md)
