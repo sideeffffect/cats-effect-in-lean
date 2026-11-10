@@ -11,7 +11,7 @@ calls become `UserEffect.emit` effects (`TraceEv.toVal`), before the other effec
 order.
 
 Format v1: `userEnv p` also runs the closures of the library mirrors (`dispatch`): queue
-(`Std.Queue.call`, `Codec.nsFn` namespace 1), timeout (`Timeout.call`, namespace 2, with the
+(`Std.Queue.call`, `Codec.cloVal` namespace 1), timeout (`Timeout.call`, namespace 2, with the
 source builder `srcIO`) and `Resource` (`Resource.cloCall`, odd ids). A difftest closure id is
 never one of them (`Difftest/Closure.lean`). An id that decodes as both a `Resource` closure and
 a queue or timeout closure is a harness error (never seen; a check, not an assumption).
@@ -277,8 +277,8 @@ def denv (p : Prog) (id : Nat) (arg : Val) (vw : View) : DResult :=
 
 /-- The source builder of `Timeout.call`: `src` is the code of a `timeoutSrc` closure value;
 the result is `I(e)` of that `timeout` node, built with the snapshot. -/
-def srcIO (p : Prog) (src : Nat) : IO :=
-  match Clo.decode? src with
+def srcIO (p : Prog) (srcV : Val) : IO :=
+  match (match srcV with | .nat src => Clo.decode? src | _ => none) with
   | some { node, lam := .timeoutSrc, vals := snap :: env } =>
     match p.at? node with
     | some (.timeout e _) =>
@@ -297,21 +297,24 @@ inductive LibClo where
 /-- The library closure of an id that is not a difftest closure id, if exactly one mirror
 decodes it. -/
 def libClo? (id : Nat) : Option LibClo :=
-  let res : Option LibClo :=
-    if id % 2 == 1 then
-      match CatsEffectInLean.Model.ValCodec.natToVal (id / 2) with
-      | some v => (Resource.Clo.ofVal v).map .resource
-      | none => none
-    else none
-  let lib : Option LibClo :=
-    match CatsEffectInLean.Model.Codec.decList id with
-    | 1 :: l => (CatsEffectInLean.Std.Queue.QLam.ofList l).map .queue
-    | 2 :: l => (Timeout.TLam.ofList l).map .timeout
-    | _ => none
-  match res, lib with
-  | some c, none => some c
-  | none, some c => some c
-  | _, _ => none
+  if id % 2 == 1 then
+    match CatsEffectInLean.Model.Codec.cloOfId id with
+    | some v =>
+      let res : Option LibClo := (Resource.Clo.ofVal v).map .resource
+      let lib : Option LibClo :=
+        match CatsEffectInLean.Model.Codec.ofCloVal v with
+        | some (k, tag, fs) =>
+          if k == CatsEffectInLean.Std.Queue.ns then
+            (CatsEffectInLean.Std.Queue.QLam.ofFields tag fs).map .queue
+          else if k == Timeout.ns then (Timeout.TLam.ofFields tag fs).map .timeout
+          else none
+        | none => none
+      match res, lib with
+      | some c, none => some c
+      | none, some c => some c
+      | _, _ => none
+    | none => none
+  else none
 
 /-- All closures of program `p`: difftest closures (with trace and failures) and library
 closures (module doc). -/

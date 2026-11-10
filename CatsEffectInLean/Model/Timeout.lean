@@ -160,7 +160,7 @@ def call (srcIO : Val → IO) (l : TLam) (arg : Val) (v : View) : UserResult :=
   | .body src d =>
     match arg with
     -- `poll(racePair(IO.sleep(finiteDuration))) flatMap { ... }` (`IO.scala:853`)
-    | .poll m p => prog (.flatMap (.unmaskRunLoop (.racePair (srcIO src) (.sleep d)) m p) (TLam.sel d m p).fn)
+    | .poll m p => prog (.flatMap (IO.applyPoll (.racePair (srcIO src) (.sleep d)) m p) (TLam.sel d m p).fn)
     | _ => illTyped
   | .sel d m p =>
     match arg with
@@ -178,7 +178,7 @@ def call (srcIO : Val → IO) (l : TLam) (arg : Val) (v : View) : UserResult :=
     -- `Errored(e) => F.raiseError(e)`
     | .ocErrored e => prog (.error e)
     -- `Canceled => poll(IO.canceled) *> IO.never`
-    | .ocCanceled => prog (.flatMap (.unmaskRunLoop .canceled m p) TLam.constNever.fn)
+    | .ocCanceled => prog (.flatMap (IO.applyPoll .canceled m p) TLam.constNever.fn)
     | _ => illTyped
   | .constNever => prog neverIO
   | .thenJoin d f snap =>
@@ -210,7 +210,7 @@ def call (srcIO : Val → IO) (l : TLam) (arg : Val) (v : View) : UserResult :=
   | .neverSel s m p =>
     match arg with
     -- `case Some(fin) => G.onCancel(poll(get), lift(fin))` (`IO.scala:1423`); `fin = IO.unit`
-    | .some _ => prog (.onCancel (.unmaskRunLoop (.contGet s) m p) (.pure .unit))
+    | .some _ => prog (.onCancel (IO.applyPoll (.contGet s) m p) (.pure .unit))
     -- `case None => get` (`IO.scala:1424`)
     | .none => prog (.contGet s)
     | _ => illTyped

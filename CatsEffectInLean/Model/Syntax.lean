@@ -367,4 +367,15 @@ def View.outcome (v : View) (t : Nat) : Option Outcome :=
   | some o => o
   | none => none
 
+/-- Apply a `Poll` value `(m, p)` to a program, as library code does with `poll(io)`.
+
+A real `IOFiber` poll builds `IO.UnmaskRunLoop(io, id, self)` (`core/shared/src/main/scala/cats/effect/IOFiber.scala`,
+the `Uncancelable` branch of `runLoop`); its mask id is `≥ 1` (`Model/Fiber.lean`).
+`IO#syncStep` gives an `uncancelable` body the identity poll `IdPoll` with `apply(ioc) = ioc`
+(`core/shared/src/main/scala/cats/effect/IO.scala:2391-2393`); the model encodes it as mask id `0`
+(`Model/SyncStep.lean`, `idPollVal`). So mask id `0` returns `io` unchanged.
+Every mirror that applies a poll it got from user-visible code must use this helper. -/
+def IO.applyPoll (io : IO) (m p : Nat) : IO :=
+  if m == 0 then io else .unmaskRunLoop io m p
+
 end CatsEffectInLean.Model

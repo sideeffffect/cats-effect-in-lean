@@ -22,7 +22,7 @@ A closure is `⟨node, lam, vals⟩`:
 
 Format v1 programs also run library closures of the mirrors: `Std.Queue` (`Codec.nsFn` namespace
 1), `Model.Timeout` (namespace 2) and `Model.Resource` (odd ids `2 * valToNat c + 1`). So a
-difftest closure id is `Codec.nsFn 3 [Clo.encode c]` = `encList [3, Clo.encode c]`. This id is
+difftest closure id is `Codec.userFn (.nat (Clo.encode c))` (even). This id is
 even (`encList (h :: t)` is even for an odd head `h`), so it is never a `Resource` id, and its
 namespace 3 is never a queue or timeout id. `Difftest/Env.lean` (`dispatch`) checks the rest.
 -/
@@ -301,14 +301,16 @@ def Clo.decode? (id : Nat) : Option Clo := do
 /-- The `Codec.nsFn` namespace of the difftest closures. -/
 def cloNs : Nat := 3
 
-/-- The `Fn` of a closure: `nsFn 3 [Clo.encode c]` (module doc). -/
-def Clo.fn (c : Clo) : Fn := CatsEffectInLean.Model.Codec.nsFn cloNs [c.encode]
+/-- The `Fn` of a closure: a user closure (even id, `Codec.userFn`) holding `.nat (Clo.encode c)`. -/
+def Clo.fn (c : Clo) : Fn := CatsEffectInLean.Model.Codec.userFn (.nat c.encode)
 
 /-- The closure of a `Fn.user` id, if the id is a difftest closure id. -/
 def cloOfId? (id : Nat) : Option Clo :=
-  match CatsEffectInLean.Model.Codec.decList id with
-  | [3, e] => Clo.decode? e
-  | _ => none
+  if id % 2 == 0 then
+    match CatsEffectInLean.Model.Codec.cloOfId id with
+    | some (.nat e) => Clo.decode? e
+    | _ => none
+  else none
 
 /-- Shorthand: `Fn` of lambda `lam` at node `node` with captured `vals`. -/
 def clo (node : Nat) (lam : Lam) (vals : List Val) : Fn := Clo.fn { node, lam, vals }

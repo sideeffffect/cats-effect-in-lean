@@ -102,14 +102,13 @@
   "v": 1
  },
  "field": "idpoll:outcome",
- "expect": "known-model-bug",
- "triage": "model-bug",
- "note": "Known model bug 'idpoll' (not fixed here: the difftest does not edit CatsEffectInLean/). SyncStep.interpret calls an uncancelable body with IdPoll (IO.scala:2390-2394 at v3.7.1), and IdPoll(fa) = fa. The model passes idPollVal = poll 0 0, but the mirror turns poll(fa) into UnmaskRunLoop(fa, 0, 0): Model/Timeout.lean:160 (TLam.body) and :178 (TLam.embed). On the root fiber (id 0, masks 0) counterMaskModel.pollMatches 0 is true, so the model pushes UnmaskK, and masks becomes 1 when fa ends: the rest of the program runs masked. In Scala it is not masked. Proposed fix: poll(fa) with mask id 0 is fa (as Difftest.pollTerm does).",
+ "expect": "agree",
+ "triage": "model-bug-fixed",
+ "note": "Fixed model bug 'idpoll': mirrors applied the syncStep IdPoll (mask id 0) as a real UnmaskRunLoop. Fix: IO.applyPoll in Model/Syntax.lean (mask id 0 returns the program unchanged, IO.scala:2391-2393), used by Timeout, Resource and Std.Queue. Was: Known model bug 'idpoll' (not fixed here: the difftest does not edit CatsEffectInLean/). SyncStep.interpret calls an uncancelable body with IdPoll (IO.scala:2390-2394 at v3.7.1), and IdPoll(fa) = fa. The model passes idPollVal = poll 0 0, but the mirror turns poll(fa) into UnmaskRunLoop(fa, 0, 0): Model/Timeout.lean:160 (TLam.body) and :178 (TLam.embed). On the root fiber (id 0, masks 0) counterMaskModel.pollMatches 0 is true, so the model pushes UnmaskK, and masks becomes 1 when fa ends: the rest of the program runs masked. In Scala it is not masked. Proposed fix: poll(fa) with mask id 0 is fa (as Difftest.pollTerm does).",
  "found": {
   "date": "2026-11-10",
   "orig_id": "g1-6327",
   "orig_size": 5,
   "size": 3
- },
- "known_bug": "idpoll"
+ }
 }

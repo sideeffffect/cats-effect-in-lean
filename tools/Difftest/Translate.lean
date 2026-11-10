@@ -359,7 +359,7 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     -- Scala builds `I(e)` now; the model builds it in the `body` closure from `src`, with the
     -- snapshot.
     let _ ← tr R e (node + 1) env vw
-    pure (Timeout.timeoutIO (Clo.encode { node, lam := .timeoutSrc, vals := snapVal vw :: env }) ms)
+    pure (Timeout.timeoutIO (.nat (Clo.encode { node, lam := .timeoutSrc, vals := snapVal vw :: env })) ms)
   | .timeoutTo .., _, _, _ => throw (.unsupported "timeoutTo")
   | .queueNew, node, _, _ =>
     -- `Queue.unbounded[IO, Val].map(q => VQueue(h.newQueue(q)))` (`Queue.scala:160-167`)

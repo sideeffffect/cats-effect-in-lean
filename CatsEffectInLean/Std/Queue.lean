@@ -269,7 +269,7 @@ def call (l : QLam) (arg : Val) (v : View) : UserResult :=
     | .right a => prog (.pure a)
     -- `(poll(wait) *> F.defer(...)).onCancel(notifyAnyway)` (`Q:943-944`)
     | .left (.nat r) =>
-      prog (.onCancel (.flatMap (.unmaskRunLoop (waitIO q r) m p) (QLam.thenRecv q m p r).fn)
+      prog (.onCancel (.flatMap (IO.applyPoll (waitIO q r) m p) (QLam.thenRecv q m p r).fn)
         (.delay (QLam.notifyAnyway q).fn))
     | _ => illTyped
   | .waitBody q r =>
@@ -300,7 +300,7 @@ def call (l : QLam) (arg : Val) (v : View) : UserResult :=
     | .right a => prog (.pure a)
     -- `case Left(Some(fin)) => G.onCancel(poll(get), lift(fin))` (`IO.scala:1360`)
     | .left (.some (.nat c)) =>
-      prog (.onCancel (.unmaskRunLoop (.contGet s) m p) (.delay (QLam.clear q c).fn))
+      prog (.onCancel (IO.applyPoll (.contGet s) m p) (.delay (QLam.clear q c).fn))
     -- `case Left(None) => get` (`IO.scala:1361`)
     | .left .none => prog (.contGet s)
     | _ => illTyped
@@ -322,7 +322,7 @@ def call (l : QLam) (arg : Val) (v : View) : UserResult :=
     match arg with
     | .some a => prog (.pure a)
     -- `poll(take)` (`Q:943`)
-    | .none => prog (.unmaskRunLoop (takeIO q) m p)
+    | .none => prog (IO.applyPoll (takeIO q) m p)
     | _ => illTyped
 
 end CatsEffectInLean.Std.Queue

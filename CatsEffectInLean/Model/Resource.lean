@@ -357,7 +357,7 @@ def cloCall (r : REnv) (c : Clo) (arg : Val) (v : View) : UserResult :=
               | .ok io =>
                 let (es, fin) := applyRel r v rel exitCanceled
                 withEffects es (fin.map fun fin =>
-                  .handleErrorWith (.onCancel (.unmaskRunLoop io m s) fin) (cloFn (.onErrorH rel)))
+                  .handleErrorWith (.onCancel (IO.applyPoll io m s) fin) (cloFn (.onErrorH rel)))
           | _ => throwR illTyped
     | _ => throwR illTyped
   | .onErrorH rel =>
