@@ -1,5 +1,5 @@
 import CatsEffectInLean.Model.IOInstance
-import CatsEffectInLean.Model.ValCodec
+import CatsEffectInLean.Model.Codec
 
 /-!
 # `Resource[IO, A]`: the ADT and `allocatedCase` (CE-0002)
@@ -22,7 +22,7 @@ builds the `IO` node that `CatsEffectInLean/Model/IOInstance.lean` (`IOI`) docum
 The generic code builds Scala lambdas at run time (for example
 `a => continue(Resource.pure(a), stack, release)`, `Resource.scala:527`). In the model a lambda
 is a `Fn.user id`. Each library lambda is one constructor of `Clo`, with its captured data. Its
-id is `2 * valToNat c.toVal + 1` (odd; `CatsEffectInLean/Model/ValCodec.lean`). User code has
+id is `2 * valToNat c.toVal + 1` (odd; `CatsEffectInLean/Model/Codec.lean`). User code has
 the even ids: user function `k` is `Fn.user (2 * k)` (`uid k`). `REnv.toEnv` is the `UserEnv`
 that runs both: an even id calls the user code, an odd id decodes the closure and runs its
 mirror (`cloCall`).
@@ -69,7 +69,7 @@ Not mirrored: `fold`/`use`, `allocated`, `Resource#map` and the other combinator
 
 namespace CatsEffectInLean.Model.Resource
 
-open CatsEffectInLean.Model.ValCodec
+open CatsEffectInLean.Model.Codec
 
 /-- Fatal error code for an ill-typed value (a model limit). -/
 def illTypedCode : Nat := 900001
@@ -244,7 +244,7 @@ def Clo.ofVal : Val → Option Clo
   | _ => none
 
 /-- The id of a library closure (odd). -/
-def cloFn (c : Clo) : Fn := .user (2 * valToNat c.toVal + 1)
+def cloFn (c : Clo) : Fn := libFn c.toVal
 
 /-- User function `k` (even id). -/
 def uid (k : Nat) : Fn := .user (2 * k)

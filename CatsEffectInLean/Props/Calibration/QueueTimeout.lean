@@ -63,18 +63,19 @@ namespace CatsEffectInLean.Props.Calibration.QueueTimeout
 open CatsEffectInLean.Model
 open CatsEffectInLean.Model.Codec
 
-/-- The namespace of the program closures in `Codec.nsFn`. -/
+/-- The namespace of the program closures in `Codec.cloVal`. -/
 def ns : Nat := 3
 
-/-- The lambdas of the `for` of program A. Fields: `q` = queue, `c` = consumer fiber,
-`n` = drain count, `xs` = the elements still to offer (`Codec.encList`). -/
+/-- The lambdas of the `for` of program A. This is user code: each lambda is a user closure
+(even id, `Codec.userFn`) that captures the handles it got before (`q`, `c`). Fields: `q` =
+queue, `c` = consumer fiber, `n` = drain count, `xs` = the elements still to offer. -/
 inductive PLam where
   /-- `q => q.take.timeout(d).start.flatMap(...)`. -/
-  | afterQueue (xs d s : Nat)
+  | afterQueue (xs : List Nat) (d s : Nat)
   /-- `consumer => IO.sleep(s).flatMap(...)`. -/
-  | afterStart (q xs s : Nat)
+  | afterStart (q : Nat) (xs : List Nat) (s : Nat)
   /-- `_ => q.offer(x).flatMap(...)` for the next `x`, or `_ => consumer.cancel.flatMap(...)`. -/
-  | offerNext (q c n xs : Nat)
+  | offerNext (q c n : Nat) (xs : List Nat)
   /-- `_ => consumer.join.flatMap(...)`. -/
   | afterCancel (q c n : Nat)
   /-- `oc => ...`: emit `oc`, then drain `n`. -/
@@ -83,27 +84,35 @@ inductive PLam where
   | afterTryTake (q k : Nat)
   deriving DecidableEq, Repr
 
-/-- The fields of a closure (tag first). -/
-def PLam.toList : PLam → List Nat
-  | .afterQueue xs d s => [0, xs, d, s]
-  | .afterStart q xs s => [1, q, xs, s]
-  | .offerNext q c n xs => [2, q, c, n, xs]
-  | .afterCancel q c n => [3, q, c, n]
-  | .afterJoin q n => [4, q, n]
-  | .afterTryTake q k => [5, q, k]
+/-- A list of elements as a `Val`. -/
+def natsV (xs : List Nat) : Val := listV (xs.map .nat)
 
-/-- The inverse of `PLam.toList`. -/
-def PLam.ofList : List Nat → Option PLam
-  | [0, xs, d, s] => some (.afterQueue xs d s)
-  | [1, q, xs, s] => some (.afterStart q xs s)
-  | [2, q, c, n, xs] => some (.offerNext q c n xs)
-  | [3, q, c, n] => some (.afterCancel q c n)
-  | [4, q, n] => some (.afterJoin q n)
-  | [5, q, k] => some (.afterTryTake q k)
-  | _ => none
+/-- The inverse of `natsV`. -/
+def ofNatsV (v : Val) : Option (List Nat) :=
+  (unlistV v).bind fun l => l.mapM fun | .nat n => some n | _ => none
 
-/-- The closure as a `Fn`. -/
-def PLam.fn (l : PLam) : Fn := nsFn ns l.toList
+/-- The closure value (`Codec.cloVal`, namespace `ns`). The handles `q` and `c` are captured
+as `Val.ref q` and `Val.fiber c`. -/
+def PLam.toVal : PLam → Val
+  | .afterQueue xs d s => cloVal ns 0 [natsV xs, .nat d, .nat s]
+  | .afterStart q xs s => cloVal ns 1 [.ref q, natsV xs, .nat s]
+  | .offerNext q c n xs => cloVal ns 2 [.ref q, .fiber c, .nat n, natsV xs]
+  | .afterCancel q c n => cloVal ns 3 [.ref q, .fiber c, .nat n]
+  | .afterJoin q n => cloVal ns 4 [.ref q, .nat n]
+  | .afterTryTake q k => cloVal ns 5 [.ref q, .nat k]
+
+/-- The inverse of `PLam.toVal` on the tag and the fields (namespace already checked). -/
+def PLam.ofFields : Nat → List Val → Option PLam
+  | 0, [xs, .nat d, .nat s] => (ofNatsV xs).map fun xs => .afterQueue xs d s
+  | 1, [.ref q, xs, .nat s] => (ofNatsV xs).map fun xs => .afterStart q xs s
+  | 2, [.ref q, .fiber c, .nat n, xs] => (ofNatsV xs).map fun xs => .offerNext q c n xs
+  | 3, [.ref q, .fiber c, .nat n] => some (.afterCancel q c n)
+  | 4, [.ref q, .nat n] => some (.afterJoin q n)
+  | 5, [.ref q, .nat k] => some (.afterTryTake q k)
+  | _, _ => none
+
+/-- The closure as a `Fn`: a user closure (even id, `Codec.userFn`). -/
+def PLam.fn (l : PLam) : Fn := userFn l.toVal
 
 /-- `n` more `q.tryTake` calls, each result emitted. -/
 def drain (q : Nat) : Nat → IO
@@ -119,17 +128,17 @@ def call (l : PLam) (arg : Val) (v : View) : UserResult :=
   | .afterQueue xs d s =>
     match arg with
     -- `consumer <- q.take.timeout(d).start` (`IO#start` = `Start`, `IO.scala:1092-1093`)
-    | .ref q => prog (.flatMap (.start (Timeout.timeoutIO q d)) (PLam.afterStart q xs s).fn)
+    | .ref q => prog (.flatMap (.start (Timeout.timeoutIO (.ref q) d)) (PLam.afterStart q xs s).fn)
     | _ => illTyped
   | .afterStart q xs s =>
     match arg with
     -- `_ <- IO.sleep(s)` (`IO.scala:1692-1696`)
-    | .fiber c => prog (.flatMap (.sleep s) (PLam.offerNext q c (decList xs).length xs).fn)
+    | .fiber c => prog (.flatMap (.sleep s) (PLam.offerNext q c xs.length xs).fn)
     | _ => illTyped
   | .offerNext q c n xs =>
-    match decList xs with
+    match xs with
     -- `_ <- q.offer(x)`
-    | x :: rest => prog (.flatMap (Std.Queue.offerIO q (.nat x)) (PLam.offerNext q c n (encList rest)).fn)
+    | x :: rest => prog (.flatMap (Std.Queue.offerIO q (.nat x)) (PLam.offerNext q c n rest).fn)
     -- `_ <- consumer.cancel`
     | [] => prog (.flatMap (IO.cancelOf c (v.outcome c)) (PLam.afterCancel q c n).fn)
   | .afterCancel q c n =>
@@ -138,20 +147,33 @@ def call (l : PLam) (arg : Val) (v : View) : UserResult :=
   | .afterJoin q n => prog (drain q n) [.emit arg]
   | .afterTryTake q k => prog (drain q k) [.emit arg]
 
-/-- Dispatch a closure id to its namespace: the queue, the timeout and the program closures.
-Ids outside these namespaces never occur. -/
+/-- The source of `timeout`: `Val.ref q` is `q.take`. -/
+def srcIO : Val → IO
+  | .ref q => Std.Queue.takeIO q
+  | _ => .error { code := 999999, kind := .fatal }
+
+/-- Dispatch a closure id (`Codec` convention): an odd id is a library closure (namespace
+`Std.Queue.ns` or `Timeout.ns`), an even id is a program closure (namespace `ns`). Other ids
+never occur. -/
 def dispatch (id : Nat) (arg : Val) (v : View) : UserResult :=
-  match decList id with
-  | 1 :: l => match Std.Queue.QLam.ofList l with
-    | some q => Std.Queue.call q arg v
-    | none => illTyped
-  | 2 :: l => match Timeout.TLam.ofList l with
-    | some t => Timeout.call Std.Queue.takeIO t arg v
-    | none => illTyped
-  | 3 :: l => match PLam.ofList l with
-    | some p => call p arg v
-    | none => illTyped
-  | _ => illTyped
+  match (cloOfId id).bind ofCloVal with
+  | some (k, tag, fs) =>
+    if isLibId id then
+      if k == Std.Queue.ns then
+        match Std.Queue.QLam.ofFields tag fs with
+        | some q => Std.Queue.call q arg v
+        | none => illTyped
+      else if k == Timeout.ns then
+        match Timeout.TLam.ofFields tag fs with
+        | some t => Timeout.call srcIO t arg v
+        | none => illTyped
+      else illTyped
+    else if k == ns then
+      match PLam.ofFields tag fs with
+      | some p => call p arg v
+      | none => illTyped
+    else illTyped
+  | none => illTyped
 
 /-- The user environment of program A. -/
 def env : UserEnv where
@@ -160,7 +182,7 @@ def env : UserEnv where
 
 /-- Program A with elements `xs`, timeout `d` and sleep `s`. -/
 def progA (xs : List Nat) (d s : Nat) : IO :=
-  .flatMap Std.Queue.newIO (PLam.afterQueue (encList xs) d s).fn
+  .flatMap Std.Queue.newIO (PLam.afterQueue xs d s).fn
 
 /-- The elements that came back, from the emitted trace: the value of a `Succeeded` outcome
 of `consumer.join`, and the value of each `Some` result of `tryTake`. -/

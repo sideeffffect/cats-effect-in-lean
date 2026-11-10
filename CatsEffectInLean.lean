@@ -29,7 +29,6 @@ import CatsEffectInLean.Props.IO.MonadCancelLaws
 import CatsEffectInLean.Proofs.IO.MonadCancelLaws
 import CatsEffectInLean.Props.Calibration.SyncStep
 import CatsEffectInLean.Proofs.Calibration.SyncStep
-import CatsEffectInLean.Model.ValCodec
 import CatsEffectInLean.Model.Resource
 import CatsEffectInLean.Model.ResourceExamples
 import CatsEffectInLean.Props.Calibration.ResourceEval

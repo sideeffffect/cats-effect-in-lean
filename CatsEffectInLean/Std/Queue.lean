@@ -24,7 +24,7 @@ import CatsEffectInLean.Model.Codec
   (`IO.scala:2081-2082`, `IO.scala:903-904`); `onCancel` = `OnCancel` (`IO.scala:2059-2060`,
   `IO.scala:590-591`); `poll(fa)` = `UnmaskRunLoop(fa, id, self)` (`IOFiber.scala:564-567`).
 * Each Scala lambda is one `QLam` case; its captured values are its fields
-  (`Codec.nsFn`, namespace `Queue.ns`).
+  (`Codec.cloVal`, namespace `Queue.ns`; a library closure, `Codec.libFn`).
 * A `Val` cannot hold an `IO`. Where a Scala thunk returns an `IO` (the thunk of `F.defer`), the
   model thunk returns a `Val` code, and the `x => x` function of `defer` builds the same `IO`
   from it (as `RtFn.deferredDefer`/`deferredFlatten` in `Syntax.lean`). The run loop runs
@@ -53,7 +53,7 @@ namespace CatsEffectInLean.Std.Queue
 open CatsEffectInLean.Model
 open CatsEffectInLean.Model.Codec
 
-/-- The namespace of the queue closures in `Codec.nsFn`. -/
+/-- The namespace of the queue closures in `Codec.cloVal`. -/
 def ns : Nat := 1
 
 /-! ## State -/
@@ -129,13 +129,12 @@ def Takers.put (t : Takers) (s : Nat) : Nat × Takers :=
 
 /-- The lambdas of `UnboundedAsyncQueue` and of the `IO` code that it calls. Fields: `q` =
 queue (buffer `Ref` id), `r` = the `Ref` cell of `received`/`result`, `s` = a `ContState` id,
-`m`, `p` = a `poll` (mask id, fiber), `c` = a taker cell id, `x` = an element code
-(`Codec.Val.enc`). -/
+`m`, `p` = a `poll` (mask id, fiber), `c` = a taker cell id, `x` = an element. -/
 inductive QLam where
   /-- The thunk of `F.delay(new UnboundedAsyncQueue())` (`Q:105-106`). -/
   | newQueue
   /-- The thunk of `offer(a) = F.delay(unsafeOffer(a))` (`Q:884`, `Q:879-882`). -/
-  | offer (q x : Nat)
+  | offer (q : Nat) (x : Val)
   /-- The thunk of `tryTake` (`Q:949-956`). -/
   | tryTake (q : Nat)
   /-- `poll => F defer { ... }`, the body of `take` (`Q:894-947`). -/
@@ -165,45 +164,47 @@ inductive QLam where
   | recvDefer (q m p : Nat)
   deriving DecidableEq, Repr
 
-/-- The fields of a closure (tag first). -/
-def QLam.toList : QLam → List Nat
-  | .newQueue => [0]
-  | .offer q x => [1, q, x]
-  | .tryTake q => [2, q]
-  | .takeBody q => [3, q]
-  | .takeThunk q => [4, q]
-  | .takeDefer q m p => [5, q, m, p]
-  | .waitBody q r => [6, q, r]
-  | .waitUnc q r s => [7, q, r, s]
-  | .waitReg q r s => [8, q, r, s]
-  | .waitSel q s m p => [9, q, s, m, p]
-  | .clear q c => [10, q, c]
-  | .notifyAnyway q => [11, q]
-  | .thenRecv q m p r => [12, q, m, p, r]
-  | .recvThunk r => [13, r]
-  | .recvDefer q m p => [14, q, m, p]
+/-- The closure value (`Codec.cloVal`, namespace `ns`). Handles are captured as handle values
+(`Val.ref q`, `Val.cont s`, `Val.poll m p`), so they are visible in the id
+(`Model/WellFormed.lean`). -/
+def QLam.toVal : QLam → Val
+  | .newQueue => cloVal ns 0 []
+  | .offer q x => cloVal ns 1 [.ref q, x]
+  | .tryTake q => cloVal ns 2 [.ref q]
+  | .takeBody q => cloVal ns 3 [.ref q]
+  | .takeThunk q => cloVal ns 4 [.ref q]
+  | .takeDefer q m p => cloVal ns 5 [.ref q, .poll m p]
+  | .waitBody q r => cloVal ns 6 [.ref q, .ref r]
+  | .waitUnc q r s => cloVal ns 7 [.ref q, .ref r, .cont s]
+  | .waitReg q r s => cloVal ns 8 [.ref q, .ref r, .cont s]
+  | .waitSel q s m p => cloVal ns 9 [.ref q, .cont s, .poll m p]
+  | .clear q c => cloVal ns 10 [.ref q, .nat c]
+  | .notifyAnyway q => cloVal ns 11 [.ref q]
+  | .thenRecv q m p r => cloVal ns 12 [.ref q, .poll m p, .ref r]
+  | .recvThunk r => cloVal ns 13 [.ref r]
+  | .recvDefer q m p => cloVal ns 14 [.ref q, .poll m p]
 
-/-- The inverse of `QLam.toList`. -/
-def QLam.ofList : List Nat → Option QLam
-  | [0] => some .newQueue
-  | [1, q, x] => some (.offer q x)
-  | [2, q] => some (.tryTake q)
-  | [3, q] => some (.takeBody q)
-  | [4, q] => some (.takeThunk q)
-  | [5, q, m, p] => some (.takeDefer q m p)
-  | [6, q, r] => some (.waitBody q r)
-  | [7, q, r, s] => some (.waitUnc q r s)
-  | [8, q, r, s] => some (.waitReg q r s)
-  | [9, q, s, m, p] => some (.waitSel q s m p)
-  | [10, q, c] => some (.clear q c)
-  | [11, q] => some (.notifyAnyway q)
-  | [12, q, m, p, r] => some (.thenRecv q m p r)
-  | [13, r] => some (.recvThunk r)
-  | [14, q, m, p] => some (.recvDefer q m p)
-  | _ => none
+/-- The inverse of `QLam.toVal` on the tag and the fields (namespace already checked). -/
+def QLam.ofFields : Nat → List Val → Option QLam
+  | 0, [] => some .newQueue
+  | 1, [.ref q, x] => some (.offer q x)
+  | 2, [.ref q] => some (.tryTake q)
+  | 3, [.ref q] => some (.takeBody q)
+  | 4, [.ref q] => some (.takeThunk q)
+  | 5, [.ref q, .poll m p] => some (.takeDefer q m p)
+  | 6, [.ref q, .ref r] => some (.waitBody q r)
+  | 7, [.ref q, .ref r, .cont s] => some (.waitUnc q r s)
+  | 8, [.ref q, .ref r, .cont s] => some (.waitReg q r s)
+  | 9, [.ref q, .cont s, .poll m p] => some (.waitSel q s m p)
+  | 10, [.ref q, .nat c] => some (.clear q c)
+  | 11, [.ref q] => some (.notifyAnyway q)
+  | 12, [.ref q, .poll m p, .ref r] => some (.thenRecv q m p r)
+  | 13, [.ref r] => some (.recvThunk r)
+  | 14, [.ref q, .poll m p] => some (.recvDefer q m p)
+  | _, _ => none
 
-/-- The closure as a `Fn`. -/
-def QLam.fn (l : QLam) : Fn := nsFn ns l.toList
+/-- The closure as a `Fn`: a library closure (odd id, `Codec.libFn`). -/
+def QLam.fn (l : QLam) : Fn := libFn l.toVal
 
 /-! ## The public operations as `IO` terms -/
 
@@ -212,7 +213,7 @@ def QLam.fn (l : QLam) : Fn := nsFn ns l.toList
 def newIO : IO := .delay QLam.newQueue.fn
 
 /-- `q.offer(a)` (`Q:884`). Elements are values `x` (encoded in the closure). -/
-def offerIO (q : Nat) (x : Val) : IO := .delay (QLam.offer q (Codec.Val.enc x)).fn
+def offerIO (q : Nat) (x : Val) : IO := .delay (QLam.offer q x).fn
 
 /-- `q.tryTake` (`Q:949-956`). -/
 def tryTakeIO (q : Nat) : IO := .delay (QLam.tryTake q).fn
@@ -243,12 +244,9 @@ def call (l : QLam) (arg : Val) (v : View) : UserResult :=
   | .newQueue =>
     -- `new UnboundedAsyncQueue()`: `buffer` and `takers` are new empty lists (`Q:875-876`)
     ret (.ref v.refs.length) [.allocRef (listVal []), .allocRef (Takers.toVal {})]
-  | .offer q x =>
-    match decVal x with
-    | none => illTyped
-    | some a =>
-      -- `buffer.put(a)` (`Q:880`), then `notifyOne()` (`Q:881`)
-      .writeRef q (listVal (buffer v q ++ [a])) :: notifyEffects q (takers v q) |> ret .unit
+  | .offer q a =>
+    -- `buffer.put(a)` (`Q:880`), then `notifyOne()` (`Q:881`)
+    .writeRef q (listVal (buffer v q ++ [a])) :: notifyEffects q (takers v q) |> ret .unit
   | .tryTake q =>
     -- `Some(buffer.take())`, or `None` on `FailureSignal` (`Q:950-955`)
     match buffer v q with
