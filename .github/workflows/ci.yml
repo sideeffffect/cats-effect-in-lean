@@ -61,6 +61,36 @@ jobs:
       - name: Registry audit self-test
         run: scripts/test_audit.sh
 
+      # Lean side of the difftest: build the decoder/translation (its #guard checks run
+      # during the build), then decode and translate every golden case. `cediff` exits 1
+      # if it rejects a case (wiki/methodology/difftest-program-format.md, "Lean side").
+      - name: Difftest decoder (Lean)
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          lake build --wfail Difftest cediff
+          lake exe cediff difftest/cases/basic.jsonl > /dev/null
+
+  # Scala side of the difftest: runner tests against cats-effect 3.7.1 (golden files,
+  # rerun determinism, hand-checked facts). See difftest/README.md.
+  difftest:
+    name: Difftest runner (Scala)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: sbt
+          cache-dependency-path: |
+            difftest/build.sbt
+            difftest/project/build.properties
+      - uses: sbt/setup-sbt@67d461eba2c4753196c230e02da850757ba4775e # v1.5.14
+      - name: sbt test
+        working-directory: difftest
+        run: sbt -batch test
+
   inventory:
     name: Inventory check
     runs-on: ubuntu-26.04
