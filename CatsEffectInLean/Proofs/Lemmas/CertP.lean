@@ -10,7 +10,8 @@ a few thousand states (the law `uncancelableRaceNotInherited` has 4,441).
 Here the search runs in compiled code (`#eval`, outside the trusted base), and it writes a
 **certificate**. The kernel only checks the certificate, in linear time:
 
-* `instrs : List (Option PChoice)`: a depth-first spanning tree of the state set. `some c` makes
+* `instrs : List (Option PChoice)`: a spanning tree of the state set, written in depth-first
+  order (the generator uses the breadth-first tree, so paths are short). `some c` makes
   the child `tickP top c` of the top state of a stack (the top must not be halted), lists it
   and pushes it; `none` pops. `certStates` runs this from `Sched.init mm io`. So the listed states
   are reachable (`certStates_reach`) and the first one is the start state.
@@ -21,6 +22,10 @@ Soundness: `certClosed = true` gives `ClosedP` (`closedP_of_certClosed`), so
 `outcomesP_sub_closed` applies. With reachability, `outcomesP_iff_of_cert` gives the exact
 outcome set, like `outcomesP_iff_of_exactP`. A wrong certificate makes the check `false`, never
 a wrong theorem.
+
+Cost (law left side, 4,441 states, 2026-11-10): building the states is about 21 s / 3.7 GB per
+`decide +kernel`; checking the edges of 100 states adds 0.5–6 GB (more for later, larger
+states). So the edges are checked in chunks (`certChunk`, `EdgesUpTo`), one declaration each.
 -/
 
 namespace CatsEffectInLean.Proofs.Lemmas.CertP
@@ -252,7 +257,7 @@ theorem outcomesP_iff_of_cert {io : IO} {is : List (Option PChoice)} {succ : Lis
 
 The kernel caches what it evaluates, so one `decide` over all edges of a few thousand states
 needs too much memory. `certChunk` checks the edges of the states `a, ..., a + n - 1` only;
-`certExact_of_chunks` puts the chunks together. -/
+`EdgesUpTo` puts chunks of any size together. -/
 
 /-- The edge check of the listed states with indices in `[a, a + n)`. -/
 def certChunk (io : IO) (is : List (Option PChoice)) (succ : List (List Nat)) (a n : Nat) : Bool :=
@@ -260,35 +265,49 @@ def certChunk (io : IO) (is : List (Option PChoice)) (succ : List (List Nat)) (a
   | some L => L.length == succ.length && (((L.zip succ).drop a).take n).all (edgeOK cfg mm env L)
   | none => false
 
-theorem certExact_of_chunks {io : IO} {is : List (Option PChoice)} {succ : List (List Nat)}
-    (n m : Nat) (hn : 0 < n) (hm0 : 0 < m) (hm : succ.length ≤ m * n)
-    (h : ∀ i < m, certChunk cfg mm env io is succ (i * n) n = true) :
-    certExact cfg mm env io is succ = true := by
-  have h0 := h 0 hm0
-  unfold certExact
-  unfold certChunk at h h0
-  split
+/-- The edges of the listed states with index `< b` are checked. Chunks of any size build it
+up from `0` (`edgesUpTo_zero`, `edgesUpTo_chunk`); `certExact_of_edgesUpTo` ends the chain. -/
+def EdgesUpTo (io : IO) (is : List (Option PChoice)) (succ : List (List Nat)) (b : Nat) : Prop :=
+  ∃ L, certStates cfg mm env io is = some L ∧ L.length = succ.length ∧
+    ∀ k (hk : k < (L.zip succ).length), k < b → edgeOK cfg mm env L (L.zip succ)[k] = true
+
+theorem edgesUpTo_zero {io : IO} {is : List (Option PChoice)} {succ : List (List Nat)} {n : Nat}
+    (h : certChunk cfg mm env io is succ 0 n = true) : EdgesUpTo cfg mm env io is succ 0 := by
+  unfold certChunk at h
+  split at h
   · next L hL =>
-    rw [hL] at h h0
-    simp only [Bool.and_eq_true, beq_iff_eq] at h0
-    have hlen : L.length = succ.length := h0.1
-    simp only [certClosed, hlen, beq_self_eq_true, Bool.true_and, List.all_eq_true]
-    intro x hx
-    obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hx
-    have hk' : k < succ.length := by simp at hk; omega
-    have hi : k / n < m := by
-      rw [Nat.div_lt_iff_lt_mul hn]; omega
-    have hc := h (k / n) hi
-    simp only [Bool.and_eq_true, List.all_eq_true] at hc
-    apply hc.2
+    simp only [Bool.and_eq_true, beq_iff_eq] at h
+    exact ⟨L, hL, h.1, fun _ _ hk => absurd hk (Nat.not_lt_zero _)⟩
+  · cases h
+
+theorem edgesUpTo_chunk {io : IO} {is : List (Option PChoice)} {succ : List (List Nat)}
+    {a n : Nat} (hp : EdgesUpTo cfg mm env io is succ a)
+    (h : certChunk cfg mm env io is succ a n = true) : EdgesUpTo cfg mm env io is succ (a + n) := by
+  obtain ⟨L, hL, hlen, hk⟩ := hp
+  refine ⟨L, hL, hlen, fun k hkz hkb => ?_⟩
+  by_cases hka : k < a
+  · exact hk k hkz hka
+  · unfold certChunk at h
+    rw [hL] at h
+    simp only [Bool.and_eq_true, List.all_eq_true] at h
+    apply h.2
     rw [List.mem_iff_getElem]
-    have hr : k % n < n := Nat.mod_lt _ hn
-    have hdk : k / n * n + k % n = k := by rw [Nat.mul_comm]; exact Nat.div_add_mod k n
-    refine ⟨k % n, ?_, ?_⟩
+    refine ⟨k - a, ?_, ?_⟩
     · simp only [List.length_take, List.length_drop]; omega
     · simp only [List.getElem_take, List.getElem_drop]
       congr 1
-  · next hL => rw [hL] at h0; cases h0
+      omega
+
+theorem certExact_of_edgesUpTo {io : IO} {is : List (Option PChoice)} {succ : List (List Nat)}
+    {b : Nat} (hp : EdgesUpTo cfg mm env io is succ b) (hb : succ.length ≤ b) :
+    certExact cfg mm env io is succ = true := by
+  obtain ⟨L, hL, hlen, hk⟩ := hp
+  unfold certExact
+  rw [hL]
+  simp only [certClosed, hlen, beq_self_eq_true, Bool.true_and, List.all_eq_true]
+  intro x hx
+  obtain ⟨k, hkz, rfl⟩ := List.getElem_of_mem hx
+  exact hk k hkz (by simp at hkz; omega)
 
 /-- A single-valued outcome set: every observation of the certificate is `o₀`, and there is
 one. -/

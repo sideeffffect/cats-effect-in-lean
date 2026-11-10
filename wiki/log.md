@@ -151,3 +151,8 @@
 - Raw: raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md
 - Created: Race no-leak invariant and frame lemmas
 - Updated: race, both and fiber leaks (why open, 4,441 states), Lean v4.35.0 toolchain (tactic gotchas), Outcome sets (See Also), index
+
+## [2026-11-10] ingest | Track P round 2: certificate checker, law uncancelableRaceNotInherited proven, F1b
+- Raw: raw/lean-tooling/2026-11-10-certificate-checker-track-p-notes.md
+- Created: Certificate checks of closed state sets
+- Updated: Race no-leak invariant (F1b, law proven), race, both and fiber leaks, Outcome sets (large sets), Kernel evaluation (See Also), index

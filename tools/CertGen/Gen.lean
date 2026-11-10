@@ -58,14 +58,69 @@ partial def dfs (cfg : Config) (mm : MaskModel M) (env : UserEnv) (st : St M) (s
         let st := dfs cfg mm env st t
         { st with instrs := st.instrs.push 0 }) st
 
-/-- The certificate of `io`: instructions and successor table. -/
-def gen (cfg : Config) (mm : MaskModel M) (env : UserEnv) (io : IO) : Array Nat × Array (List Nat) :=
+/-- Breadth-first search: all states (BFS order) and, for each state after the first, its
+tree parent and the choice. -/
+partial def bfs (cfg : Config) (mm : MaskModel M) (env : UserEnv) (st : St M)
+    (parent : Array (Nat × PChoice)) (next : Nat) : St M × Array (Nat × PChoice) :=
+  if h : next < st.states.size then
+    let s := st.states[next]
+    if s.halt.isSome then bfs cfg mm env st parent (next + 1)
+    else
+      let (st, parent) := (choicesOf s).foldl (fun (st, parent) c =>
+        let t := s.tickP cfg mm env c
+        match find? st t with
+        | some _ => (st, parent)
+        | none => (add st t, parent.push (next, c))) (st, parent)
+      bfs cfg mm env st parent (next + 1)
+  else (st, parent)
+
+/-- The certificate of `io`: instructions and successor table. The spanning tree is the BFS
+tree (shortest paths, so the kernel forces few ancestors per state); the states are listed in
+depth-first order of that tree. Also returns the tree depth. -/
+def gen (cfg : Config) (mm : MaskModel M) (env : UserEnv) (io : IO) :
+    Array Nat × Array (List Nat) × Nat := Id.run do
   let s0 := Sched.init mm io
-  let st := dfs cfg mm env (add {} s0) s0
-  let succ := st.states.map fun s =>
-    if s.halt.isSome then []
-    else (choicesOf s).map fun c => ((find? st (s.tickP cfg mm env c)).getD 999999999)
-  (st.instrs, succ)
+  let (st, parent) := bfs cfg mm env (add {} s0) #[(0, .preempt)] 0
+  let n := st.states.size
+  -- children in discovery order
+  let mut kids : Array (Array (Nat × PChoice)) := Array.replicate n #[]
+  for i in [1:n] do
+    let (p, c) := parent[i]?.getD (0, .preempt)
+    kids := kids.modify p (·.push (i, c))
+  -- depth-first traversal with an explicit stack: new index of each old index
+  let mut newIdx : Array Nat := Array.replicate n 0
+  let mut order : Array Nat := #[0]
+  let mut instrs : Array Nat := #[]
+  let mut depth : Array Nat := Array.replicate n 0
+  let mut maxDepth := 0
+  -- stack of (node, next child position)
+  let mut stack : Array (Nat × Nat) := #[(0, 0)]
+  let mut fuel := 4 * n + 4
+  while fuel > 0 && stack.size > 0 do
+    fuel := fuel - 1
+    let (v, k) := stack.back!
+    if h : k < kids[v]!.size then
+      let (w, c) := kids[v]![k]
+      stack := (stack.pop).push (v, k + 1)
+      newIdx := newIdx.set! w order.size
+      order := order.push w
+      instrs := instrs.push (encodeInstr (some c))
+      depth := depth.set! w (depth[v]! + 1)
+      maxDepth := max maxDepth (depth[v]! + 1)
+      stack := stack.push (w, 0)
+    else
+      stack := stack.pop
+      if stack.size > 0 then instrs := instrs.push 0
+  let succ := order.map fun i =>
+    match st.states[i]? with
+    | none => []
+    | some s =>
+      if s.halt.isSome then []
+      else (choicesOf s).map fun c =>
+        match find? st (s.tickP cfg mm env c) with
+        | some j => newIdx[j]!
+        | none => 999999999
+  return (instrs, succ, maxDepth)
 
 def chunks {α : Type} (l : List α) (n : Nat) : List (List α) :=
   if n = 0 then [l] else
@@ -91,7 +146,8 @@ def renderList (name : String) (ty : String) (elems : List String) : String := I
 `succ : List (List Nat)`) into `path`, in namespace `ns`. Returns the state count. -/
 def writeCert (cfg : Config) (mm : MaskModel M) (env : UserEnv) (io : IO)
     (path : System.FilePath) (header ns : String) : _root_.IO Nat := do
-  let (instrs, succ) := gen cfg mm env io
+  let (instrs, succ, depth) := gen cfg mm env io
+  IO.println s!"tree depth: {depth}"
   let body :=
     renderList "instrs" "Nat" (instrs.toList.map toString) ++ "\n" ++
     renderList "succ" "(List Nat)" (succ.toList.map fun l => toString l)

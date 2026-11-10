@@ -45,7 +45,7 @@ Formal modeling approaches for effect systems and concurrency.
 | [Modeling approaches for CE3 in Lean](semantics/modeling-approaches.md) | Small-step + scheduler recommended; ITrees, dejafu, Marlow 2001 compared | 2026-11-10 |
 | [Fairness and liveness](semantics/fairness-and-liveness.md) | Schedule = Nat → Choice; Fair/Terminates definitions; CE 512/1024 thresholds; ranking, decide, lasso refutations | 2026-11-10 |
 | [Outcome sets, Eqv and the IO laws](semantics/outcome-equivalence.md) | outcomes/Eqv over pick schedules (trace, refs, reports); bounded enumerator + soundness; IO ops without a typed instance; 2 IO laws proven, 2 open; auto-yield finding | 2026-11-10 |
-| [Race no-leak invariant and frame lemmas](semantics/race-invariant.md) | Invariant design for the 5 open race entries (NL, S, F3, F4, P1/P2, H, C(r)); F1/F2 frame lemmas proven for all runs; law LHS 4,441 states | 2026-11-10 |
+| [Race no-leak invariant and frame lemmas](semantics/race-invariant.md) | Invariant design for the 4 open race leak/winner entries (NL, S, F3, F4, P1/P2, H, C(r)); F1/F1b/F2 frame lemmas proven for all runs; law proven by certificate | 2026-11-10 |
 
 ## lean
 
@@ -56,6 +56,7 @@ Lean 4 toolchain facts and proof hygiene.
 | [Lean v4.35.0 toolchain](lean/toolchain-v4-35.md) | lake check (+ bwrap/AppArmor failure), vcgen, native_decide axioms, recursion styles | 2026-11-10 |
 | [Proof hygiene and agent tooling](lean/proof-hygiene-and-agent-tooling.md) | Forbidden tactics, axiom audit, CI gates (incl. this repo's CI), lean-lsp-mcp, lean4-skills, Plausible | 2026-11-10 |
 | [Kernel evaluation of the model](lean/kernel-evaluation.md) | Toy spike: decide +kernel for runs/witnesses (5k steps in 6 s), decide_cbv memoizes schedule enumeration; design rules | 2026-11-10 |
+| [Certificate checks of closed state sets](lean/certificate-checker.md) | CertP: untrusted BFS generator + linear kernel check (tree replay, edge indices), chunking (EdgesUpTo), cost per state; proves uncancelableRaceNotInherited | 2026-11-10 |
 
 ## precedents
 

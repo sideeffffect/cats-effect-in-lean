@@ -2552,7 +2552,7 @@ laws.GenSpawnLaws.fiberNeverIsNever,laws,law,laws/shared/src/main/scala/cats/eff
 laws.GenSpawnLaws.fiberStartOfNeverIsUnit,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,130,todo,,
 laws.GenSpawnLaws.fiberJoinIsGuaranteeCase,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,133,todo,,
 laws.GenSpawnLaws.neverDominatesOverFlatMap,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,143,todo,,
-laws.GenSpawnLaws.uncancelableRaceNotInherited,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,146,todo,,laws.GenSpawnLaws.uncancelableRaceNotInherited.IO
+laws.GenSpawnLaws.uncancelableRaceNotInherited,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,146,modelled,,laws.GenSpawnLaws.uncancelableRaceNotInherited.IO
 laws.GenSpawnLaws.uncancelableCancelCancels,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,149,todo,,
 laws.GenSpawnLaws.uncancelableStartIsCancelable,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,153,todo,,
 laws.GenSpawnLaws.forceRNeverIsNever,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,157,todo,,

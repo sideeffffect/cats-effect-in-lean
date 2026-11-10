@@ -43,12 +43,12 @@ Phase 6 batch 6.1, track R. Mirror of the four `GenSpawn` combinators for `IO`, 
 | `core.IO.race.combCanceledNoLeak` | decision 50: a parent starts the combinator, cancels and joins it; no live race child of fiber 1 |
 | `core.IO.timeout.noLeak` | `fa.timeout(d)`, direct and canceled by a parent |
 | `core.IO.raceOutcome.isWinnerOutcome` | `Left(oc)` only if fiber 1 ended with `oc`; `Right(oc)` only if fiber 2 did |
-| `laws.GenSpawnLaws.uncancelableRaceNotInherited.IO` | closed law under `EqvP` |
+| `laws.GenSpawnLaws.uncancelableRaceNotInherited.IO` | closed law under `EqvP` (**proven**, certificate) |
 
 - Smoke evidence: `leaksmoke` 140,400 random runs, 0 violations; real CE 7,038 completed runs, 0 violations.
 - Wrong-function test: a `race` without `f.cancel` leaks on `race(pure 1, never)` in every completed run.
 - Why open: a proof for all sides needs an invariant over `Step`/`SchedP`: a racing fiber gets past its combinator only after both children are done. Exact search does not scale: the law's left side has 4,441 states (closed; 3 fibers, preemption at every iteration); `decide +kernel` of `checkEqvP` timed out after 8 min.
-- Track P (2026-11-10): no statement found false. Invariant design and the proven frame lemmas F1/F2 (`Proofs/Lemmas/Frame.lean`): [Race no-leak invariant](../semantics/race-invariant.md). All five entries stay `open`; the registry notes name the gap (S, F3, F4, P1/P2, H, C(r)).
+- Track P (2026-11-10): no statement found false. Invariant design and the proven frame lemmas F1/F2 (`Proofs/Lemmas/Frame.lean`): [Race no-leak invariant](../semantics/race-invariant.md). The four leak/winner entries stay `open`; the registry notes name the gap (S, F3, F4, P1/P2, H, C(r)). Round 2: the law `uncancelableRaceNotInherited` is proven by a kernel-checked certificate ([Certificate checks](../lean/certificate-checker.md)); F1b (`result_stable`) is proven.
 
 ## Difftest
 
@@ -57,6 +57,8 @@ Format v2 ([program format](../methodology/difftest-program-format.md)): 225,000
 Side effects on shared difftest code: `gen.py` weights for the v2 productions (default about 5–7 % of cases per op; `selftest.py` checks ≥ 5 %); the shrinker measure (`drive.measure`) counts `never` nodes before the JSON length, so a `never` can become `canceled` (the new generator mix made the selftest's mock shrink stop at size 8; now 3).
 
 ## See Also
+
+- [Certificate checks of closed state sets](../lean/certificate-checker.md)
 
 - [Race no-leak invariant and frame lemmas](../semantics/race-invariant.md)
 

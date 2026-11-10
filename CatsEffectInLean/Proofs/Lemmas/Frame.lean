@@ -3,21 +3,24 @@ import CatsEffectInLean.Model.SchedP
 /-!
 # Frame lemmas for the run loop and the preemptive scheduler (Phase 6, track P)
 
-Facts F1 and F2 of the race invariant design
+Facts F1, F1b and F2 of the race invariant design
 (`raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md`). They hold for every
 micro-step of `Sched.tickP`, for all user code and all schedules, with no hypothesis:
 
 * **F1 (`ContState` owners are stable).** The `ContState` table only grows, and the owner
   fiber (`ContState.fiber`) of a cell never changes. Every write to a cell is
   `{ st with value := ... }` (or `wasFinalizing`) of the cell itself; `IOCont` appends a cell.
+* **F1b (results are sticky).** A cell that holds a result (`ContVal.result v`) keeps it:
+  `contCallback` writes only "initial"/"waiting" cells, `contGetFin` only "waiting" cells,
+  `contGet` only "initial" cells. So the first callback result of an `IOCont` wins.
 * **F2 (tables grow).** The fiber table only grows, and the `CallbackStack` handle counter
   (`Heap.handles`) never goes down. So a handle that `joinReg`/`deferredReg` push is at least
   the start value `1`; slot 0 stays the constructor callback.
 
 `Frame x y` is the relation for one `Exec` transition. `SFrame s t` is the same relation on
 the live heap and the live fiber table of two scheduler states. Main results:
-`tickP_sframe`, `runSchedStateP_sframe`, and `owner_stable` (the owner of a `ContState` cell
-is the same in every later state).
+`sframe_tickP`, `sframe_runSchedStateP`, `owner_stable` (the owner of a `ContState` cell is
+the same in every later state) and `result_stable` (a result stays).
 -/
 
 namespace CatsEffectInLean.Proofs.Lemmas.Frame

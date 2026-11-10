@@ -57,6 +57,7 @@ Without task count and log, a terminating program has a finite state space under
 - `pathsOK`: each result state is the result of its recorded list.
 - `outcomesP_iff_of_exactP`: closed + start state + paths ⇒ `outcomesP io o ↔ o ∈ obsList L`. `checkEqvP`/`checkNotEqvP` then decide `EqvP` by `decide +kernel`. If the search bound is too small, the check is `false`, never a wrong `true`.
 - Free variables (`decide` rejects them): `runSchedStateP_family` with a family of states named by choice lists (`famSt`) and a successor table from `exploreTable` (`#eval` on a closed instance). Each step is `rfl`. With one fiber, `pick m` acts as `pick 0` (`tickP_pick_single`; prove `ready.length ≤ 1` by `Nat.le_of_ble_eq_true rfl`).
+- Large state sets (more than about 500 states): use the certificate checker `CertP` instead ([Certificate checks](../lean/certificate-checker.md)); `GenSpawnLaws.uncancelableRaceNotInherited` (4,441 states) is proven with it.
 - Cost: kernel memory. 9 programs x 2 sides (up to 322 states) in one `decide` exceed 8 GB. `Sched.fastEq` (a cheap `Sched.key` before the full comparison) and one declaration per check fix it; largest side about 30 s.
 
 ## `WellFormed`: the domain of all properties (decision 27)
@@ -118,7 +119,8 @@ Decision 29/36 (done): `EqvP`. Smoke tests (`Model/EnumPExamples.lean`), with `f
 ## See Also
 
 - [race, both and fiber leaks](../cats-effect/race-both-model.md) (leak observation beside `Obs`; exact search too large for 3 fibers)
-- [Race no-leak invariant and frame lemmas](race-invariant.md) (F1/F2 proven for all runs; law left side 4,441 states)
+- [Race no-leak invariant and frame lemmas](race-invariant.md) (F1/F1b/F2 proven for all runs)
+- [Certificate checks of closed state sets](../lean/certificate-checker.md)
 
 - [Kernel typeclasses model](../cats-effect/kernel-typeclasses-model.md)
 - [Scheduler model](../cats-effect/scheduler-model.md)
