@@ -5,3 +5,9 @@ __pycache__/
 !inventory/*.csv
 !test/AuditFixtures/*.csv
 /test/AuditFixtures/Generated/
+difftest/target/
+difftest/project/target/
+difftest/project/project/
+.metals/
+.bloop/
+metals.sbt

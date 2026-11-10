@@ -5,7 +5,7 @@
 
 ## Overview
 
-Both agent precedents and Cedar require the model to agree with the real implementation on many generated inputs **before** any property is stated. A mismatch is a model bug until proven otherwise. CE adds a new difficulty that the precedents did not have: scheduling nondeterminism. This article records the planned design; nothing is built yet except the schedule spike.
+Both agent precedents and Cedar require the model to agree with the real implementation on many generated inputs **before** any property is stated. A mismatch is a model bug until proven otherwise. CE adds a new difficulty that the precedents did not have: scheduling nondeterminism. This article records the design. Built so far: the schedule spike and the Scala runner v0 in `difftest/` (see [Difftest program format v0](difftest-program-format.md)). The Lean side is not built yet.
 
 ## Rules from precedents
 
@@ -35,6 +35,7 @@ model bug · harness/glue bug · deliberate model simplification · intended CE 
 
 ## See Also
 
+- [Difftest program format v0 and Scala runner](difftest-program-format.md)
 - [Agent workflow and review protocol](agent-workflow.md)
 - [Lessons for Cats Effect in Lean](lessons-for-cats-effect.md)
 - [Modeling approaches](../semantics/modeling-approaches.md)

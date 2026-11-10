@@ -70,3 +70,8 @@
 
 ## [2026-11-10] ingest | Phase 0 decisions
 - Updated: Project plan, Inventory (csv gitignore gotcha)
+
+## [2026-11-10] ingest | Phase 1 registry/audit, Phase 2 data model, Phase 3 Scala runner (3 parallel agents)
+- Created: Registry and audit; Updated: Agent workflow, Inventory
+- Created: IO ADT and fiber state; Updated: Source layout, Project plan (26 constructors, not 25)
+- Created: Difftest program format v0; Updated: Differential testing

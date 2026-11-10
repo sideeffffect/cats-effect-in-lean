@@ -13,3 +13,9 @@ Agents asked these questions. The orchestrator decided them, because they are te
 5. Kernel evaluation: `decide +kernel` for single runs and witnesses; `decide_cbv` for bounded schedule enumeration. No CI time budget yet. Phase 2 measures the real model first.
 6. Fairness definitions from the liveness spike (`Schedule := Nat → Choice`, `Fair`, `Terminates`) are adopted for Phase 2.
 7. Monad-transformer instances stay `deferred:`. Logged as Q1 in `QUESTIONS.md`.
+
+Later decisions on the same day (after Phase 1–3 agent reports):
+
+8. Difftest `TypeError` (for example `inc` on a pair) is a generator bug. The generator must produce only well-typed programs. It is not modelled as a user error.
+9. `Val` and `IO` stay separate inductives for now. Merge them into one mutual inductive only when a mirrored combinator needs an `IO` inside a value.
+10. `sorryAx` in the forbidden list: logged as Q2 in `QUESTIONS.md`; no change now.

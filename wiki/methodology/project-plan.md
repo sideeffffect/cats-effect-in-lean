@@ -30,6 +30,10 @@ Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effe
   4. Use `decide +kernel` for witnesses and `decide_cbv` for enumeration.
   5. Monad transformers stay deferred (Q1 in `QUESTIONS.md`).
 - Phase 1 step 2 (inventory) done early: [Inventory](inventory.md).
+- Phase 1 steps 1, 3, 4 done: layout, [Registry and audit](registry-and-audit.md), CI jobs.
+- Phase 2 steps 1–4 (data) done: [IO ADT and fiber state](../cats-effect/io-adt-and-fiber-state.md). Next: the step function.
+- Phase 3 steps 1–2 (Scala runner) done: [Difftest program format v0](difftest-program-format.md). sbt is not in CI yet.
+- Later decisions: generator programs are well-typed (a `TypeError` is a generator bug); `Val` and `IO` stay separate until a combinator needs `IO` in a value.
 
 ## Phase map
 
@@ -71,7 +75,7 @@ Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effe
 
 ## Phase 2 — core model of `IOFiber`
 
-1. **Syntax.** One inductive with the 25 `IO` constructors in tag order (`IO.scala`). Internal tags (`UnmaskRunLoop`, `IOCont.Get`, `EndFiber`) included.
+1. **Syntax.** One inductive with the 26 `IO` constructors in tag order (25 tags 0–24 plus `EndFiber` = -1) (`IO.scala`). Internal tags (`UnmaskRunLoop`, `IOCont.Get`, `EndFiber`) included.
 2. **User code as parameters.** `Delay`, `Map`, `FlatMap`, `OnCancel`, async registration and `Ref.modify` functions are values of a `UserFn` type. A `UserFn` can return, raise, read and write `Ref` cells, and complete a callback zero, one or two times. Never a total "always succeeds" function.
 3. **Fiber state.** Mirror the `IOFiber` fields: `conts` stack, `objectState`, `finalizers`, `callbacks`, `masks : Nat`, `canceled`, `finalizing`, `outcome`, `suspended`, `resumeTag`.
 4. **Second mask model.** A twin fiber state with fresh mask ids per `uncancelable` (as in the scaladoc and PureConc). Same step function shape; only the mask and `poll` branches differ. Difftest both; the escaped-`poll` question is the first comparison.

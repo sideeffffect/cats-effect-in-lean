@@ -1,0 +1,206 @@
+package cats.effect.difftest
+
+import ujson.Value
+
+/** JSON codec for format v0. The decoder is strict: unknown keys, unknown ops, handle literals
+  * in the input, unbound variables and poll misuse are all decode errors.
+  */
+object Json:
+  val FormatVersion = 0
+  val DefaultMaxSteps = 10000
+
+  private def fail(msg: String): Nothing = throw DecodeError(msg)
+
+  private def obj(j: Value, ctx: String): collection.Map[String, Value] = j match
+    case o: ujson.Obj => o.value
+    case _ => fail(s"$ctx: expected an object, got $j")
+
+  private def keys(o: collection.Map[String, Value], allowed: Set[String], ctx: String): Unit =
+    val extra = o.keySet.diff(allowed)
+    if extra.nonEmpty then fail(s"$ctx: unknown keys ${extra.mkString(",")}")
+
+  private def field(o: collection.Map[String, Value], k: String, ctx: String): Value =
+    o.getOrElse(k, fail(s"$ctx: missing key '$k'"))
+
+  private def nat(j: Value, ctx: String): Long = j match
+    case ujson.Num(d) if d >= 0 && d == d.floor && d <= 9.0e15 => d.toLong
+    case _ => fail(s"$ctx: expected a natural number, got $j")
+
+  private def str(j: Value, ctx: String): String = j match
+    case ujson.Str(s) if s.nonEmpty => s
+    case _ => fail(s"$ctx: expected a non-empty string, got $j")
+
+  // ------------------------------------------------------------------ values
+
+  def decodeVal(j: Value): Val =
+    val o = obj(j, "value")
+    val t = str(field(o, "t", "value"), "value.t")
+    def only(ks: String*) = keys(o, Set("t") ++ ks, s"value '$t'")
+    t match
+      case "unit" => only(); Val.VUnit
+      case "bool" =>
+        only("v")
+        field(o, "v", t) match
+          case ujson.Bool(b) => Val.VBool(b)
+          case x => fail(s"bool: expected true/false, got $x")
+      case "nat" => only("v"); Val.VNat(nat(field(o, "v", t), "nat.v"))
+      case "pair" => only("a", "b"); Val.VPair(decodeVal(field(o, "a", t)), decodeVal(field(o, "b", t)))
+      case "left" => only("v"); Val.VLeft(decodeVal(field(o, "v", t)))
+      case "right" => only("v"); Val.VRight(decodeVal(field(o, "v", t)))
+      case "succeeded" => only("v"); Val.VSucceeded(decodeVal(field(o, "v", t)))
+      case "errored" => only("code"); Val.VErrored(Err.User(nat(field(o, "code", t), "errored.code")))
+      case "canceled" => only(); Val.VCanceled
+      case "fiber" | "ref" | "deferred" => fail(s"value '$t': handles cannot be literals")
+      case _ => fail(s"unknown value tag '$t'")
+
+  def encodeErr(e: Err): ujson.Obj = e match
+    case Err.User(c) => ujson.Obj("t" -> "errored", "code" -> c.toDouble)
+    case Err.Foreign(d) => ujson.Obj("t" -> "errored", "exn" -> d)
+
+  def encodeVal(v: Val): Value = v match
+    case Val.VUnit => ujson.Obj("t" -> "unit")
+    case Val.VBool(b) => ujson.Obj("t" -> "bool", "v" -> b)
+    case Val.VNat(n) => ujson.Obj("t" -> "nat", "v" -> n.toDouble)
+    case Val.VPair(a, b) => ujson.Obj("t" -> "pair", "a" -> encodeVal(a), "b" -> encodeVal(b))
+    case Val.VLeft(x) => ujson.Obj("t" -> "left", "v" -> encodeVal(x))
+    case Val.VRight(x) => ujson.Obj("t" -> "right", "v" -> encodeVal(x))
+    case Val.VSucceeded(x) => ujson.Obj("t" -> "succeeded", "v" -> encodeVal(x))
+    case Val.VErrored(e) => encodeErr(e)
+    case Val.VCanceled => ujson.Obj("t" -> "canceled")
+    case Val.VFiber(i) => ujson.Obj("t" -> "fiber", "id" -> i)
+    case Val.VRef(i) => ujson.Obj("t" -> "ref", "id" -> i)
+    case Val.VDeferred(i) => ujson.Obj("t" -> "deferred", "id" -> i)
+
+  // --------------------------------------------------------------- programs
+
+  private enum Kind:
+    case V, P
+
+  private type Scope = Map[String, Kind]
+
+  private def atom(j: Value, scope: Scope, ctx: String): Atom = j match
+    case o: ujson.Obj if o.value.get("t").contains(ujson.Str("var")) =>
+      keys(o.value, Set("t", "x"), ctx)
+      val x = str(field(o.value, "x", ctx), s"$ctx.x")
+      scope.get(x) match
+        case Some(Kind.V) => Atom.Var(x)
+        case Some(Kind.P) => fail(s"$ctx: '$x' is a poll, not a value")
+        case None => fail(s"$ctx: unbound variable '$x'")
+    case _ => Atom.Lit(decodeVal(j))
+
+  def decodeProg(j: Value): Prog = prog(j, Map.empty)
+
+  private def prog(j: Value, scope: Scope): Prog =
+    val o = obj(j, "prog")
+    val op = str(field(o, "op", "prog"), "prog.op")
+    val ctx = s"op '$op'"
+    def only(ks: String*) = keys(o, Set("op") ++ ks, ctx)
+    def p(k: String, s: Scope = scope) = prog(field(o, k, ctx), s)
+    def a(k: String) = atom(field(o, k, ctx), scope, s"$ctx.$k")
+    def n(k: String) = nat(field(o, k, ctx), s"$ctx.$k")
+    def s(k: String) = str(field(o, k, ctx), s"$ctx.$k")
+    def tag = o.get("tag").map(nat(_, s"$ctx.tag")).getOrElse(0L)
+    def fn(k: String) =
+      val i = n(k)
+      if i >= UserFns.size then fail(s"$ctx.$k: unknown user function $i")
+      i.toInt
+    op match
+      case "pure" => only("v"); Prog.Pure(a("v"))
+      case "raise" => only("code"); Prog.Raise(n("code"))
+      case "delay" =>
+        only("fn", "arg")
+        Prog.Delay(fn("fn"), o.get("arg").fold(Atom.Lit(Val.VUnit))(atom(_, scope, s"$ctx.arg")))
+      case "bind" =>
+        only("x", "e", "k"); val x = s("x")
+        Prog.Bind(x, p("e"), p("k", scope + (x -> Kind.V)))
+      case "seq" =>
+        only("ps")
+        field(o, "ps", ctx) match
+          case ujson.Arr(ps) if ps.nonEmpty => Prog.Seq(ps.toList.map(prog(_, scope)))
+          case x => fail(s"$ctx.ps: expected a non-empty array, got $x")
+      case "map" => only("e", "fn"); Prog.Map(p("e"), fn("fn"))
+      case "handleErrorWith" =>
+        only("e", "x", "k"); val x = s("x")
+        Prog.HandleErrorWith(p("e"), x, p("k", scope + (x -> Kind.V)))
+      case "attempt" => only("e"); Prog.Attempt(p("e"))
+      case "uncancelable" =>
+        only("poll", "body"); val q = s("poll")
+        Prog.Uncancelable(q, p("body", scope + (q -> Kind.P)))
+      case "poll" =>
+        only("poll", "e"); val q = s("poll")
+        if !scope.get(q).contains(Kind.P) then fail(s"$ctx: '$q' is not a bound poll")
+        Prog.Poll(q, p("e"))
+      case "onCancel" => only("e", "fin", "tag"); Prog.OnCancel(p("e"), p("fin"), tag)
+      case "guaranteeCase" =>
+        only("e", "x", "fin", "tag"); val x = s("x")
+        Prog.GuaranteeCase(p("e"), x, p("fin", scope + (x -> Kind.V)), tag)
+      case "canceled" => only(); Prog.Canceled
+      case "cede" => only(); Prog.Cede
+      case "never" => only(); Prog.Never
+      case "start" => only("e"); Prog.Start(p("e"))
+      case "join" => only("f"); Prog.Join(a("f"))
+      case "cancel" => only("f"); Prog.Cancel(a("f"))
+      case "racePair" => only("a", "b"); Prog.RacePair(p("a"), p("b"))
+      case "sleep" => only("ms"); Prog.Sleep(n("ms"))
+      case "refNew" => only("v"); Prog.RefNew(a("v"))
+      case "refGet" => only("r"); Prog.RefGet(a("r"))
+      case "refSet" => only("r", "v"); Prog.RefSet(a("r"), a("v"))
+      case "refModify" => only("r", "fn"); Prog.RefModify(a("r"), fn("fn"))
+      case "deferredNew" => only(); Prog.DeferredNew
+      case "deferredGet" => only("d"); Prog.DeferredGet(a("d"))
+      case "deferredComplete" => only("d", "v"); Prog.DeferredComplete(a("d"), a("v"))
+      case "async" =>
+        only("cbs", "fin", "tag")
+        val cbs = field(o, "cbs", ctx) match
+          case ujson.Arr(cs) => cs.toList.map(cb)
+          case x => fail(s"$ctx.cbs: expected an array, got $x")
+        Prog.Async(cbs, o.get("fin").map(prog(_, scope)), tag)
+      case "case" =>
+        only("on", "l", "lk", "r", "rk"); val l = s("l"); val r = s("r")
+        Prog.Case(a("on"), l, p("lk", scope + (l -> Kind.V)), r, p("rk", scope + (r -> Kind.V)))
+      case "split" =>
+        only("on", "a", "b", "k"); val x = s("a"); val y = s("b")
+        Prog.Split(a("on"), x, y, p("k", scope + (x -> Kind.V) + (y -> Kind.V)))
+      case _ => fail(s"unknown op '$op'")
+
+  private def cb(j: Value): CbCall =
+    val o = obj(j, "callback")
+    keys(o, Set("when", "ok", "err"), "callback")
+    val when = str(field(o, "when", "callback"), "callback.when") match
+      case "sync" => When.Sync
+      case "later" => When.Later
+      case w => fail(s"callback.when: expected sync or later, got '$w'")
+    (o.get("ok"), o.get("err")) match
+      case (Some(v), None) => CbCall(when, Right(decodeVal(v)))
+      case (None, Some(c)) => CbCall(when, Left(nat(c, "callback.err")))
+      case _ => fail("callback: give exactly one of 'ok' or 'err'")
+
+  // ------------------------------------------------------------------ cases
+
+  def decodeCase(j: Value): TestCase =
+    val o = obj(j, "case")
+    keys(o, Set("v", "id", "mode", "choices", "seed", "maxSteps", "prog"), "case")
+    val v = nat(field(o, "v", "case"), "case.v")
+    if v != FormatVersion then fail(s"case.v: unsupported format version $v")
+    val id = str(field(o, "id", "case"), "case.id")
+    val mode = str(field(o, "mode", "case"), "case.mode") match
+      case "replay" =>
+        if o.contains("seed") then fail("case: 'seed' is only for mode testcontrol")
+        val cs = o.get("choices") match
+          case None => Nil
+          case Some(ujson.Arr(cs)) => cs.toList.map(choice)
+          case Some(x) => fail(s"case.choices: expected an array, got $x")
+        Mode.Replay(cs)
+      case "testcontrol" =>
+        if o.contains("choices") then fail("case: 'choices' is only for mode replay")
+        Mode.TestControlSeed(nat(field(o, "seed", "case"), "case.seed"))
+      case m => fail(s"case.mode: unknown mode '$m'")
+    val max = o.get("maxSteps").map(nat(_, "case.maxSteps").toInt).getOrElse(DefaultMaxSteps)
+    TestCase(id, mode, decodeProg(field(o, "prog", "case")), max)
+
+  private def choice(j: Value): Choice = j match
+    case ujson.Num(_) => Choice.Pick(nat(j, "choice").toInt)
+    case o: ujson.Obj =>
+      keys(o.value, Set("cancel"), "choice")
+      Choice.CancelFiber(nat(field(o.value, "cancel", "choice"), "choice.cancel").toInt)
+    case _ => fail(s"choice: expected a number or {\"cancel\":n}, got $j")
