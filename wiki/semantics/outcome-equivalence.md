@@ -1,7 +1,7 @@
 # Outcome sets, `Eqv`/`EqvP`, the enumerators and the IO laws
 
 > Sources: own Phase 2 step 10 and Phase 4 work (`CatsEffectInLean/Model/Outcomes.lean`, `SchedP.lean`, `Enum.lean`, `EnumP.lean`, `IOInstance.lean`, `EnumExamples.lean`, `EnumPExamples.lean`, `Props/IO/MonadCancelLaws.lean`, `Proofs/IO/MonadCancelLaws.lean`), Lean v4.35.0, 2026-11-10; Cats Effect v3.7.1 (`IO.scala`, `MonadCancelLaws.scala`, `MonadCancelTests.scala`, `testkit/.../TestInstances.scala`); scala-cli smoke test on CE 3.7.1 with `TestControl`
-> Raw: [Review 2 fixes notes](../../raw/cats-effect/2026-11-10-review2-ce0001-ce0004-notes.md); [Enumerator and first laws notes](../../raw/lean-tooling/2026-11-10-enumerator-and-first-laws-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md); [Preemptive EqvP notes](../../raw/project-decisions/2026-11-10-preemptive-eqv-notes.md)
+> Raw: [User answers Q1–Q3](../../raw/project-decisions/2026-11-10-user-answers-q1-q3.md); [Review 2 fixes notes](../../raw/cats-effect/2026-11-10-review2-ce0001-ce0004-notes.md); [Enumerator and first laws notes](../../raw/lean-tooling/2026-11-10-enumerator-and-first-laws-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md); [Preemptive EqvP notes](../../raw/project-decisions/2026-11-10-preemptive-eqv-notes.md)
 
 ## Overview
 
@@ -108,6 +108,12 @@ The effect stays without forged ids (re-run 2026-11-10): with `fa = start(emit 9
 Decision 29/36 (done): `EqvP`. Smoke tests (`Model/EnumPExamples.lean`), with `fa n = start(emit 9) >> emit 1 >> n flatMaps >> emit 2` built as left-nested `flatMap`s:
 - Default thresholds: the replay enumeration (picks 3, depth 3, fuel 1300) differs only at `n = 509` (508 in the older construction). The left side alone has `[1, 9, 2]`. With one `preempt` after micro-step 514, the right side gives the same observation (`default_rhs_preempt`).
 - Thresholds 2/4: the replay enumeration differs for most `n` (`replay_differs_0`, `_1`); the exact `EqvP` sets agree for `n = 0..9` (`#eval`), kernel-checked for `n = 0..3` (`eqvP_0` .. `eqvP_3`).
+
+## Law context (user decision, 2026-11-10)
+
+- A law `lhs <-> rhs` is judged with the program running alone, as CE's own law tests run it. No outside fiber cancels it.
+- `EqvP` still lets the program's own fibers interleave at any run-loop iteration. That is scheduling inside the program.
+- Handles are unforgeable. User code can cancel or join only fibers it started or whose handle it received. `WellFormed` encodes this.
 
 ## See Also
 

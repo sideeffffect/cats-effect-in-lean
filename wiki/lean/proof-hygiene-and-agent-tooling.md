@@ -1,7 +1,7 @@
 # Proof hygiene and agent tooling for Lean
 
 > Sources: lean-lsp-mcp v0.33.0, 2026-11-03; lean4-skills (cameronfreer), 2026-11-08; lean-action v1.7.1, 2026-11-06; Plausible; Vero (arXiv 2608.13522), 2026-08-13; python-formalization Audit.lean, 2026-11; AI-prover landscape notes, 2026-11-10
-> Raw: [CI first runs](../../raw/project-decisions/2026-11-10-ci-first-runs.md); [CI setup decision](../../raw/project-decisions/2026-11-10-ci-setup.md); [lean-lsp-mcp README](../../raw/lean-tooling/lean-lsp-mcp-readme.md); [lean-lsp-mcp tools](../../raw/lean-tooling/lean-lsp-mcp-tools.md); [lean4-skills README](../../raw/lean-tooling/lean4-skills-readme.md); [lean4-skills SKILL.md](../../raw/lean-tooling/lean4-skills-skill-md.md); [lean4-skills guardrails](../../raw/lean-tooling/lean4-skills-guardrails.md); [lean4-skills disprove](../../raw/lean-tooling/lean4-skills-disprove-command.md); [lean-action README](../../raw/lean-tooling/lean-action-readme.md); [Plausible README](../../raw/lean-tooling/plausible-readme.md); [Vero anti-cheating](../../raw/lean-tooling/2026-08-13-vero-agents-verified-repos-anti-cheating.md); [python-formalization AGENTS.md copy](../../raw/lean-tooling/python-formalization-agents-md.md); [python-formalization harness code](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [AI prover landscape](../../raw/lean-tooling/2026-11-10-ai-prover-and-search-landscape-notes.md); [Aristotle](../../raw/lean-tooling/harmonic-aristotle-product-page.md); [Gauss](../../raw/lean-tooling/math-inc-gauss-intro.md)
+> Raw: [User answers Q1–Q3](../../raw/project-decisions/2026-11-10-user-answers-q1-q3.md); [CI first runs](../../raw/project-decisions/2026-11-10-ci-first-runs.md); [CI setup decision](../../raw/project-decisions/2026-11-10-ci-setup.md); [lean-lsp-mcp README](../../raw/lean-tooling/lean-lsp-mcp-readme.md); [lean-lsp-mcp tools](../../raw/lean-tooling/lean-lsp-mcp-tools.md); [lean4-skills README](../../raw/lean-tooling/lean4-skills-readme.md); [lean4-skills SKILL.md](../../raw/lean-tooling/lean4-skills-skill-md.md); [lean4-skills guardrails](../../raw/lean-tooling/lean4-skills-guardrails.md); [lean4-skills disprove](../../raw/lean-tooling/lean4-skills-disprove-command.md); [lean-action README](../../raw/lean-tooling/lean-action-readme.md); [Plausible README](../../raw/lean-tooling/plausible-readme.md); [Vero anti-cheating](../../raw/lean-tooling/2026-08-13-vero-agents-verified-repos-anti-cheating.md); [python-formalization AGENTS.md copy](../../raw/lean-tooling/python-formalization-agents-md.md); [python-formalization harness code](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [AI prover landscape](../../raw/lean-tooling/2026-11-10-ai-prover-and-search-landscape-notes.md); [Aristotle](../../raw/lean-tooling/harmonic-aristotle-product-page.md); [Gauss](../../raw/lean-tooling/math-inc-gauss-intro.md)
 
 ## Overview
 
@@ -29,6 +29,10 @@ Agents cheat, mostly by accident. Proof hygiene must be enforced mechanically in
 - Never weaken a statement to get a proof. If false, refute it (`¬P` + reproducer). If hard, leave it `open` with a note.
 - A proof can be valid and still empty: check hypotheses do not assume the interesting case (julia 128/130).
 - Use the wrong-function test (python-formalization).
+
+## `sorryAx` in the source scan (2026-11-10)
+
+`scripts/check_forbidden.py` also forbids `\bsorryAx\b` (user answer to Q2). Before, only `sorry` was matched; a direct `sorryAx` term passed the source scan and only the axiom audits caught it.
 
 ## See Also
 

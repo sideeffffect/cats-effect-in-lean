@@ -520,8 +520,8 @@ def member_rows(rel: str, sc: Scan, area: str, status: str, reason: str) -> list
                 st, rs = "excluded", "trivial: auxiliary constructor"
             elif any(TRANSFORMER_TEMPLATE.match(x) for x in m.path) or TRANSFORMER_INSTANCE.search(m.name):
                 st, rs = "excluded", (
-                    "deferred: monad-transformer instance (OptionT, EitherT, Kleisli, ...); "
-                    "after IO and the generic derived combinators"
+                    "out-of-scope: monad-transformer instance (OptionT, EitherT, Kleisli, ...); "
+                    "user decision Q1 (2026-11-10): ignore monad transformers"
                 )
             elif m.name == "toString":
                 st, rs = "excluded", "no-behaviour: string rendering only"

@@ -19,6 +19,7 @@ from pathlib import Path
 # (pattern, reason). Patterns match code with comments and strings removed.
 FORBIDDEN: list[tuple[str, str]] = [
     (r"\bsorry\b", "unfinished proof"),
+    (r"\bsorryAx\b", "unfinished proof (the axiom behind sorry; user decision Q2, 2026-11-10)"),
     (r"\badmit\b", "unfinished proof"),
     (r"\bnative_decide\b", "trusts the compiler (adds an axiom)"),
     (r"\bbv_decide\b", "trusts an external SAT certificate path"),

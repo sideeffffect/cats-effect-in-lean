@@ -122,3 +122,6 @@
 ## [2026-11-10] ingest | Review batch 3 (gate PASS); CI memory split; Phase 5 gate report
 - Created: Phase 5 gate report
 - Updated: Agent workflow (review log), Project plan (status, decisions 44–46)
+
+## [2026-11-10] ingest | User answers Q1–Q3
+- Updated: Project plan, Inventory (out-of-scope transformers, regeneration hazard), Proof hygiene (sorryAx), Outcome sets and Eqv (law context)

@@ -27,7 +27,8 @@ COLUMNS = ["id", "area", "kind", "file", "line", "status", "reason", "registry"]
 AREAS = {"kernel", "core", "std", "laws", "runtime"}
 KINDS = {"method", "constructor", "runloop-branch", "law"}
 STATUSES = {"todo", "modelled", "excluded"}
-REASON_PREFIXES = ("deferred:", "platform:", "internal:", "trivial:", "no-behaviour:")
+REASON_PREFIXES = ("deferred:", "platform:", "internal:", "trivial:", "no-behaviour:", "out-of-scope:")
+# `out-of-scope:` = the user removed this area from the project (Q1, 2026-11-10: monad transformers).
 ID_RE = re.compile(r"^[A-Za-z_][\w$.<>*&!=:|+\-/~^%?@#\\]*$")
 
 

@@ -1,7 +1,7 @@
 # Inventory
 
 > Sources: own work: `scripts/gen_inventory.py` and `scripts/check_inventory.py` run on Cats Effect v3.7.1 (2026-11-10)
-> Raw: [Inventory generator notes](../../raw/project-decisions/2026-11-10-inventory-notes.md); [Orchestrator merge notes](../../raw/project-decisions/2026-11-10-orchestrator-merge-notes.md)
+> Raw: [User answers Q1–Q3](../../raw/project-decisions/2026-11-10-user-answers-q1-q3.md); [Inventory generator notes](../../raw/project-decisions/2026-11-10-inventory-notes.md); [Orchestrator merge notes](../../raw/project-decisions/2026-11-10-orchestrator-merge-notes.md)
 
 ## Overview
 
@@ -48,6 +48,14 @@ Main exclusion rules: js/native sources (`platform:`), `private`/`protected` mem
 3. Run `python3 scripts/check_inventory.py`. It checks unique ids, allowed values, reason prefixes, `registry` for `modelled` rows, and (only when the checkout exists) that each file exists and each line is in range.
 
 Do not hand-edit generated columns. To change a status, change the rules in the script, or (later) let the registry audit set `modelled`. A regeneration must keep the `status`/`registry` of modelled rows; add that merge step before the first row becomes `modelled`.
+
+## User scope decision (2026-11-10)
+
+Monad-transformer instances (`OptionT`, `EitherT`, `IorT`, `Kleisli`, `WriterT`, `StateT`, `ReaderWriterStateT`): 306 rows, reason prefix `out-of-scope:` (user answer to Q1). They are not deferred; they never enter scope.
+
+## Regeneration hazard
+
+`scripts/gen_inventory.py` writes every row as `todo`/`excluded` and drops `modelled` statuses and `registry` ids. Never regenerate over the committed CSV. Edit rows in place, and compare the generator output in a temporary file.
 
 ## Git gotcha
 
