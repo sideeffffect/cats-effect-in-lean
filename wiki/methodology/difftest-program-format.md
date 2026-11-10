@@ -134,7 +134,8 @@ Output line: `{"v":0,"id","mode","outcome","trace","steps","time","schedule","fi
 - Run cases: `difftest/run.sh FILE.jsonl …` or `… | difftest/run.sh` (stdin). It caches the class path and runs plain `java`: about 4,500 cases/s. `sbt run` does not forward stdin in batch mode.
 - Other CE version: `sbt -Dce.version=<version> test`.
 - Lean side: `lake build Difftest cediff`, then `lake exe cediff difftest/cases/basic.jsonl`.
-- CI: job `difftest` runs `sbt -batch test` (JDK 21); the `lean` job runs the Lean side on `basic.jsonl`.
+- Generated cases, driver, shrinker: `difftest/py/` ([Differential testing](differential-testing.md), sections Generator and Driver).
+- CI: job `difftest` runs `sbt -batch test` (JDK 21), then `python3 difftest/py/selftest.py`; the `lean` job runs the Lean side on `basic.jsonl`.
 
 ## Lean side
 

@@ -90,6 +90,10 @@ jobs:
       - name: sbt test
         working-directory: difftest
         run: sbt -batch test
+      # Generator + driver self-test (Python stdlib): well-typed generated cases, no TypeError,
+      # deterministic Scala runs, bins, shrinker, corpus rerun. About 15 s. See difftest/py/.
+      - name: Difftest generator and driver self-test
+        run: python3 difftest/py/selftest.py
 
   inventory:
     name: Inventory check

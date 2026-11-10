@@ -1,13 +1,42 @@
 # Differential testing
 
-The Lean model and the real Cats Effect run the same generated programs. Method: `wiki/methodology/differential-testing.md`.
+The Lean model and the real Cats Effect run the same generated programs. Method: `wiki/methodology/differential-testing.md`. Program format: `wiki/methodology/difftest-program-format.md`.
 
-Planned content (Phase 3 of `wiki/methodology/project-plan.md`):
+## Contents
 
-- `difftest/` — sbt project. Cats Effect `3.7.1`, and a second build against `series/3.x`. It runs each program under `TestControl` and prints one JSON line for each case.
-- Lean side — `lake exe cediff`. It reads the same cases and checks each real outcome against the model.
-- `difftest/corpus/` — shrunk cases that once disagreed. CI runs them as a regression corpus.
+- `src/`, `build.sbt`, `run.sh` — Scala runner (Cats Effect 3.7.1). It reads JSON-line cases and prints one result line for each case.
+- `cases/` — hand-written golden cases. `sbt -batch test` checks them.
+- `py/` — generator, driver and shrinker (Python 3, stdlib only):
+  - `gen.py` — seeded, type-directed generator of v0 cases (weight table `WEIGHTS`, knobs `CONFIG`).
+  - `typecheck.py` — scope and type checker. Each generated case must pass it (decision 8).
+  - `drive.py` — subcommands `run`, `scala-check`, `shrink`, `corpus`.
+  - `mock_lean.py` — a fake Lean side with planted faults, for the self-test only.
+  - `selftest.py` — fast self-test (about 15 s). CI runs it after `sbt -batch test`.
+- `corpus/` — shrunk cases that once disagreed (regression corpus). It is made when the first mismatch is saved.
 
-## Format
+## Commands
 
-JSON lines (one case per line). Each case has the program AST, the seed (or the logged schedule), and the observed outcome and trace. The AST schema is shared by Scala and Lean. Define it in Phase 3 and document it here.
+```sh
+python3 difftest/py/gen.py --seed 1 --n 100                 # cases on stdout
+python3 difftest/py/drive.py scala-check --seeds 1 2 3 --n 10000
+python3 difftest/py/drive.py run --seeds 1 2 3 --n 10000 --lean "lake exe cediff" --shrink
+python3 difftest/py/drive.py corpus [--lean "lake exe cediff"]
+python3 difftest/py/selftest.py
+```
+
+## Corpus entry format
+
+One file `corpus/<case id>.json` for each shrunk mismatch:
+
+| key | meaning |
+|-----|---------|
+| `case` | the shrunk test case (a v0 input line) |
+| `scala` | Scala `outcome` and `trace` when the entry was saved |
+| `lean` | Lean output when the entry was saved |
+| `field` | first field that differed: `outcome`, `trace`, `schedule`, or `refinement` |
+| `expect` | `agree` (default: the model must be fixed) or `mismatch` (accepted difference) |
+| `triage` | `untriaged`, `model-bug`, `harness-bug`, `model-simplification`, `intended-ce-behaviour`, `underspecified`, `ce-bug` |
+| `note` | free text: the reason for the triage |
+| `found` | date, original case id, original and shrunk size |
+
+`drive.py corpus` fails if the Scala result changed, or (with `--lean`) if the Lean result is not `expect`.
