@@ -1,7 +1,7 @@
 # Project plan: Cats Effect v3.7.1 in Lean
 
 > Sources: own plan, written 2026-11-10 from all wiki articles; user asked for "a detailed step by step plan how to do this whole thing"
-> Raw: [Project plan draft note](../../raw/project-decisions/2026-11-10-project-plan-draft.md); [User decisions on the plan](../../raw/project-decisions/2026-11-10-plan-decisions.md); [Start signal](../../raw/project-decisions/2026-11-10-start-signal.md)
+> Raw: [Project plan draft note](../../raw/project-decisions/2026-11-10-project-plan-draft.md); [User decisions on the plan](../../raw/project-decisions/2026-11-10-plan-decisions.md); [Start signal](../../raw/project-decisions/2026-11-10-start-signal.md); [Phase 0 decisions](../../raw/project-decisions/2026-11-10-phase0-decisions.md)
 
 ## Overview
 
@@ -16,6 +16,20 @@ Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effe
 2. **Scope:** safety **and** liveness/fairness from the start.
 3. **Masks:** model both the `IOFiber` mask counter and the spec (fresh mask ids) in Phase 2.
 4. **Execution:** after Phase 0 and "start", agents run Phases 1–5 autonomously in parallel worktrees. The user reviews at the Phase 5 gate.
+
+## Phase 0 results (2026-11-10)
+
+- Step 1 done: all 5 calibration bugs are open and present at v3.7.1 ([Bug history](../cats-effect/bug-history.md)).
+- Step 2 done: `TestControl` is seed-random only; a scripted `ExecutionContext` replays and logs chosen schedules ([TestControl](../cats-effect/testcontrol.md)).
+- Step 3 done: kernel evaluation is fast enough for witnesses and bounded enumeration ([Kernel evaluation](../lean/kernel-evaluation.md)).
+- Step 4 done: `Schedule`, `Fair`, `Terminates` shapes proven on a toy ([Fairness and liveness](../semantics/fairness-and-liveness.md)).
+- Step 5 decisions:
+  1. Reproducers also run on `series/3.7.x`.
+  2. External cancel is a schedule choice in the difftest.
+  3. Difftest = replay first, refinement second; step-capped `TestControl` runs are inconclusive.
+  4. Use `decide +kernel` for witnesses and `decide_cbv` for enumeration.
+  5. Monad transformers stay deferred (Q1 in `QUESTIONS.md`).
+- Phase 1 step 2 (inventory) done early: [Inventory](inventory.md).
 
 ## Phase map
 

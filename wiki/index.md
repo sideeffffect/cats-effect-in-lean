@@ -10,6 +10,7 @@ How this project works: synthesis, agent loop, difftest design. Start here.
 | [Agent workflow and review protocol](methodology/agent-workflow.md) | Inventory → mirror → difftest → prove/refute → review; rubric; bug records; no upstream filing | 2026-11-10 |
 | [Project plan](methodology/project-plan.md) | Step-by-step plan: phases 0–9, gates, risks, user decisions; started 2026-11-10 | 2026-11-10 |
 | [Differential testing](methodology/differential-testing.md) | Planned Lean-vs-CE difftest harness, nondeterminism handling, triage bins | 2026-11-10 |
+| [Inventory](methodology/inventory.md) | inventory/inventory.csv: columns, scope, exclusion rules, how to regenerate, counts (3,255 rows) | 2026-11-10 |
 
 ## cats-effect
 
@@ -20,7 +21,8 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [Pinned version: v3.7.1](cats-effect/pinned-version.md) | v3.7.1 (2026-08-23, eb0cc25) is the latest stable; pinned | 2026-11-10 |
 | [Source layout](cats-effect/source-layout.md) | kernel, laws, IO ADT, IOFiber, runtime, std, PureConc, TestControl | 2026-11-10 |
 | [Semantics of CE3](cats-effect/semantics.md) | Cancellation, masking, finalizers, laws; IOFiber vs PureConc | 2026-11-10 |
-| [Bug history](cats-effect/bug-history.md) | Bug classes, open bugs, recommended first targets | 2026-11-10 |
+| [Bug history](cats-effect/bug-history.md) | Bug classes, open bugs (status on series/3.x checked), recommended first targets | 2026-11-10 |
+| [TestControl and schedule replay](cats-effect/testcontrol.md) | TestControl is seed-random only; a scripted EC in IORuntime replays and logs chosen schedules; difftest = replay first, refinement second | 2026-11-10 |
 
 ## semantics
 
@@ -29,6 +31,7 @@ Formal modeling approaches for effect systems and concurrency.
 | Article | Summary | Updated |
 |---------|---------|---------|
 | [Modeling approaches for CE3 in Lean](semantics/modeling-approaches.md) | Small-step + scheduler recommended; ITrees, dejafu, Marlow 2001 compared | 2026-11-10 |
+| [Fairness and liveness](semantics/fairness-and-liveness.md) | Schedule = Nat → Choice; Fair/Terminates definitions; CE 512/1024 thresholds; ranking, decide, lasso refutations | 2026-11-10 |
 
 ## lean
 
@@ -38,6 +41,7 @@ Lean 4 toolchain facts and proof hygiene.
 |---------|---------|---------|
 | [Lean v4.35.0 toolchain](lean/toolchain-v4-35.md) | lake check (+ bwrap/AppArmor failure), vcgen, native_decide axioms, recursion styles | 2026-11-10 |
 | [Proof hygiene and agent tooling](lean/proof-hygiene-and-agent-tooling.md) | Forbidden tactics, axiom audit, CI gates (incl. this repo's CI), lean-lsp-mcp, lean4-skills, Plausible | 2026-11-10 |
+| [Kernel evaluation of the model](lean/kernel-evaluation.md) | Toy spike: decide +kernel for runs/witnesses (5k steps in 6 s), decide_cbv memoizes schedule enumeration; design rules | 2026-11-10 |
 
 ## precedents
 

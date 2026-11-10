@@ -1,7 +1,7 @@
 # Inventory
 
 > Sources: own work: `scripts/gen_inventory.py` and `scripts/check_inventory.py` run on Cats Effect v3.7.1 (2026-11-10)
-> Raw: [Inventory generator notes](../../raw/project-decisions/2026-11-10-inventory-notes.md)
+> Raw: [Inventory generator notes](../../raw/project-decisions/2026-11-10-inventory-notes.md); [Orchestrator merge notes](../../raw/project-decisions/2026-11-10-orchestrator-merge-notes.md)
 
 ## Overview
 
@@ -48,6 +48,10 @@ Main exclusion rules: js/native sources (`platform:`), `private`/`protected` mem
 3. Run `python3 scripts/check_inventory.py`. It checks unique ids, allowed values, reason prefixes, `registry` for `modelled` rows, and (only when the checkout exists) that each file exists and each line is in range.
 
 Do not hand-edit generated columns. To change a status, change the rules in the script, or (later) let the registry audit set `modelled`. A regeneration must keep the `status`/`registry` of modelled rows; add that merge step before the first row becomes `modelled`.
+
+## Git gotcha
+
+The user's global gitignore (`~/.gitignore_global`) ignores `*.csv`. The first commit lost `inventory/inventory.csv` silently. The repository `.gitignore` now has `!inventory/*.csv`. After you regenerate, check `git status` shows the CSV.
 
 ## Parser limits
 

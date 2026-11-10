@@ -60,3 +60,13 @@
 
 ## [2026-11-10] ingest | Start signal (formalization started)
 - Updated: Project plan
+
+## [2026-11-10] ingest | Phase 0 spikes and Phase 1 inventory (5 parallel agents)
+- Updated: Bug history (status of #4687, #4627, #4571, #4483, #4697)
+- Created: TestControl and schedule replay; Updated: Differential testing, Source layout
+- Created: Kernel evaluation of the model; Updated: Lean v4.35.0 toolchain, Modeling approaches
+- Created: Fairness and liveness; Updated: Modeling approaches
+- Created: Inventory
+
+## [2026-11-10] ingest | Phase 0 decisions
+- Updated: Project plan, Inventory (csv gitignore gotcha)

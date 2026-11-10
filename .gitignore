@@ -1,3 +1,5 @@
 /.lake
 .scala-build/
 .bsp/
+__pycache__/
+!inventory/*.csv
