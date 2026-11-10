@@ -11,6 +11,7 @@ import CatsEffectInLean.Proofs.Calibration.FatalRaise
 import CatsEffectInLean.Props.Phase6.Race
 import CatsEffectInLean.Props.Phase6.Bracket
 import CatsEffectInLean.Proofs.Phase6.BracketFullTwin
+import CatsEffectInLean.Proofs.Phase6.RaceLaw
 
 /-!
 # Property registry
