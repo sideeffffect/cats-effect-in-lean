@@ -25,6 +25,7 @@ import CatsEffectInLean.Model.SchedP
 import CatsEffectInLean.Model.Outcomes
 import CatsEffectInLean.Model.Enum
 import CatsEffectInLean.Model.EnumP
+import CatsEffectInLean.Model.EnumPExamples
 import CatsEffectInLean.Model.IOInstance
 import CatsEffectInLean.Model.EnumExamples
 import CatsEffectInLean.Props.IO.MonadCancelLaws
@@ -35,6 +36,10 @@ import CatsEffectInLean.Model.Resource
 import CatsEffectInLean.Model.ResourceExamples
 import CatsEffectInLean.Props.Calibration.ResourceEval
 import CatsEffectInLean.Proofs.Calibration.ResourceEval
+import CatsEffectInLean.Model.ResourceFixed
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedFamily
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed
+import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedOld
 import CatsEffectInLean.Model.Codec
 import CatsEffectInLean.Model.WellFormed
 import CatsEffectInLean.Std.Queue

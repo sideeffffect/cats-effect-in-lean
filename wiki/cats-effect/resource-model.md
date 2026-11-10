@@ -1,11 +1,11 @@
 # Resource model and CE-0002
 
-> Sources: Cats Effect source at v3.7.1 (`Resource.scala:156-196`, `:388`, `:464-531`, `:826-993`, `:1167-1232`; `IO.scala:138`, `:532-533`, `:605-606`, `:903-904`, `:2017-2102`); own Lean work and scala-cli runs, 2026-11-10
-> Raw: [Resource mirror notes](../../raw/cats-effect/2026-11-10-resource-mirror-notes.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
+> Sources: Cats Effect source at v3.7.1 (`Resource.scala:156-196`, `:388`, `:464-531`, `:826-993`, `:1167-1232`; `IO.scala:138`, `:532-533`, `:605-606`, `:903-904`, `:2017-2102`); `series/3.7.x` commit `2f94201` `Resource.scala:464-530` (fix PR #4630); own Lean work and scala-cli runs, 2026-11-10
+> Raw: [Resource mirror notes](../../raw/cats-effect/2026-11-10-resource-mirror-notes.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md); [Preemptive EqvP notes](../../raw/project-decisions/2026-11-10-preemptive-eqv-notes.md)
 
 ## Overview
 
-The second refuted property of the project. `Resource.eval(fa).allocatedCase` is `fa.flatMap(...)` with no mask (`Resource.scala:526-527`). So the `flatMap` after `fa` is a cancelation point, also when `fa` is uncancelable. The Scaladoc of `Resource.eval` says "Preserves interruptibility of `fa`" (`Resource.scala:986-987`). The Lean refutation and reproducer case C show the same defect. Status of the record: draft, waits for review.
+The second refuted property of the project. `Resource.eval(fa).allocatedCase` is `fa.flatMap(...)` with no mask (`Resource.scala:526-527`). So the `flatMap` after `fa` is a cancelation point, also when `fa` is uncancelable. The Scaladoc of `Resource.eval` says "Preserves interruptibility of `fa`" (`Resource.scala:986-987`). The Lean refutation and reproducer case C show the same defect. Since review batch 2 the statement uses `EqvP` (preemption at any run-loop iteration), and a fixed twin (PR #4630) satisfies it on a family of programs (decision 39). Status of the record: draft, waits for review.
 
 ## Files
 
@@ -15,7 +15,11 @@ The second refuted property of the project. `Resource.eval(fa).allocatedCase` is
 | `Model/Resource.lean` | `Res` ADT, `allocatedCase` loop, `make`, closures `Clo`, release values `RelFn`, `REnv` |
 | `Model/ResourceExamples.lean` | 15 checks: success, release on error, release on cancel, LIFO, `ExitCase`, cases B and C, fix of PR #4630 |
 | `Props/Calibration/ResourceEval.lean` | `resourceEvalPreservesUncancelable` |
-| `Proofs/Calibration/ResourceEval.lean` | `resourceEvalPreservesUncancelable_refuted` |
+| `Proofs/Calibration/ResourceEval.lean` | `resourceEvalPreservesUncancelable_refuted` (exact `EqvP` sets) |
+| `Model/ResourceFixed.lean` | Fixed twin `allocatedCaseFixed` (PR #4630), closures `FClo`, `FEnv` |
+| `Proofs/Calibration/ResourceEvalFixedFamily.lean` | The 9-program domain of the fixed-twin check |
+| `Proofs/Calibration/ResourceEvalFixed.lean` | `fixedTwin_holds`: the twin satisfies the equation for all 9 |
+| `Proofs/Calibration/ResourceEvalFixedOld.lean` | v3.7.1 on the same domain: fails for the 3 self-cancel programs, holds for the other 6 |
 
 ## Mirror
 
@@ -39,23 +43,33 @@ The second refuted property of the project. `Resource.eval(fa).allocatedCase` is
 ```
 fa    = IO.uncancelable(_ => g)
 alloc = Resource.eval(fa).allocatedCase
-alloc <-> IO.uncancelable(_ => alloc)        -- Eqv {} counterMaskModel
+alloc <-> IO.uncancelable(_ => alloc)        -- EqvP {} counterMaskModel
 ```
 
-Why this reads "preserves interruptibility": `fa` is uncancelable (its body ignores `poll`). Then allocating `Resource.eval(fa)` must be uncancelable too. "`x` is uncancelable" = masking `x` changes nothing. `allocatedCase` is the interpreter of `allocated`, `race` (so `timeout`), `onCancel`, `guaranteeCase`, `evalOn`, `attempt` and `Resource.uncancelable` (`Resource.scala:335`, `:552`, `:591-740`, `:1086-1089`). `Eqv` has no outside canceller (decision 22); cancelation comes from `g` itself. Only the uncancelable direction is stated.
+Why this reads "preserves interruptibility": `fa` is uncancelable (its body ignores `poll`). Then allocating `Resource.eval(fa)` must be uncancelable too. "`x` is uncancelable" = masking `x` changes nothing. `allocatedCase` is the interpreter of `allocated`, `race` (so `timeout`), `onCancel`, `guaranteeCase`, `evalOn`, `attempt` and `Resource.uncancelable` (`Resource.scala:335`, `:552`, `:591-740`, `:1086-1089`). `EqvP` has no outside canceller (decision 22); cancelation comes from `g` itself. Only the uncancelable direction is stated.
+
+Why `EqvP`, not `Eqv` (review batch 2): the right side has one more run-loop iteration (the outer `Uncancelable`). Under the replay `Eqv`, a child fiber of `g` then sees a different auto-yield position, so `¬P` was true for every implementation (HOLLOW). `EqvP` allows a preemption at any iteration, as the multi-threaded runtime does, so iteration counts are not observed ([Outcome sets](../semantics/outcome-equivalence.md)).
 
 ## Refutation
 
 - Witness: `g = IO.canceled` (reproducer case C). `fa` alone: `Succeeded(())`.
-- Left: `Canceled`, empty trace, for every fuel ≥ 7 and every pick list (single fiber; `runs_of_nil_pick` from the `IO` law proofs).
-- Right: `Succeeded(((), _ => F.unit))` at fuel 8.
+- Exact outcome sets under `EqvP` (`exploreP`, closed lists, `decide +kernel`): left `{Canceled}` (26 states), right `{Succeeded(((), _ => F.unit))}` (34 states). One fiber, so preemption only splits the run.
 - Wrong-function test: the fix of PR #4630 gives `Succeeded` on both sides (examples `fixed_lhs`, `fixed_rhs`). The real `series/3.7.x` snapshot with the fix agrees (case C ok).
+
+## Fixed-twin check (decision 39)
+
+- `allocatedCaseFixed` mirrors `series/3.7.x` `Resource.scala:464-530`: one `F uncancelable { poll => ... }` around the loop (`:470`); `Allocate` → `resource(poll) flatMap` (`:486`); `Frame` → `(poll(F.unit) >> continue(head(b), tail, rel2)).onCancel(...).onError(...)` (`:507-509`, `>>` is by name, so `continue` runs in the lambda `FClo.thenK`); `Eval` → `poll(fa).flatMap(...)` (`:525`).
+- Closures: `FClo` with tags 20-23 (no overlap with `Clo` tags 0-8). `FEnv.callV` tries `FClo`, else the v3.7.1 closures. The body captures `this : Res` as an index into `FEnv.res` (a `Val` cannot hold a `Res`).
+- Domain: `g` ∈ {`canceled`, `emit 1`, `raiseError`, `canceled >> emit 1`, `start(emit 9) >> emit 1`, `start(emit 9).flatMap(_.cancel)`, `start(emit 9).flatMap(_.join)`, `start(emit 9) >> canceled`, `start(emit 9) >> emit 1 >> emit 2`}. All fuel values and all schedules with preemption (exact sets, 34 to 322 states).
+- Result: the twin satisfies the equation for all 9. v3.7.1 fails it exactly for the 3 programs with a self-cancel. So the statement separates the bug from the fix: not HOLLOW by the wrong-function test of batch 2.
+- Not checked: the cancelable direction ("a cancelable `fa` stays cancelable"), which would catch an over-masking `Eval` (batch 2, fix 3).
 - Ordinary input: the witness is an ordinary program, so no separate property is needed.
 - The witness is well-formed: `alloc_wellFormed`, `rhs_wellFormed` (start program by `decide +kernel`; user code by cases on `id / 2`: it ignores the view, has no effects, and returns `IO.canceled`, `alloc` or a throw).
 
 ## Gotchas
 
-- `rfl` on a run with a free fuel `f + 7` fails when the run calls a `Resource` closure. With fuel `7` (and a free task limit) it works. Lemma `runSchedState_add` (a halted run stays halted) bridges the two.
+- `rfl` on a run with a free fuel `f + 7` fails when the run calls a `Resource` closure (old `Eqv` proof). The `EqvP` proof avoids it: the closed state list covers all fuel values.
+- One `decide +kernel` for many programs runs out of memory (8 GB). Use one declaration per program and side.
 - A user release function with a side effect shows the strict call `rel(ExitCase.Canceled)` at build time, even when that finalizer never runs.
 
 ## Limits

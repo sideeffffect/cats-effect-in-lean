@@ -27,9 +27,30 @@ namespace CatsEffectInLean.Model
 section
 variable {M : Type} [DecidableEq M] (cfg : Config) (mm : MaskModel M) (env : UserEnv)
 
+/-- A cheap part of a state: run-loop counters, list lengths, halt, and per-fiber tags. Equal
+states have equal keys. Kernel evaluation compares keys first, so most unequal states are
+told apart without a full structural comparison. -/
+def Sched.key (s : Sched M) :
+    Option (Nat × Nat × Nat × Nat) × Nat × Nat × Bool × List (Nat × Nat × Bool × Bool) :=
+  (s.cur.map (fun l => (l.cancelIters, l.autoCedeIters, l.exec.fib.id, l.exec.fib.conts.length)),
+   s.heap.ready.length, s.heap.out.length, s.halt.isSome,
+   s.fibers.map (fun f => (f.resumeTag.toNat, f.conts.length, f.outcome.isSome, f.canceled)))
+
+/-- Equality with a cheap pre-test on `Sched.key`. -/
+def Sched.fastEq (a b : Sched M) : Bool := a.key == b.key && a == b
+
+/-- `t ∈ S`, with `Sched.fastEq`. -/
+def memFast (t : Sched M) (S : List (Sched M)) : Bool := S.any (Sched.fastEq t)
+
+theorem memFast_iff (t : Sched M) (S : List (Sched M)) : memFast t S = true ↔ t ∈ S := by
+  simp only [memFast, List.any_eq_true, Sched.fastEq, Bool.and_eq_true, beq_iff_eq]
+  constructor
+  · rintro ⟨x, hx, -, rfl⟩; exact hx
+  · intro h; exact ⟨t, h, rfl, rfl⟩
+
 /-- `S` is closed under the preemptive scheduler. -/
 def ClosedP (S : List (Sched M)) : Bool :=
-  S.all fun s => s.halt.isSome || (succsP cfg mm env s).all (fun t => S.contains t)
+  S.all fun s => s.halt.isSome || (succsP cfg mm env s).all (fun t => memFast t S)
 
 theorem runSchedStateP_mem {S : List (Sched M)} (hS : ClosedP cfg mm env S = true) :
     ∀ (fuel : Nat) (cs : List PChoice) (s : Sched M), s ∈ S →
@@ -42,8 +63,7 @@ theorem runSchedStateP_mem {S : List (Sched M)} (hS : ClosedP cfg mm env S = tru
       simp only [runSchedStateP, hh]
       apply runSchedStateP_mem hS
       have hs := List.all_eq_true.mp hS s h
-      simp only [hh, Option.isSome_none, Bool.false_or, List.all_eq_true,
-        List.contains_iff_mem] at hs
+      simp only [hh, Option.isSome_none, Bool.false_or, List.all_eq_true, memFast_iff] at hs
       exact hs _ (tickP_mem_succsP cfg mm env s _)
 
 /-- With a closed `S` that holds the start state, every observation is one of a state in
@@ -61,7 +81,7 @@ def exploreNew (seen : List (Sched M × List PChoice)) (s : Sched M) (p : List P
   let cands := (PChoice.preempt :: (List.range (max 1 s.heap.ready.length)).map .pick).map
     (fun c => (s.tickP cfg mm env c, c :: p))
   cands.foldl (fun acc tq =>
-    if acc.any (fun x => x.1 == tq.1) || seen.any (fun x => x.1 == tq.1) then acc
+    if acc.any (fun x => x.1.fastEq tq.1) || seen.any (fun x => x.1.fastEq tq.1) then acc
     else acc ++ [tq]) []
 
 /-- Breadth-first search: at most `bound` expansions. `todo` is the work list, `seen` all
