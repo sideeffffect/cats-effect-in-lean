@@ -46,3 +46,9 @@
 ## [2026-11-10] lint | 0 issues found, 0 auto-fixed
 
 ## [2026-11-10] ingest | Proof hygiene and agent tooling for Lean (CI first runs, module-name gotcha)
+
+## [2026-11-10] ingest | Project plan (draft)
+- Created: Project plan
+- Updated: Lessons for Cats Effect in Lean
+
+## [2026-11-10] lint | 0 issues found, 0 auto-fixed

@@ -1,0 +1,138 @@
+# Project plan: Cats Effect v3.7.1 in Lean
+
+> Sources: own plan, written 2026-11-10 from all wiki articles; user asked for "a detailed step by step plan how to do this whole thing"
+> Raw: [Project plan draft note](../../raw/project-decisions/2026-11-10-project-plan-draft.md)
+
+## Overview
+
+The end-to-end plan, from research to bug records. Status: **draft, not approved**. The formalization starts only when the user says so (`AGENTS.md`, "Current phase").
+Each phase has an exit gate. Do not start a phase before the gate of the phase before it passes, except where noted.
+Time estimates assume agents do the work and the user reviews at gates. Confidence in the estimates: 0.4.
+Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effect.md) synthesis).
+
+## Phase map
+
+| # | Phase | Output | Gate | Estimate |
+|---|---|---|---|---|
+| 0 | Close research gaps | 5 spike notes in the wiki, decisions recorded | User approves the plan and says "start" | 2–4 days |
+| 1 | Scaffolding | Directory layout, inventory, registry, audits in CI | CI green with empty registry | 2–3 days |
+| 2 | Core model of `IOFiber` | Executable small-step model with scheduler input | Hand examples pass; kernel can evaluate a small run | 2–3 weeks |
+| 3 | Difftest harness | Scala runner + Lean `cediff` + driver | 100% agreement, ≥50,000 cases, ≥3 seeds | 2–3 weeks (overlaps 2) |
+| 4 | Kernel laws | Laws stated over the model, settled | All law rows settled and reviewed | 2–4 weeks |
+| 5 | Calibration | Model refutes 3 known open bugs | 3 reproducers print `REPRODUCED` | 1–2 weeks |
+| 6 | Derived combinators, `Resource` | Mirrors + properties | Rows reviewed FAITHFUL | 3–5 weeks |
+| 7 | std structures | Queue first, then the rest | Rows reviewed FAITHFUL | 6–10 weeks |
+| 8 | Bug hunt | New bug candidates and records | Each candidate settled | ongoing |
+| 9 | Runtime (optional) | `LocalQueue`, `CallbackStack` with a memory model | Separate decision | months |
+
+## Phase 0 — close research gaps (still research; allowed now)
+
+1. **Check the status of the open bugs** #4687, #4627, #4571, #4483, #4697 on `series/3.x` (read-only `gh`). Record fix PRs. A bug that is fixed on `series/3.x` is still a valid calibration target at v3.7.1.
+2. **TestControl spike.** Read `testkit/.../TestControl.scala` and `TestContext.scala` at v3.7.1. Answer: can the runner follow a schedule that we choose, or only a seed? Can it log which task ran at each step? This decides the difftest mode (step 3.4).
+3. **Kernel-evaluation spike.** A refutation is a concrete counterexample. Its proof must run the model inside the Lean kernel (`decide`, `rfl`, `decide_cbv`), because `native_decide` is forbidden. Build a toy fiber interpreter (fuel, structural recursion), run 2 fibers × 20 steps under `decide`, and measure time and memory. If it is too slow, plan proof by lemmas instead of brute evaluation.
+4. **Value representation spike.** Choose between an untyped value universe (`Val`, as in python-formalization) and a typed `IO α`. Recommendation: untyped `Val` plus typed wrappers for property statements. Reasons: JSON difftest, user code as data, no universe problems with `Start`/`RacePair`.
+5. **Write the decisions** into the wiki: modeling approach (small-step + scheduler, [Modeling approaches](../semantics/modeling-approaches.md)), safety-only first, mask counter as in `IOFiber` (spec mask ids later as a twin), value representation, difftest mode.
+6. **Gate:** user approves this plan and says "start the formalization". Update `AGENTS.md` "Current phase".
+
+## Phase 1 — scaffolding
+
+1. **Layout.**
+   - `CatsEffectInLean/Model/` — `Syntax`, `Val`, `Fiber`, `Step`, `Sched`, `Run`.
+   - `CatsEffectInLean/Kernel/`, `Std/` — mirrors of derived combinators and std structures.
+   - `CatsEffectInLean/Props/` — property definitions only (no proofs, no local notation).
+   - `CatsEffectInLean/Proofs/` — `*_proven` / `*_refuted` theorems.
+   - `CatsEffectInLean/Registry.lean` — one entry per property: id, inventory rows, `prop`, status, theorem name.
+   - `inventory/`, `bugs/`, `difftest/` (sbt), `reproducers/` (scala-cli), `review/`.
+2. **Inventory.** Write a script that lists every public method, `IO` constructor, `runLoop` branch and law at v3.7.1 (use `scalex` on `~/Projects/cats-effect`). One row each, status `todo`. Scope: kernel, core `IO`/`IOFiber`/`SyncIO`, std. Runtime rows start as `excluded` with reason `deferred:` and a link to phase 9.
+3. **Registry audit** (Lean meta program, run in CI): each registered theorem has type exactly `prop` or `¬prop`; each `modelled` inventory row is named by a registry entry; `#print axioms` gives only `propext`, `Classical.choice`, `Quot.sound`.
+4. **CI:** add the registry audit, the inventory check, and later the difftest regression corpus and the reproducer job.
+5. **Gate:** CI green; the audit rejects a planted wrong theorem type.
+
+## Phase 2 — core model of `IOFiber`
+
+1. **Syntax.** One inductive with the 25 `IO` constructors in tag order (`IO.scala`). Internal tags (`UnmaskRunLoop`, `IOCont.Get`, `EndFiber`) included.
+2. **User code as parameters.** `Delay`, `Map`, `FlatMap`, `OnCancel`, async registration and `Ref.modify` functions are values of a `UserFn` type. A `UserFn` can return, raise, read and write `Ref` cells, and complete a callback zero, one or two times. Never a total "always succeeds" function.
+3. **Fiber state.** Mirror the `IOFiber` fields: `conts` stack, `objectState`, `finalizers`, `callbacks`, `masks : Nat`, `canceled`, `finalizing`, `outcome`, `suspended`, `resumeTag`.
+4. **Step function.** Mirror `runLoop` branch by branch, in the same order, with `path:line` citations. Mirror `shouldFinalize`, `prepareFiberForCancelation`, `succeeded`/`failed` continuation handling, `done`.
+5. **Scheduler.** The global state is a fiber soup + `Ref`/`Deferred` cells + virtual clock. The run takes a choice list: which fiber steps next, and whether a pending cancel is observed now. The 512-step read barrier and auto-yield become scheduler choices.
+6. **Concurrency constructors.** `Start`, `RacePair`, `Cede`, `Sleep`, `IOCont`/`Get` with the `ContState` three-way race (callback vs `get` vs cancel), external `cancel` and `join`.
+7. **Primitives.** `Ref` and `IODeferred` mirrors.
+8. **Run.** Fuel-bounded; "out of fuel" is a separate result. A bounded enumerator gives the set of outcomes over all schedules up to a preemption bound (dejafu style).
+9. **Gate:** 30+ hand examples agree with the docs; a 2-fiber program is evaluated by `decide` in the kernel; inventory rows for constructors move to `modelled` only with a registry entry.
+
+## Phase 3 — difftest harness (starts in parallel with 2.4)
+
+1. **Program language.** One JSON AST for test programs, shared by Scala and Lean.
+2. **Scala side** (`difftest/`, sbt, CE pinned to 3.7.1, and a second build against `series/3.x`): decode the AST, interpret into real `IO`, run under `TestControl` with a seed, print outcome + observable trace (finalizer order, `Ref` writes, callback calls) as JSON lines.
+3. **Generator.** Type-directed and edge-heavy: nested `uncancelable`/`poll`, escaped `poll`, finalizers that raise, callbacks called twice or after cancel, cancel at every boundary, races, `Start` inside `uncancelable`. Measure rule coverage (which `runLoop` branches fire), not line coverage.
+4. **Lean side** (`lean_exe cediff`): read cases, then either (a) compute the outcome set and check membership (refinement), or (b) replay the logged schedule and check equality — mode (b) only if spike 0.2 shows the schedule can be logged.
+5. **Driver** (Python): run both sides, compare, shrink failures, sort mismatches into the triage bins of [Differential testing](differential-testing.md), save shrunk cases as a CI regression corpus.
+6. **Real runtime pass.** Also run on the real `IORuntime` and check refinement only, to catch races `TestControl` hides.
+7. **Gate:** 100% agreement on ≥50,000 cases over ≥3 seeds. Each mismatch fixed in the model, never by removing a generator case. Record each model bug found in the wiki.
+
+## Phase 4 — kernel laws (model sanity check)
+
+1. Mirror the derived combinators in `MonadCancel`, `GenSpawn`, `Async`, `Sync`, generic over `F` (operations as parameters, laws as hypotheses), and the `IO` overrides. These are twins.
+2. State each law from the law files as outcome-set equivalence over all schedules.
+3. Prove the laws that hold. `onCancelAssociatesOverUncancelableBoundary` is a deliberate violation ([Semantics](../cats-effect/semantics.md)): settle it but mark it intended.
+4. Twins: `IO` vs `SyncIO`; derived vs override; `IOFiber` mask counter vs spec mask ids (escaped `poll` question).
+5. Smoke-test each statement with Plausible and the difftest before you try a proof.
+6. **Gate:** every law row is proven or refuted and reviewed FAITHFUL.
+
+## Phase 5 — calibration on known bugs
+
+1. Mirror `syncStep` (#4687), `Resource.eval` (#4627), Concurrent `Queue.take` + `timeout` (#4571).
+2. State the promised property for each, from its Scaladoc.
+3. The model must refute each one. If it cannot, the model is too abstract: go back to phase 2 or 3.
+4. Write each Scala reproducer; it must print `REPRODUCED <id>` on v3.7.1. Record the `series/3.x` result.
+5. Full bug record YAML for each, with `duplicates` pointing to the known issue.
+6. **Gate:** 3 refutations reproduced and reviewed.
+
+## Phase 6 — derived combinators and `Resource`
+
+1. Order: `bracket*`, `guarantee*`, `race`, `both`, `timeout*`, `memoize`, `parTraverseN`, then `Resource` (`allocated`, `use`, `eval`, `both`, `timeout`, `flatMap` finalizer order).
+2. Properties: release runs exactly once when acquire completed; finalizers LIFO and masked; no leaked fiber after `race`/`both`/`timeout`; the four external-cancel rules.
+3. **Gate:** rows reviewed FAITHFUL; refutations reproduced.
+
+## Phase 7 — std structures
+
+1. Order by bug density: `Queue` (both implementations, as twins) → `Semaphore` → `Mutex` → `CountDownLatch`, `CyclicBarrier` → `Supervisor` → `Dispatcher` → `Hotswap`, `AtomicCell`, `Dequeue`, `PQueue`, `MapRef`.
+2. Properties: no lost element and no lost wakeup under any cancel interleaving; no deadlock; linearizability against a sequential spec; finalizers once; no leaked fiber.
+3. The lock-free Async `Queue` is first modelled under sequential consistency. Record this as a model simplification.
+4. **Gate:** rows reviewed FAITHFUL.
+
+## Phase 8 — bug hunt (the goal)
+
+1. For each modelled area, collect properties: twins first, then invariants, then Scaladoc sentences.
+2. Search for counterexamples with the bounded schedule enumerator before you try a proof. Cheap search first, proof second.
+3. Each counterexample: refutation theorem, reproducer on v3.7.1 and `series/3.x`, duplicate search, honest `likelihood` and `maybe_intended`. Never file outside this repository.
+4. Each proven property: also test it against the real library.
+
+## Cross-cutting work (every phase)
+
+- **Review.** After each batch, a different agent reviews rows read-only with the MIRROR / PROPERTY / SETTLED rubric and the wrong-function test ([Agent workflow](agent-workflow.md)).
+- **Parallel agents.** One module per agent in its own worktree; a merge gate reruns the build, audits, difftest corpus and reproducers.
+- **Wiki.** Record findings the same day; lint at the end of each task.
+- **Metrics** (report at each gate): reviewed FAITHFUL / in scope, difftest cases and seeds, properties proven / refuted / open, reproduced refutations, false-positive rate, cost.
+- **Pre-push checks:** `lake build --wfail`, `check_forbidden.py`, `check_wiki.py`, `lake check`.
+
+## Main risks
+
+| Risk | Effect | Mitigation |
+|---|---|---|
+| Kernel evaluation too slow for counterexamples | Refutations cannot be checked without `native_decide` | Spike 0.3; small counterexamples; proof by lemmas |
+| `TestControl` cannot replay a schedule | Only refinement mode; weaker difftest | Spike 0.2; refinement is still sound |
+| Model too abstract | Hollow proofs, no bugs found | Calibration gate (phase 5) |
+| Breadth-first drift | Thin rows fail review | Headline metric = reviewed rows only |
+| Lock-free code needs a memory model | Runtime bugs out of reach | Phase 9 is a separate decision |
+| Build memory and time grow | Slow CI | `-M8000`, module split, heavy runs on a big machine |
+
+## See Also
+
+- [Lessons for Cats Effect in Lean](lessons-for-cats-effect.md)
+- [Agent workflow and review protocol](agent-workflow.md)
+- [Differential testing](differential-testing.md)
+- [Modeling approaches](../semantics/modeling-approaches.md)
+- [Bug history](../cats-effect/bug-history.md)
+- [Source layout](../cats-effect/source-layout.md)
+- [Lean v4.35.0 toolchain](../lean/toolchain-v4-35.md)

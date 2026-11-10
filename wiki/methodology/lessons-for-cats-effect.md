@@ -29,6 +29,8 @@ The top-level synthesis. Read this first before planning formalization work. Con
 
 ## Suggested order of work (not started; confirm with the user)
 
+The detailed version is the [Project plan](project-plan.md).
+
 1. Lean core: IO syntax, fiber state, scheduler-indexed small-step semantics with fuel.
 2. Scala difftest harness (TestControl + JSON lines).
 3. Kernel laws (MonadCancel, GenSpawn, Async) as properties — sanity check of the model.
@@ -50,6 +52,7 @@ Inventory coverage (reviewed FAITHFUL / in scope), difftest case counts and seed
 
 ## See Also
 
+- [Project plan](project-plan.md)
 - [Agent workflow and review protocol](agent-workflow.md)
 - [Differential testing](differential-testing.md)
 - [Modeling approaches](../semantics/modeling-approaches.md)
