@@ -1,0 +1,116 @@
+{
+ "case": {
+  "v": 1,
+  "id": "ip-res",
+  "mode": "replay",
+  "prog": {
+   "op": "syncStep",
+   "limit": 2147483647,
+   "e": {
+    "op": "seq",
+    "ps": [
+     {
+      "op": "allocatedCase",
+      "res": {
+       "op": "rFlatMap",
+       "res": {
+        "op": "rMake",
+        "acq": {
+         "op": "cede"
+        },
+        "x": "a",
+        "rel": {
+         "op": "cede"
+        }
+       },
+       "x": "b",
+       "k": {
+        "op": "rEval",
+        "e": {
+         "op": "cede"
+        }
+       }
+      }
+     },
+     {
+      "op": "canceled"
+     }
+    ]
+   }
+  }
+ },
+ "scala": {
+  "outcome": {
+   "t": "canceled"
+  },
+  "trace": []
+ },
+ "lean": {
+  "compare": [
+   "outcome",
+   "trace",
+   "steps",
+   "time",
+   "schedule",
+   "fifoFrom",
+   "fibers",
+   "pending",
+   "failures"
+  ],
+  "failures": [],
+  "fibers": {
+   "0": "f0"
+  },
+  "fifoFrom": 0,
+  "id": "ip-res",
+  "mode": "replay",
+  "outcome": {
+   "t": "succeeded",
+   "v": {
+    "t": "unit"
+   }
+  },
+  "pending": 0,
+  "schedule": [
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 0,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 1,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 2,
+    "task": "f0"
+   }
+  ],
+  "steps": 3,
+  "time": 0,
+  "trace": [],
+  "v": 1
+ },
+ "field": "idpoll:outcome",
+ "expect": "known-model-bug",
+ "triage": "model-bug",
+ "note": "Known model bug 'idpoll' (not fixed here: the difftest does not edit CatsEffectInLean/). SyncStep.interpret calls an uncancelable body with IdPoll (IO.scala:2390-2394 at v3.7.1), and IdPoll(fa) = fa. The model passes idPollVal = poll 0 0, but the mirror turns poll(fa) into UnmaskRunLoop(fa, 0, 0): Model/Resource.lean:359 (Clo.allocK, the Frame branch). On the root fiber (id 0, masks 0) counterMaskModel.pollMatches 0 is true, so the model pushes UnmaskK, and masks becomes 1 when fa ends: the rest of the program runs masked. In Scala it is not masked. Proposed fix: poll(fa) with mask id 0 is fa (as Difftest.pollTerm does).",
+ "found": {
+  "date": "2026-11-10",
+  "orig_id": "ip-res",
+  "orig_size": 11,
+  "size": 10
+ },
+ "known_bug": "idpoll"
+}

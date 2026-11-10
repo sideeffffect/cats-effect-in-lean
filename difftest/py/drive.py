@@ -40,7 +40,36 @@ CORPUS_DIR = REPO / 'difftest' / 'corpus'
 CHUNK = 5000
 
 # Automatic bins of the driver. A `mismatch` then gets one of TRIAGE_BINS by a human.
-BINS = ('agree', 'unsupported', 'inconclusive', 'mismatch', 'harness', 'generator-bug', 'hang')
+BINS = ('agree', 'unsupported', 'inconclusive', 'mismatch', 'known-model-bug', 'harness', 'generator-bug', 'hang')
+
+
+def _has_op(p, ops):
+    if isinstance(p, dict):
+        return p.get('op') in ops or any(_has_op(v, ops) for v in p.values())
+    if isinstance(p, list):
+        return any(_has_op(v, ops) for v in p)
+    return False
+
+
+# Known model bugs (in CatsEffectInLean/, which the difftest does not fix). A replay mismatch of a
+# case that matches the predicate goes to the bin `known-model-bug`, not `mismatch`. Each entry:
+# id, predicate on the case, note. Details: raw/project-decisions/2026-11-10-difftest-v1-notes.md.
+KNOWN_MODEL_BUGS = [
+    ('idpoll',
+     lambda c: c['prog'].get('op') == 'syncStep' and _has_op(c['prog']['e'], ('timeout', 'timeoutTo', 'allocatedCase')),
+     'Timeout/Resource mirrors turn poll(fa) into UnmaskRunLoop also for the IdPoll (mask id 0) of '
+     'syncStep; Scala IdPoll(fa) = fa. After the poll the root fiber stays masked in the model.'),
+]
+
+
+def known_model_bug(case):
+    for bid, pred, _ in KNOWN_MODEL_BUGS:
+        try:
+            if pred(case):
+                return bid
+        except (KeyError, TypeError, AttributeError):
+            pass
+    return None
 TRIAGE_BINS = ('untriaged', 'model-bug', 'harness-bug', 'model-simplification',
                'intended-ce-behaviour', 'underspecified', 'ce-bug')
 
@@ -146,7 +175,8 @@ def compare(case, s, l):
             fields = ['outcome', 'trace'] + (['schedule'] if 'schedule' in l else [])
         for field in fields:
             if dumps(s.get(field)) != dumps(l.get(field)):
-                return 'mismatch', field
+                kb = known_model_bug(case)
+                return ('known-model-bug', f"{kb}:{field}") if kb else ('mismatch', field)
         return 'agree', ''
     # testcontrol: refinement. Lean gives the set of allowed (outcome, trace) pairs.
     if s['outcome'].get('t') == 'inconclusive':
@@ -163,7 +193,7 @@ def compare(case, s, l):
 
 # --------------------------------------------------------------- shrinking
 
-PROG_KEYS = ('e', 'k', 'body', 'fin', 'a', 'b', 'lk', 'rk')
+PROG_KEYS = ('e', 'k', 'body', 'fin', 'a', 'b', 'lk', 'rk', 'fb', 'res', 'acq', 'rel')
 
 
 def _nodes(p, path=()):
@@ -247,8 +277,24 @@ def case_candidates(case):
         if d not in seen and well_typed(c['prog']):
             seen.add(d)
             out.append(c)
+    # When a candidate removes a `start`, the fiber handles of the external cancel choices move.
+    # So each program candidate also comes with all cancel handles set to 0 (the root).
+    # A second variant also folds each run of picks before a cancel into one pick 0 (the smaller
+    # program needs fewer steps before the cancel).
+    cs0 = [{'cancel': 0} if isinstance(x, dict) else x for x in case.get('choices', [])]
+    cs1 = []
+    for x in cs0:
+        if isinstance(x, dict) and cs1 and not isinstance(cs1[-1], dict):
+            while cs1 and not isinstance(cs1[-1], dict):
+                cs1.pop()
+            cs1.append(0)
+        cs1.append(x)
+    remap = cs0 != case.get('choices', [])
     for p in prog_candidates(case['prog']):
         add({**base, 'prog': p})
+        if remap:
+            add({**base, 'choices': cs0, 'prog': p})
+            add({**base, 'choices': cs1, 'prog': p})
     if 'choices' in case:
         for cs in choice_candidates(case['choices']):
             c = {k: v for k, v in case.items() if k != 'choices'}
@@ -260,9 +306,10 @@ def case_candidates(case):
     return out
 
 
-def shrink(case, lean_cmd, field, max_rounds=200, log=None):
+def shrink(case, lean_cmd, field, max_rounds=200, log=None, bin_='mismatch'):
     """Greedy delta debugging. A candidate is kept if the mismatch persists with the same
-    first differing field. Each round runs all candidates in one Scala batch and one Lean batch."""
+    first differing field (and the same bin: `mismatch` or `known-model-bug`). Each round runs
+    all candidates in one Scala batch and one Lean batch."""
     cur = case
     for rnd in range(max_rounds):
         m = measure(cur)
@@ -273,7 +320,7 @@ def shrink(case, lean_cmd, field, max_rounds=200, log=None):
             c['id'] = f"{case['id']}~s{rnd}.{j}"
         s = run_scala(cands)
         lo = run_lean(lean_cmd, cands)
-        ok = [c for c in cands if compare(c, s.get(c['id']), lo.get(c['id'])) == ('mismatch', field)]
+        ok = [c for c in cands if compare(c, s.get(c['id']), lo.get(c['id'])) == (bin_, field)]
         if not ok:
             break
         cur = min(ok, key=measure)
@@ -286,13 +333,15 @@ def shrink(case, lean_cmd, field, max_rounds=200, log=None):
 
 def save_corpus(case, s, l, field, meta, corpus_dir=CORPUS_DIR):
     corpus_dir.mkdir(parents=True, exist_ok=True)
+    kb = known_model_bug(case)
     entry = {
         'case': case,
         'scala': {'outcome': s.get('outcome'), 'trace': s.get('trace')},
         'lean': {k: v for k, v in l.items() if k != '_raw'},
         'field': field,
-        'expect': 'agree',
-        'triage': 'untriaged',
+        'expect': 'known-model-bug' if kb else 'agree',
+        'triage': 'model-bug' if kb else 'untriaged',
+        'known_bug': kb or '',
         'note': '',
         'found': meta,
     }
@@ -347,6 +396,9 @@ def cmd_run(a):
     details = collections.Counter(d for _, d in by_bin['mismatch'])
     if details:
         print("  mismatch fields:", dict(details))
+    kdet = collections.Counter(d for _, d in by_bin['known-model-bug'])
+    if kdet:
+        print("  known model bugs (id:field):", dict(kdet))
     unsup = collections.Counter(op for _, d in by_bin['unsupported'] for op in d.split(',') if op)
     if unsup:
         print("  unsupported ops:", dict(unsup.most_common()))
@@ -372,10 +424,10 @@ def cmd_shrink(a):
     lo = run_lean(a.lean, cases)
     for c in cases:
         b, field = compare(c, s.get(c['id']), lo.get(c['id']))
-        if b != 'mismatch':
+        if b not in ('mismatch', 'known-model-bug'):
             print(f"{c['id']}: {b} (not shrunk)")
             continue
-        sc = shrink(c, a.lean, field, log=print)
+        sc = shrink(c, a.lean, field, log=print, bin_=b)
         print(json.dumps(sc, separators=(',', ':')))
         if a.save:
             meta = {'date': datetime.date.today().isoformat(), 'orig_id': c['id'],
