@@ -94,3 +94,9 @@
 
 ## [2026-11-10] ingest | CI fix: sbt class path cache in difftest/run.sh
 - Updated: Differential testing
+
+## [2026-11-10] ingest | RacePair/Sleep, enumerator + first IO laws, SyncIO/syncStep (3 parallel agents)
+- Updated: Scheduler model, Differential testing, Difftest program format v0
+- Created: Outcome sets, Eqv and the IO laws; Updated: Kernel typeclasses model
+- Created: SyncIO and syncStep model; Updated: Bug history (CE-0001 refuted in Lean)
+- Updated: Project plan (status, decisions 22–25)

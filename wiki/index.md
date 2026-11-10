@@ -29,6 +29,7 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [Run-loop model (single fiber)](cats-effect/runloop-model.md) | step mirrors IOFiber.runLoop for one fiber; result types; 34 examples by decide +kernel; escaped poll: counter = Canceled (matches CE 3.7.1), spec = Succeeded; escaped poll in a finalizer skips finalizers | 2026-11-10 |
 | [Scheduler model (multi-fiber, replay)](cats-effect/scheduler-model.md) | Task-level replay scheduler: ready-list order, IOCont/Get/Cede/Start, _cancel/_join closures, callback race; 15 difftest cases agree with Scala | 2026-11-10 |
 | [Kernel typeclasses model](cats-effect/kernel-typeclasses-model.md) | MonadCancel/GenSpawn ops over abstract F; default-body mirrors; 33 laws as Props with Eqv parameter; IO twin table; unregistered default-instance lemmas | 2026-11-10 |
+| [SyncIO and syncStep model](cats-effect/syncio-and-syncstep-model.md) | SyncIO run loop and SyncStep.interpret (G = SyncIO) mirror; syncStepIdentitySyncIO refuted (CE-0001, reproducer case 4) | 2026-11-10 |
 
 ## semantics
 
@@ -38,6 +39,7 @@ Formal modeling approaches for effect systems and concurrency.
 |---------|---------|---------|
 | [Modeling approaches for CE3 in Lean](semantics/modeling-approaches.md) | Small-step + scheduler recommended; ITrees, dejafu, Marlow 2001 compared | 2026-11-10 |
 | [Fairness and liveness](semantics/fairness-and-liveness.md) | Schedule = Nat → Choice; Fair/Terminates definitions; CE 512/1024 thresholds; ranking, decide, lasso refutations | 2026-11-10 |
+| [Outcome sets, Eqv and the IO laws](semantics/outcome-equivalence.md) | outcomes/Eqv over pick schedules (trace, refs, reports); bounded enumerator + soundness; IO ops without a typed instance; 2 IO laws proven, 2 open; auto-yield finding | 2026-11-10 |
 
 ## lean
 

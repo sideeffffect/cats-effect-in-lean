@@ -43,6 +43,10 @@ Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effe
 - Generator coverage raised: every weak run event now ≥ 5.9% of cases.
 - Phase 5 Scala side done: CE-0001 (#4687), CE-0002 (#4627), CE-0003 (#4571) reproduce on v3.7.1 ([Bug history](../cats-effect/bug-history.md)). Lean refutations need `syncStep`, `Resource`, `racePair`, `sleep`, `timeout`, `Queue`.
 - Decisions 18–21 (properties may start on the fragment without `sleep`/`racePair`; masked-end `Succeeded` is a Phase 8 candidate; reproducers run at gates).
+- Phase 2 steps 8 and 10 done: `RacePair`, `Sleep` mirrored; 150,000 replay cases agree, 0 unsupported. Bounded enumerator with soundness ([Outcome sets and Eqv](../semantics/outcome-equivalence.md)).
+- Phase 4 started: 2 IO laws proven, 2 open (see Q3 in `QUESTIONS.md`).
+- Phase 5: CE-0001 refuted in Lean ([SyncIO and syncStep model](../cats-effect/syncio-and-syncstep-model.md)); CE-0002, CE-0003 next.
+- Decisions 22–25 (laws judged in isolation by default; single-fiber driver allowed when stated; `racePair` loser report twin is a Phase 8 candidate).
 - Phase 3 steps 1–2 (Scala runner) done: [Difftest program format v0](difftest-program-format.md). sbt is not in CI yet.
 - Later decisions: generator programs are well-typed (a `TypeError` is a generator bug); `Val` and `IO` stay separate until a combinator needs `IO` in a value.
 

@@ -39,3 +39,10 @@ Decisions after the first Lean-vs-Scala agreement, calibration reproducers and c
 19. Properties about `join`, `cancel`, `Ref`, `Deferred` and masks may start now, restricted to programs without `sleep`/`racePair`. The 50,000-case gate is met for that fragment (161,811 + 41,355 agreeing cases over 25 seeds). Properties that need `racePair` or `sleep` wait for their mirrors and their own 50,000 cases.
 20. "A canceled fiber whose last action is a masked region completes `Succeeded`" is a Phase 8 property candidate. Check it against the docs and laws. The generator keeps producing it often.
 21. Reproducers are not in CI yet (scala-cli download time). They run with `scripts/run_reproducers.sh` at each gate.
+
+Decisions after the racePair/sleep, enumerator/laws and syncStep reports:
+
+22. Law context: default (a), the program runs alone (Q3 in `QUESTIONS.md`). Model programs may use only fiber handles they received.
+23. A property may use the single-fiber driver when the behaviour it states is single-fiber (for example `syncStep`). The statement must say so. The reviewer judges it.
+24. Phase 8 twin candidate: a failed `racePair` loser is never sent to `reportFailure`, but a failed unjoined `start` fiber is.
+25. Merged check: 3 seeds x 10,000 replay cases, 30,000 agree, 0 mismatch, 0 unsupported (all ops supported).
