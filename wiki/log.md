@@ -190,3 +190,6 @@
 
 ## [2026-11-10] ingest | Track R witnesses (decision 53)
 - Updated: race, both and fiber leaks (witnesses, decision 54 check, citation fix)
+
+## [2026-11-10] ingest | Reviewer evidence rule
+- Updated: Agent workflow
