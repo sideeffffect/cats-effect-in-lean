@@ -239,8 +239,8 @@ def specMaskModel : MaskModel SpecMask where
 
 Fields not modelled: `runtime` and `tracingEvents` (`FIB:92-94`; configuration and tracing
 only), and the `cancelationIterations`/`autoCedeIterations` arguments of `runLoop`
-(`FIB:211-240`): the 512-step read barrier and auto-yield are scheduler choices
-(`wiki/methodology/project-plan.md`, Phase 2 step 6). `_cancel` and `_join` (`FIB:142`,
+(`FIB:211-240`): they are fields of `Loop` (`CatsEffectInLean/Model/Step.lean`); an
+auto-yield gives a `yielded` result and the scheduler decides when the fiber runs again. `_cancel` and `_join` (`FIB:142`,
 `FIB:179`) change to `IO.unit`/`IO.pure(oc)` in `done` (`FIB:1094-1095`); they follow from
 `outcome`, so they are not fields. -/
 structure Fiber (M : Type) where

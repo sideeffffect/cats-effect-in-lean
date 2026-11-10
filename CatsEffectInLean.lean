@@ -7,3 +7,6 @@ import CatsEffectInLean.Model.Syntax
 import CatsEffectInLean.Model.Fiber
 import CatsEffectInLean.Model.State
 import CatsEffectInLean.Model.Examples
+import CatsEffectInLean.Model.Step
+import CatsEffectInLean.Model.Run
+import CatsEffectInLean.Model.StepExamples

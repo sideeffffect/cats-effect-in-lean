@@ -5,7 +5,7 @@
 
 ## Overview
 
-Phase 2 steps 1–3: data definitions only, no step function. Files: `CatsEffectInLean/Model/Val.lean`, `Syntax.lean`, `Fiber.lean`, `State.lean`, `Examples.lean`. All types derive `DecidableEq`. `Examples.lean` checks them with `decide +kernel`. Builds in under 1 s.
+Phase 2 steps 1–3: data definitions only. The step function is in [Run-loop model](runloop-model.md). Files: `CatsEffectInLean/Model/Val.lean`, `Syntax.lean`, `Fiber.lean`, `State.lean`, `Examples.lean`. All types derive `DecidableEq`. `Examples.lean` checks them with `decide +kernel`. Builds in under 1 s.
 
 ## IO constructors
 
@@ -60,3 +60,4 @@ Phase 2 steps 1–3: data definitions only, no step function. Files: `CatsEffect
 - [Kernel evaluation of the model](../lean/kernel-evaluation.md)
 - [Project plan](../methodology/project-plan.md)
 - [Fairness and liveness](../semantics/fairness-and-liveness.md)
+- [Run-loop model (single fiber)](runloop-model.md)
