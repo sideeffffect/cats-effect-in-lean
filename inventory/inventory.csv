@@ -1065,7 +1065,7 @@ core.IO.andWait,core,method,core/shared/src/main/scala/cats/effect/IO.scala,789,
 core.IO.andWait#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,792,excluded,internal: private helper; modelled as part of its public caller,
 core.IO.timeout,core,method,core/shared/src/main/scala/cats/effect/IO.scala,818,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 core.IO.timeout#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,825,excluded,internal: private helper; modelled as part of its public caller,
-core.IO.timeoutTo,core,method,core/shared/src/main/scala/cats/effect/IO.scala,850,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
+core.IO.timeoutTo,core,method,core/shared/src/main/scala/cats/effect/IO.scala,850,todo,,
 core.IO.timeoutTo#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,862,excluded,internal: private helper; modelled as part of its public caller,
 core.IO.timeoutAndForget,core,method,core/shared/src/main/scala/cats/effect/IO.scala,883,todo,,
 core.IO.timeoutAndForget#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,886,excluded,internal: private helper; modelled as part of its public caller,

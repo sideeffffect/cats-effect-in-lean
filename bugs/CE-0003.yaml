@@ -10,7 +10,7 @@ files:
   - core/shared/src/main/scala/cats/effect/IOFiber.scala:940   # cancel finalizer of the async: cancels both children
   - core/shared/src/main/scala/cats/effect/IO.scala:818        # IO#timeout
   - core/shared/src/main/scala/cats/effect/IO.scala:850        # IO#timeoutTo: poll(racePair(IO.sleep(d)))
-  - std/shared/src/main/scala/cats/effect/std/Queue.scala:365  # taker-cancelation atomicity comment
+  - std/shared/src/main/scala/cats/effect/std/Queue.scala:894  # UnboundedAsyncQueue.take (F uncancelable { poll => ... }); notifyAnyway comment at 936-940
 functions:
   - IO#timeout
   - IO#timeoutTo
@@ -55,7 +55,7 @@ expected: |
 promised_by:
   - "Undisputed invariant (AGENTS.md section 3b, 'no lost element'): an element that take removed from the queue is returned to a caller, or it stays in the queue."
   - "Scaladoc of IO#timeout, core/shared/src/main/scala/cats/effect/IO.scala:800-802: 'The resulting effect will always wait for the source effect to complete (and to complete its finalizers), and will return the source's outcome over raising a `TimeoutException`.'"
-  - "Design comment in Queue, std/shared/src/main/scala/cats/effect/std/Queue.scala:365-366: 'The taker starts out *without* a value, so it's the taker-cancelation situation where we must take extra care to ensure atomicity.' (internal comment, not Scaladoc)"
+  - "Design comment in UnboundedAsyncQueue.take, std/shared/src/main/scala/cats/effect/std/Queue.scala:936-940 (notifyAnyway): 'we might have been awakened and canceled simultaneously / try waking up another taker just in case' (internal comment, not Scaladoc; it shows care for cancel of take, but it promises no more than the general invariant). Review batch 2: the earlier citation Queue.scala:365-366 is about the Synchronous queue and was removed."
 cause: >
   IOFiber.scala:908-951 (RacePair). The parent registers `cancel` (cancel fiberA and fiberB) as
   the async finalizer. A child completion calls cb, but if the parent is already canceled the
@@ -91,4 +91,18 @@ lean:
     consumer was canceled; the racePair callback loses; join gives Canceled, tryTake gives None.
     Checked by decide +kernel (cx_run). The FIFO schedule is a model schedule; it is not the
     replay of one TestControl seed.
-  model: CatsEffectInLean/Std/Queue.lean (UnboundedAsyncQueue, UnsafeUnbounded), CatsEffectInLean/Model/Timeout.lean (timeout, timeoutTo, never), CatsEffectInLean/Model/Codec.lean (closure ids)
+  model: CatsEffectInLean/Std/Queue.lean (UnboundedAsyncQueue, UnsafeUnbounded), CatsEffectInLean/Model/Timeout.lean (timeout, timeoutTo with the TimeoutException fallback only, never), CatsEffectInLean/Model/Codec.lean (closure ids)
+  fixed_twin: >
+    Not done (decision 39), and not feasible as a small twin. The candidate fix, draft PR #4710
+    "Lossless cancelation" (head f313ce86, 2026-11-10, base series/3.7.x), is not a local change
+    to racePair: it removes the finalizer stack of IOFiber, unwinds the whole stack on cancel,
+    adds MonadCancel#onCancelGraceful and async variants, changes ContState, and rewrites
+    racePair and other combinators with the new primitive. A mirror needs a second IOFiber model
+    (CatsEffectInLean/Model/Step.lean), which is shared and out of scope for this change. Evidence
+    that the property separates a lossless implementation from v3.7.1 (by reading, review batch
+    2, entry 7): under the schedule pick 0 x6, pick 1, pick 1 the same model run gives join
+    Canceled and tryTake Some(42), so the statement does not reject a lossless run; the property
+    is a safety claim over all schedules, so a lossless racePair finalizer can only remove lossy
+    runs. PR #4710 adds an upstream test for #4571 (commit a023a45). Plan: when PR #4710 settles,
+    run reproducers/CE-0003 on a publishLocal snapshot of it (Scala-side fixed twin), and mirror
+    only its racePair finalizer as a twin if the semantics allow a local change.

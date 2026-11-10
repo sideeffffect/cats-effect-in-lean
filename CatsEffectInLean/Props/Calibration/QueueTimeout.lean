@@ -30,8 +30,12 @@ queue is returned to a caller of `take`, or it is still in the queue. Support:
   `v3.7.1`): "The resulting effect will always wait for the source effect to complete (and to
   complete its finalizers), and will return the source's outcome over raising a
   `TimeoutException`."
-* `std/shared/src/main/scala/cats/effect/std/Queue.scala:365-366` (design comment): "it's the
-  taker-cancelation situation where we must take extra care to ensure atomicity."
+* `std/shared/src/main/scala/cats/effect/std/Queue.scala:936-940` (design comment of
+  `UnboundedAsyncQueue.take`, `notifyAnyway`): "we might have been awakened and canceled
+  simultaneously / try waking up another taker just in case". The queue itself takes care that
+  a cancel of `take` does not strand a wake-up. (The comment at `Queue.scala:365-366`, cited
+  before review batch 2, is about the `Synchronous` queue, not this queue.) Neither comment
+  promises more than the general invariant.
 
 ## Statement
 

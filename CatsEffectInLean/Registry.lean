@@ -120,7 +120,7 @@ def registry : List Entry := [
       "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.take",
       "std.Queue.UnboundedAsyncQueue.tryTake", "std.UnsafeUnbounded.put",
       "std.UnsafeUnbounded.take", "std.UnsafeUnbounded.Cell.apply",
-      "core.IO.timeout", "core.IO.timeoutTo", "core.IO.racePair",
+      "core.IO.timeout", "core.IO.racePair",
       "core.IOFiber.runLoop.RacePair", "core.IO.asyncCheckAttempt"]
     prop := ``Props.Calibration.QueueTimeout.takeTimeoutNoLostElement
     status := .refuted
@@ -129,7 +129,9 @@ def registry : List Entry := [
     note := "No lost element for program A of reproducers/CE-0003 (offer xs; take.timeout(d) in a \
       started fiber; cancel it; join; drain), all xs, d, s and pick schedules. Counterexample: \
       xs = [42], d = 1000, s = 1, FIFO schedule: the take racer completes Succeeded(42) after \
-      the consumer is canceled; the racePair finalizer drops the outcome." },
+      the consumer is canceled; the racePair finalizer drops the outcome. Row core.IO.timeoutTo \
+      is not listed: the model mirrors timeoutTo only with the TimeoutException fallback of \
+      IO#timeout (review batch 2), so the row stays todo." },
   { id := "core.SyncIO.runLoop.Error.fatalTwin"
     rows := ["core.IOFiber.runLoop.Error", "core.SyncIO.runLoop.Error"]
     prop := ``Props.Calibration.raiseErrorTwin
