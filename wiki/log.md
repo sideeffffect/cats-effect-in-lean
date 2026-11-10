@@ -80,3 +80,9 @@
 - Created: Run-loop model (single fiber); Updated: IO ADT and fiber state
 - Updated: Difftest program format v0 (Lean side), Differential testing
 - Updated: Project plan (status, decisions 11–13)
+
+## [2026-11-10] ingest | Scheduler model, difftest generator/driver, kernel typeclasses (3 parallel agents)
+- Created: Scheduler model; Updated: Run-loop model
+- Updated: Differential testing, Difftest program format v0 (generator, driver, corpus)
+- Created: Kernel typeclasses model
+- Updated: Project plan (status, decisions 14–17)

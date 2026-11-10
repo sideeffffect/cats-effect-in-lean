@@ -35,6 +35,10 @@ Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effe
 - Phase 2 step 5 done for one fiber: [Run-loop model](../cats-effect/runloop-model.md). 7 predictions match CE 3.7.1. Next: multi-fiber scheduler and concurrency tags (steps 6–9).
 - Phase 3 step 4 started: Lean decoder and `cediff` skeleton in `tools/Difftest/`; sbt job in CI.
 - Decisions 11–13 (escaped `poll` = Phase 8 candidate; `RtFn` for runtime closures; `UserEffect.emit` and allocation).
+- Phase 2 steps 6 and 8 (part) done: [Scheduler model](../cats-effect/scheduler-model.md); 15 replay cases agree with Scala (hand-translated). Missing: `RacePair`, `Sleep`, foreign `EvalOn`, `IODeferred`, bounded enumerator.
+- Phase 3 steps 3 and 5 done: generator, driver, shrinker in `difftest/py/`; 30,000 Scala cases deterministic. Lean does not run cases yet.
+- Phase 4 step 1 groundwork done: [Kernel typeclasses model](../cats-effect/kernel-typeclasses-model.md); 33 laws stated, none registered.
+- Decisions 14–17 (handle mapping in `cediff`; Lean outcome sets for testcontrol; one registry entry per law and instance; raise weak generator weights).
 - Phase 3 steps 1–2 (Scala runner) done: [Difftest program format v0](difftest-program-format.md). sbt is not in CI yet.
 - Later decisions: generator programs are well-typed (a `TypeError` is a generator bug); `Val` and `IO` stay separate until a combinator needs `IO` in a value.
 
