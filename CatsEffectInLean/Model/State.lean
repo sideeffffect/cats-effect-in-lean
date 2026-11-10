@@ -3,6 +3,9 @@ import CatsEffectInLean.Model.Fiber
 /-!
 # Global state and scheduler choices (skeleton)
 
+The replay scheduler that runs is `CatsEffectInLean/Model/Sched.lean` (`Sched`, `RChoice`).
+This file keeps the planned shape for the refinement mode (`Choice.step`, `fire`, `tick`).
+
 Phase 2 step 6 data only (no step function yet): the fiber soup, `Ref` and `Deferred`
 cells, `ContState` cells, the virtual clock, the ready queue in enqueue order, and the
 `Choice` type.

@@ -61,13 +61,12 @@ The rows with real CE claims (`map` vs `flatMap`, escaped `poll`, 512/513) were 
 
 ## Open points
 
-- Step 8: `IOCont`/`Get`, `Cede`, `Start`, `RacePair`, `Sleep`, foreign `EvalOn`, `Blocking`, and the canceller side of `cancel`.
-- The multi-fiber scheduler must reuse `step`/`resume` on `Exec` and keep `pendingCancel` per fiber.
-- Hand examples do not yet cover `IOCont`, so `Abort.unsupportedEffect` is the only behaviour for callback effects.
+- Step 8 (rest): `RacePair`, `Sleep`, foreign `EvalOn`, `Blocking`. `IOCont`/`Get`, `Cede`, `Start` and the canceller side of `cancel` are done: see [Scheduler model](scheduler-model.md). Since then `Cede` works in the single-fiber driver too (example 16), and user callback effects run (`Abort.unsupportedEffect` is unused).
 
 ## See Also
 
 - [IO ADT and fiber state](io-adt-and-fiber-state.md)
+- [Scheduler model (multi-fiber, replay)](scheduler-model.md)
 - [Semantics of CE3](semantics.md)
 - [Fairness and liveness](../semantics/fairness-and-liveness.md)
 - [Kernel evaluation of the model](../lean/kernel-evaluation.md)

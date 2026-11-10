@@ -153,10 +153,10 @@ Code: `tools/Difftest/` (`lean_lib Difftest`, `lean_exe cediff`). It is test cod
 
 | Gap | Ops | Needed in the model |
 |-----|-----|---------------------|
-| `fib.join`/`fib.cancel` read the fields `_join`/`_cancel` when the term is built (`IOFiber.scala:142-205`) | `join`, `cancel` | user code sees fiber completion (a heap snapshot with more than `Ref` cells), or an equivalent |
+| `fib.join`/`fib.cancel` read the fields `_join`/`_cancel` when the term is built (`IOFiber.scala:142-205`) | `join`, `cancel` | model has it now (`View.outcomes`, `IO.joinOf`/`IO.cancelOf`, [Scheduler model](../cats-effect/scheduler-model.md)); the translation must still map handles to fiber ids |
 | `deferred.get` reads the cell when the term is built (`IODeferred.scala:71`); `complete` calls callbacks | `deferredGet`, `deferredComplete` | `IODeferred` mirror (Phase 2 step 9) and cells visible to user code |
-| `Ref.unsafe` / `new IODeferred` allocate in a `Delay` thunk (`IO.scala:1822-1824`) | `refNew`, `deferredNew` | an allocation effect in `UserEffect` |
-| no trace output | all (trace only) | `UserEffect.emit (e : Val)` or a log of user calls in the run |
+| `Ref.unsafe` / `new IODeferred` allocate in a `Delay` thunk (`IO.scala:1822-1824`) | `refNew`, `deferredNew` | `UserEffect.allocRef` exists (not used by the translation yet); no `Deferred` allocation yet |
+| no trace output | all (trace only) | `UserEffect.emit (v : Val)` exists; the translation does not use it yet |
 | `Fn.user` has no captured values | all | none (worked around by the encoding); cleaner: `Fn.user id env` |
 | `Val` cannot hold an `IO` (`async` returns `Option[IO[Unit]]`) | `async`, `never` | none (a `some unit` marker; the next closure rebuilds the term) |
 
@@ -172,6 +172,7 @@ Code: `tools/Difftest/` (`lean_lib Difftest`, `lean_exe cediff`). It is test cod
 
 - [Differential testing](differential-testing.md)
 - [TestControl and schedule replay](../cats-effect/testcontrol.md)
+- [Scheduler model (multi-fiber, replay)](../cats-effect/scheduler-model.md)
 - [Project plan](project-plan.md)
 - [Semantics of CE3](../cats-effect/semantics.md)
 - [Agent workflow and review protocol](agent-workflow.md)

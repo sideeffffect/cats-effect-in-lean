@@ -9,7 +9,8 @@ finishes gives "out of fuel", which is never a Cats Effect outcome.
 
 The scheduler decides when a yielded fiber runs again: a `step` choice on a parked fiber
 calls `run()` (`resume`). External cancel is a schedule choice (Phase 0 decision 2).
-The multi-fiber scheduler (`State`, `Choice`) comes with Phase 2 step 8.
+The multi-fiber scheduler is `CatsEffectInLean/Model/Sched.lean`. Here a `Cede` or a
+`Start` works, but the single fiber is the only one that runs.
 -/
 
 namespace CatsEffectInLean.Model
@@ -49,10 +50,16 @@ inductive Summary where
   | uncaught (e : Err)
   | aborted (a : Abort)
   /-- The fiber waits for an async callback that never comes (a deadlock if nothing else
-  runs). -/
+  runs). Only the single-fiber driver gives it. -/
   | suspended
   /-- The schedule ended while the fiber can still run. -/
   | outOfFuel
+  /-- Multi-fiber scheduler (`CatsEffectInLean/Model/Sched.lean`): no task is ready and the
+  root fiber has no outcome (the difftest outcome `blocked`). -/
+  | blocked
+  /-- Multi-fiber scheduler: the task limit was reached (the difftest outcome `fuel`,
+  `maxSteps`). Like `outOfFuel`, this is not a Cats Effect result. -/
+  | taskLimit
   deriving DecidableEq, Repr
 
 section
@@ -114,7 +121,8 @@ def Solo.summary : Solo M → Summary
 /-- The root fiber of `io` (fiber id 0, `ExecutionContext` 0, the `root` callback), not yet
 started, with the `Ref` cells `refs`. -/
 def Solo.init (io : IO) (refs : List Val := []) : Solo M :=
-  .parked { fib := Fiber.new mm 0 .unit 0 io (some .root), heap := { refs := refs } }
+  let root := Fiber.new mm 0 .unit 0 io (some .root)
+  .parked { fib := root, heap := { refs := refs }, fibers := [root] }
 
 /-- Run `io` for `fuel` choices `step true` (no external cancel). -/
 def runSolo (fuel : Nat) (io : IO) (refs : List Val := []) : Solo M :=

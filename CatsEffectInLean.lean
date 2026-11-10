@@ -10,3 +10,5 @@ import CatsEffectInLean.Model.Examples
 import CatsEffectInLean.Model.Step
 import CatsEffectInLean.Model.Run
 import CatsEffectInLean.Model.StepExamples
+import CatsEffectInLean.Model.Sched
+import CatsEffectInLean.Model.SchedExamples

@@ -122,6 +122,11 @@ inductive OutcomeCb where
   | raceLeft (state : Nat) (other : Nat)
   /-- `oc => cb(Right(Right((fiberA, oc))))` (`FIB:935`). -/
   | raceRight (state : Nat) (other : Nat)
+  /-- The callback that `unsafeRunFiber` gives to a fiber that the test harness starts from
+  outside (`core/shared/src/main/scala/cats/effect/IO.scala:1117-1148`), for example the
+  external canceller of the difftest runner (`difftest/.../Runner.scala`, `f.cancel.unsafeRunFiber`).
+  It has no effect on the model. -/
+  | ext
   deriving DecidableEq, Repr
 
 /-- The value in a `ContState` cell (`core/shared/src/main/scala/cats/effect/ContState.scala:25-37`). -/
@@ -254,8 +259,10 @@ structure Fiber (M : Type) where
   objectState : List ObjEntry := []
   /-- `finalizers: ArrayStack[IO[Unit]]` (`FIB:88`); head = top. -/
   finalizers : List IO := []
-  /-- `callbacks: CallbackStack[OutcomeIO[A]]` (`FIB:89`) as (handle, callback) pairs;
-  `clearHandle` removes by handle. -/
+  /-- `callbacks: CallbackStack[OutcomeIO[A]]` (`FIB:89`) as (handle, callback) pairs, newest
+  first. Handle 0 is the constructor callback (the `callback` field of `CallbackStack`,
+  `core/jvm-native/src/main/scala/cats/effect/CallbackStack.scala`); `push` gives fresh handles
+  from `Heap.handles`. `clearHandle` removes by handle. -/
   callbacks : List (Nat × OutcomeCb) := []
   /-- `resumeTag: Byte = ExecR` (`FIB:90`). -/
   resumeTag : ResumeTag := .execR

@@ -17,8 +17,12 @@ Design (`wiki/lean/kernel-evaluation.md`, design rules):
   structural on the `conts` stack: each recursive call in Scala pops one byte first.
 * Each Scala `try` around user code is `tryUser`; each call without `try` is `callUser`.
 * `onFatalFailure` (`FIB:1597`) throws. It is `Flow.fatal`, never an `Outcome`.
-* Tags that need other fibers, the scheduler or async callbacks are not done yet. They give
-  `Abort.unsupportedTag`. They never succeed silently.
+* Phase 2 step 8 (part): `IOCont`, `Get`, `Cede` and `Start` are mirrored, with the runtime
+  closures of `_cancel` and `_join` (`RtFn`, `rtCall`) and the `IOCont` callback
+  (`contCallback`). These read and write other fibers through `Exec.fibers`. The multi-fiber
+  scheduler is `CatsEffectInLean/Model/Sched.lean`.
+* `RacePair`, `Sleep`, a foreign `EvalOn` and `Blocking` give `Abort.unsupportedTag`. They
+  never succeed silently.
 
 The cancelation and auto-yield counters of `runLoop` (`FIB:213-240`) are `Loop` fields. The
 read barrier (`FIB:228`) and the `observe` flag of a step make a pending external cancel
@@ -59,17 +63,6 @@ inductive TraceEv where
   | cancelerCb (state : Nat)
   deriving DecidableEq, Repr
 
-/-- The part of the world that one fiber step reads and writes, other than the fiber. -/
-structure Heap where
-  /-- `Ref` cells (index = id). User code reads a snapshot and writes with `writeRef`.
-  A write to an id that is not in the list has no effect, so examples allocate first. -/
-  refs : List Val := []
-  /-- The virtual clock (`RealTime`/`Monotonic`, `FIB:294-306`). -/
-  clock : Nat := 0
-  /-- Runtime events, newest first. -/
-  trace : List TraceEv := []
-  deriving DecidableEq, Repr
-
 /-- Why the model stops without a Cats Effect result. Never a Cats Effect outcome. -/
 inductive Abort where
   /-- A tag that the single-fiber step does not implement yet (Phase 2 step 8). -/
@@ -78,7 +71,8 @@ inductive Abort where
   | unsupportedResume (tag : ResumeTag)
   /-- A runtime closure (`Fn.rt`) must run. They come only from unsupported tags. -/
   | unsupportedFn
-  /-- User code called an `IOCont` callback (`invokeCb`/`deferCb`). -/
+  /-- Not used any more: user code can call `IOCont` callbacks since Phase 2 step 8. Kept so
+  that older examples still name it. -/
   | unsupportedEffect
   /-- User code returned a value where the run loop needs a program, or the reverse. The
   generator makes only well-typed programs, so this is a generator or example bug. -/
@@ -89,6 +83,50 @@ inductive Abort where
   | badObjectState
   /-- `resumeIO` is `null` where `run()` reads it. -/
   | noResumeIO
+  /-- A `ContState` id that does not exist, or a `Get` that finds the state "waiting"
+  (`FIB:849-863` says this cannot happen; Scala would throw a `MatchError`). -/
+  | badContState
+  /-- A fiber id that does not exist. -/
+  | badHandle
+  /-- The `IOCont` callback must spin until `get` gives up the run loop (`FIB:701-709`). With
+  one thread nothing gives it up, so this is a hang of the scripted runtime. -/
+  | cbSpin
+  /-- The task scheduler found a broken invariant (for example a ready index out of range). -/
+  | badSched
+  deriving DecidableEq, Repr
+
+/-- One task in the ready list of the `ExecutionContext` (in replay mode: the scripted
+`ExecutionContext` of `difftest/src/main/scala/cats/effect/difftest/Runner.scala`). -/
+inductive Task where
+  /-- `ec.execute(fiber)`: the task is one `IOFiber.run()` (`FIB:113-131`). `scheduleFiber`
+  and `rescheduleFiber` both end in `ec.execute` for an `ExecutionContext` that is not a
+  `WorkStealingThreadPool` (`FIB:1333-1376`). -/
+  | fiber (id : Nat)
+  /-- A task that calls the `IOCont` callback of cell `state` with `result`
+  (`UserEffect.deferCb`; in the difftest a `CbTask`). -/
+  | cb (state : Nat) (result : Val)
+  deriving DecidableEq, Repr
+
+/-- The part of the world that one fiber step reads and writes, other than the fibers. -/
+structure Heap where
+  /-- `Ref` cells (index = id). User code reads a snapshot and writes with `writeRef`.
+  A write to an id that is not in the list has no effect, so examples allocate first. -/
+  refs : List Val := []
+  /-- The virtual clock (`RealTime`/`Monotonic`, `FIB:294-306`). -/
+  clock : Nat := 0
+  /-- Runtime events, newest first. -/
+  trace : List TraceEv := []
+  /-- `ContState` cells (index = id; one per executed `IOCont`, `FIB:642`). -/
+  conts : List ContState := []
+  /-- The ready list of the `ExecutionContext`, in enqueue order (`ec.execute` appends). -/
+  ready : List Task := []
+  /-- The next fresh `CallbackStack` handle (handle 0 is the constructor callback). -/
+  handles : Nat := 1
+  /-- Values that user code emitted (`UserEffect.emit`), newest first. -/
+  out : List Val := []
+  /-- A broken invariant found where the step cannot return an `Abort` (inside `done` and
+  the `IOCont` callback). The first one wins. The scheduler stops when it is set. -/
+  broken : Option Abort := none
   deriving DecidableEq, Repr
 
 /-- What the run loop does next, as computed by one branch, `succeeded` or `failed`. -/
@@ -103,12 +141,20 @@ inductive Flow where
   | uncaught (e : Err)
   /-- The model stops (see `Abort`). -/
   | abort (a : Abort)
+  /-- `runLoop` returns because the fiber put itself in the ready list (`Cede`,
+  `FIB:886-888`). -/
+  | yield
   deriving DecidableEq, Repr
 
-/-- The fiber and the heap: what `succeeded`, `failed` and the branches change. -/
+/-- The fiber and the world: what `succeeded`, `failed` and the branches change.
+
+`fib` is the fiber in focus (the one that runs). `fibers` is the table of all fibers (index =
+fiber id); the slot of `fib` in it can be old while `fib` runs. `getFib` and `setFib` read and
+write any fiber and use `fib` for its own id. -/
 structure Exec (M : Type) where
   fib : Fiber M
   heap : Heap
+  fibers : List (Fiber M) := []
   deriving DecidableEq, Repr
 
 namespace Exec
@@ -129,70 +175,261 @@ variable {M : Type}
 /-- Add a runtime event. -/
 @[inline] def log (x : Exec M) (e : TraceEv) : Exec M :=
   { x with heap := { x.heap with trace := e :: x.heap.trace } }
+/-- Fiber `t` (the focused fiber for its own id). -/
+def getFib (x : Exec M) (t : Nat) : Option (Fiber M) :=
+  if t == x.fib.id then some x.fib else x.fibers[t]?
+/-- Write fiber `t`. -/
+def setFib (x : Exec M) (t : Nat) (f : Fiber M) : Exec M :=
+  if t == x.fib.id then { x with fib := f } else { x with fibers := x.fibers.set t f }
+/-- `ec.execute(task)`: append a task to the ready list. -/
+def enqueue (x : Exec M) (t : Task) : Exec M :=
+  { x with heap := { x.heap with ready := x.heap.ready ++ [t] } }
+/-- Write `ContState` cell `s`. -/
+def setContState (x : Exec M) (s : Nat) (st : ContState) : Exec M :=
+  { x with heap := { x.heap with conts := x.heap.conts.set s st } }
+/-- Record a broken invariant (the first one wins). -/
+def markBroken (x : Exec M) (a : Abort) : Exec M :=
+  match x.heap.broken with
+  | some _ => x
+  | none => { x with heap := { x.heap with broken := some a } }
+/-- What user code can read (`View`). -/
+def view (x : Exec M) : View :=
+  { refs := x.heap.refs, outcomes := (x.fibers.set x.fib.id x.fib).map (·.outcome) }
 end Exec
 
-/-! ## User code -/
+/-! ## User code, runtime closures and the `IOCont` callback -/
 
-/-- Apply the effects of one user call, in order. Callback effects need `IOCont`. -/
-def applyEffects : List UserEffect → List Val → Except Abort (List Val)
-  | [], refs => .ok refs
-  | .writeRef r v :: es, refs => applyEffects es (refs.set r v)
-  | .invokeCb _ _ :: _, _ => .error .unsupportedEffect
-  | .deferCb _ _ :: _, _ => .error .unsupportedEffect
+section Closures
+variable {M : Type} (mm : MaskModel M)
 
-/-- Call a function with no `try` around it: effects first, then the output. -/
-def callUser (env : UserEnv) (f : Fn) (arg : Val) (h : Heap) : Except Abort (UserOut × Heap) :=
+/-- `shouldFinalize()` (`FIB:1172-1173`) with `isUnmasked()` (`FIB:1175-1176`). -/
+def shouldFinalize (fib : Fiber M) : Bool :=
+  fib.canceled && mm.isUnmasked fib.mask
+
+/-- The callback `cb` of the `IOCont` with cell `s`, called with `result` (`FIB:644-755`).
+`result` is `Val.left (Val.err t)` or `Val.right a` (`Val.ofExcept`).
+
+`stateLoop` (`FIB:737-752`): an "initial" cell gets the result (the callback came first); a
+"waiting" cell gets the result and then `loop()` takes the run loop of the suspended fiber
+and schedules it (`FIB:664-716`); a cell with a result ignores the call (`FIB:733-734`).
+The CAS loops succeed at once: one model step is atomic. -/
+def contCallback (s : Nat) (result : Val) (x : Exec M) : Exec M :=
+  match x.heap.conts[s]? with
+  | none => x.markBroken .badContState
+  | some st =>
+    match st.value with
+    -- FIB:739: neither "initial" nor "waiting": a second call is a no-op
+    | .result _ => x
+    -- FIB:740: CAS(null, result); `cb` came first, so it stops here (FIB:731)
+    | .initial => x.setContState s { st with value := .result result }
+    | .waiting =>
+      -- FIB:740 CAS(waiting, result), then FIB:748 `loop()`
+      let x := x.setContState s { st with value := .result result }
+      match x.getFib st.fiber with
+      | none => x.markBroken .badHandle
+      | some f =>
+        -- FIB:667 `resume()`: `suspended.getAndSet(false)`
+        if f.suspended then
+          let f := { f with suspended := false }
+          -- FIB:670
+          if f.finalizing == st.wasFinalizing then
+            -- FIB:671-673 `state.handle.deregister()`: fiber monitor only
+            -- FIB:675-693
+            if !shouldFinalize mm f then
+              match result with
+              | .left (.err t) =>
+                (x.setFib f.id { f with resumeTag := .asyncContinueFailedR,
+                                         objectState := .err t :: f.objectState }).enqueue
+                  (.fiber f.id)
+              | .right a =>
+                (x.setFib f.id { f with resumeTag := .asyncContinueSuccessfulR,
+                                         objectState := .val a :: f.objectState }).enqueue
+                  (.fiber f.id)
+              | _ => (x.setFib f.id f).markBroken .illTyped
+            else
+              -- FIB:691: canceled; we won `resume`, so we run the finalizers
+              (x.setFib f.id { f with resumeTag := .asyncContinueCanceledR }).enqueue (.fiber f.id)
+          else
+            -- FIB:699 `suspend()`
+            x.setFib f.id { f with suspended := true }
+        else if f.finalizing == st.wasFinalizing && !shouldFinalize mm f && f.outcome.isNone then
+          -- FIB:701-709: spin until `get` gives up the run loop
+          x.markBroken .cbSpin
+        else
+          -- FIB:711-715: canceled, completed or finalizing: let `cancel` or `get` win
+          x
+
+/-- Run a runtime closure (`Fn.rt`) on `arg`. Each case mirrors one Scala lambda; the
+citations are on the `RtFn` constructors (`CatsEffectInLean/Model/Syntax.lean`). Runtime
+closures never throw. -/
+def rtCall (k : RtFn) (arg : Val) (x : Exec M) : Except Abort (UserOut × Exec M) :=
+  match k with
+  | .contGetFin s =>
+    -- FIB:781-784 `state.compareAndSet(state.waiting, null)`
+    match x.heap.conts[s]? with
+    | some st =>
+      if st.value == .waiting then .ok (.ret .unit, x.setContState s { st with value := .initial })
+      else .ok (.ret .unit, x)
+    | none => .error .badContState
+  -- FIB:804-807: fiber monitor only
+  | .monitorDeregister _ => .ok (.ret .unit, x)
+  | .cancel t =>
+    match x.getFib t with
+    | none => .error .badHandle
+    | some f =>
+      -- FIB:143 `canceled = true`
+      let f := { f with canceled := true }
+      -- FIB:148 `if (resume())`
+      if f.suspended then
+        let f := { f with suspended := false }
+        if mm.isUnmasked f.mask then
+          -- FIB:155-161 `IO.async_[Unit] { fin => ... }` = `IOCont(body)` (`IO.scala:1473-1481`)
+          .ok (.prog (.ioCont (.rt (.cancelAsync t))), x.setFib t f)
+        else
+          -- FIB:167-168 `suspend(); join.void`; `void` = `map(_ => ())` (`IO.scala:961-962`)
+          let f := { f with suspended := true }
+          .ok (.prog (.map (IO.joinOf t f.outcome) (.rt .voidK)), x.setFib t f)
+      else
+        -- FIB:173 `join.void`
+        .ok (.prog (.map (IO.joinOf t f.outcome) (.rt .voidK)), x.setFib t f)
+  | .cancelAsync t =>
+    match arg with
+    -- IO.scala:1476 `G.uncancelable(_ => ...)`
+    | .cont s => .ok (.prog (.uncancelable (.rt (.cancelAsyncUnc t s))), x)
+    | _ => .error .illTyped
+  -- IO.scala:1476 `lift(IO.delay(k(resume))).flatMap(_ => get)`
+  | .cancelAsyncUnc t s =>
+    .ok (.prog (.flatMap (.delay (.rt (.cancelAsyncK t s))) (.rt (.getK s))), x)
+  | .cancelAsyncK t s =>
+    match x.getFib t with
+    | none => .error .badHandle
+    | some f =>
+      -- FIB:157-160 `ec = currentCtx; resumeTag = AsyncContinueCanceledWithFinalizerR;
+      -- objectState.push(fin); scheduleFiber(ec, this)`
+      let f := { f with resumeTag := .asyncContinueCanceledWithFinalizerR,
+                        objectState := .cancelCb (some s) :: f.objectState }
+      .ok (.ret .unit, (x.setFib t f).enqueue (.fiber t))
+  | .getK s => .ok (.prog (.contGet s), x)
+  | .voidK => .ok (.ret .unit, x)
+  | .join t =>
+    match arg with
+    -- IO.scala:1357 `G.uncancelable { poll => ... }`
+    | .cont s => .ok (.prog (.uncancelable (.rt (.joinUnc t s))), x)
+    | _ => .error .illTyped
+  | .joinUnc t s =>
+    match arg with
+    -- IO.scala:1358 `lift(k(resume)) flatMap { ... }`; `k(cb) = IO { ... }` (FIB:180)
+    | .poll m p =>
+      .ok (.prog (.flatMap (.delay (.rt (.joinReg t s))) (.rt (.joinSel t s m p))), x)
+    | _ => .error .illTyped
+  | .joinReg t s =>
+    match x.getFib t with
+    | none => .error .badHandle
+    | some f =>
+      match f.outcome with
+      | none =>
+        -- FIB:182 `callbacks.push(oc => cb(Right(oc)))`; FIB:185 double-check (one thread:
+        -- `outcome` is still `null`); FIB:189 `Left(Some(IO { clearHandle }))`
+        let h := x.heap.handles
+        let x := x.setFib t { f with callbacks := (h, .join s) :: f.callbacks }
+        .ok (.ret (.left (.some (.nat h))), { x with heap := { x.heap with handles := h + 1 } })
+      -- FIB:191-192 `Right(outcome)`
+      | some oc => .ok (.ret (.right oc.toVal), x)
+  | .joinSel t s m p =>
+    match arg with
+    -- IO.scala:1359
+    | .right a => .ok (.prog (.pure a), x)
+    -- IO.scala:1360 `G.onCancel(poll(get), lift(fin))`; `poll(get)` = `UnmaskRunLoop`
+    -- (FIB:564-567)
+    | .left (.some (.nat h)) =>
+      .ok (.prog (.onCancel (.unmaskRunLoop (.contGet s) m p) (.delay (.rt (.joinClear t h)))), x)
+    -- IO.scala:1361
+    | .left .none => .ok (.prog (.contGet s), x)
+    | _ => .error .illTyped
+  | .joinClear t h =>
+    match x.getFib t with
+    | none => .error .badHandle
+    -- FIB:189 `callbacks.clearHandle(handle)`
+    | some f => .ok (.ret .unit, x.setFib t { f with callbacks := f.callbacks.filter (·.1 != h) })
+  | .racePairRegister _ _ | .sleepRegister _ => .error .unsupportedFn
+
+/-- Apply the effects of one user call, in order. -/
+def applyEffects : List UserEffect → Exec M → Exec M
+  | [], x => x
+  | .writeRef r v :: es, x =>
+    applyEffects es { x with heap := { x.heap with refs := x.heap.refs.set r v } }
+  | .allocRef v :: es, x =>
+    applyEffects es { x with heap := { x.heap with refs := x.heap.refs ++ [v] } }
+  | .emit v :: es, x =>
+    applyEffects es { x with heap := { x.heap with out := v :: x.heap.out } }
+  | .invokeCb s r :: es, x => applyEffects es (contCallback mm s r x)
+  | .deferCb s r :: es, x => applyEffects es (x.enqueue (.cb s r))
+
+/-- Call a function with no `try` around it: effects first, then the output. User code sees
+`Exec.view`. -/
+def callUser (env : UserEnv) (f : Fn) (arg : Val) (x : Exec M) :
+    Except Abort (UserOut × Exec M) :=
   match f with
-  | .rt _ => .error .unsupportedFn
+  | .rt k => rtCall mm k arg x
   | .user id =>
-    let r := env.call id arg h.refs
-    match applyEffects r.effects h.refs with
-    | .ok refs => .ok (r.out, { h with refs := refs })
-    | .error a => .error a
+    let r := env.callV id arg x.view
+    .ok (r.out, applyEffects mm r.effects x)
 
 /-- The result of user code inside the run loop's `try` / `catch`. -/
-inductive TryRes where
+inductive TryRes (M : Type) where
   /-- The call returned (`out` is `ret` or `prog`, never `throw`). -/
-  | ok (out : UserOut) (h : Heap)
+  | ok (out : UserOut) (x : Exec M)
   /-- `case t if UnsafeNonFatal(t) => ...` caught `e`. -/
-  | caught (e : Err) (h : Heap)
+  | caught (e : Err) (x : Exec M)
   /-- `case t: Throwable => onFatalFailure(t)`. -/
-  | fatal (e : Err) (h : Heap)
+  | fatal (e : Err) (x : Exec M)
   /-- The model stops. -/
   | abort (a : Abort)
 
 /-- `try f(arg) catch { case t if UnsafeNonFatal(t) => ...; case t: Throwable =>
 onFatalFailure(t) }`, the pattern at `FIB:280-286` and its copies. -/
-def tryUser (env : UserEnv) (f : Fn) (arg : Val) (h : Heap) : TryRes :=
-  match callUser env f arg h with
+def tryUser (env : UserEnv) (f : Fn) (arg : Val) (x : Exec M) : TryRes M :=
+  match callUser mm env f arg x with
   | .error a => .abort a
-  | .ok (.throw e, h') => if e.isNonFatal then .caught e h' else .fatal e h'
-  | .ok (out, h') => .ok out h'
+  | .ok (.throw e, x') => if e.isNonFatal then .caught e x' else .fatal e x'
+  | .ok (out, x') => .ok out x'
 
 /-- `try f(thunk()) catch ...`: two calls inside one `try` (`FIB:359`, `FIB:429`). If the
 thunk throws, `f` does not run. -/
-def tryUser2 (env : UserEnv) (thunk f : Fn) (h : Heap) : TryRes :=
-  match tryUser env thunk .unit h with
-  | .ok (.ret r) h' => tryUser env f r h'
+def tryUser2 (env : UserEnv) (thunk f : Fn) (x : Exec M) : TryRes M :=
+  match tryUser mm env thunk .unit x with
+  | .ok (.ret r) x' => tryUser mm env f r x'
   | .ok _ _ => .abort .illTyped
   | other => other
+
+end Closures
 
 /-! ## Helpers of the run loop -/
 
 section Helpers
 variable {M : Type} (cfg : Config) (mm : MaskModel M)
 
+/-- Call one outcome callback (`FIB:1099`). A `join` callback is `oc => cb(Right(oc))`
+(`FIB:182`). -/
+def runOutcomeCb (oc : Outcome) (x : Exec M) : OutcomeCb → Exec M
+  | .root | .ext => x
+  | .join s => contCallback mm s (.right oc.toVal) x
+  | .raceLeft _ _ | .raceRight _ _ => x.markBroken .unsupportedFn
+
 /-- `done(oc)` (`FIB:1092-1126`). `_join`/`_cancel` (`FIB:1094-1095`) follow from `outcome`.
 `currentCtx = null` (`FIB:1121`) is not modelled (no read after `done`). -/
 def done (x : Exec M) (oc : Outcome) : Exec M :=
   -- FIB:1097 `outcome = oc`
   let fib := { x.fib with outcome := some oc }
-  -- FIB:1099 `callbacks(oc)`: calls every callback in stack order (`CallbackStack.scala:61-85`)
-  let x := { x with fib := fib }
-  let x := x.fib.callbacks.foldl (fun x p => x.log (.outcomeCb p.2 oc)) x
+  -- FIB:1099 `callbacks(oc)`: `CallbackStack.apply` calls the constructor callback (handle 0)
+  -- first, then the pushed callbacks from the head (newest first), and clears the stack
+  -- (`core/jvm-native/src/main/scala/cats/effect/CallbackStack.scala`, `apply`)
+  let cbs := fib.callbacks.filter (·.1 == 0) ++ fib.callbacks.filter (·.1 != 0)
+  let x := { x with fib := { fib with callbacks := [] } }
+  let x := cbs.foldl (fun x p => runOutcomeCb mm oc (x.log (.outcomeCb p.2 oc)) p.2) x
   -- FIB:1099-1104 report an `Errored` outcome that nobody receives
   let x :=
-    if x.fib.callbacks.isEmpty && cfg.reportUnhandledFiberErrors then
+    if cbs.isEmpty && cfg.reportUnhandledFiberErrors then
       match oc with
       | .errored e => x.log (.reportFailure e)
       | _ => x
@@ -216,16 +453,12 @@ def prepareFiberForCancelation (x : Exec M) (cb : Option Nat) : Exec M × IO :=
     -- FIB:1149 `finalizers.pop()`
     ({ x with fib := { fib with finalizers := rest } }, fin)
   | [] =>
-    -- FIB:1154-1156 unblock the canceller
+    -- FIB:1154-1156 unblock the canceller: `cb(RightUnit)`
     let x := match cb with
-      | some s => x.log (.cancelerCb s)
+      | some s => contCallback mm s (.right .unit) (x.log (.cancelerCb s))
       | none => x
     -- FIB:1159-1162
     (done cfg mm x .canceled, .endFiber)
-
-/-- `shouldFinalize()` (`FIB:1172-1173`) with `isUnmasked()` (`FIB:1175-1176`). -/
-def shouldFinalize (fib : Fiber M) : Bool :=
-  fib.canceled && mm.isUnmasked fib.mask
 
 /-- `cancelationLoopSuccessK()` (`FIB:1465-1485`). -/
 def cancelationLoopSuccessK (x : Exec M) : Exec M × Flow :=
@@ -240,7 +473,7 @@ def cancelationLoopSuccessK (x : Exec M) : Exec M × Flow :=
     | .cancelCb cb :: os =>
       let x := x.setObj os
       let x := match cb with
-        | some s => x.log (.cancelerCb s)
+        | some s => contCallback mm s (.right .unit) (x.log (.cancelerCb s))
         | none => x
       -- FIB:1480-1483
       (done cfg mm x .canceled, .io .endFiber)
@@ -282,18 +515,16 @@ def succeeded (x : Exec M) (result : Val) (depth : Nat) : List ContK → Exec M 
       match x.fib.objectState with
       | .fn f :: os =>
         let x := x.setObj os
-        match tryUser env f result x.heap with
-        | .ok (.ret t) h =>
-          let x := x.setHeap h
+        match tryUser mm env f result x with
+        | .ok (.ret t) x =>
           -- FIB:1226-1228: hand back to the run loop at depth > MaxStackDepth
           if depth > cfg.maxStackDepth then (x, .io (.pure t))
           else succeeded x t (depth + 1) rest
-        | .caught e h =>
-          let x := x.setHeap h
+        | .caught e x =>
           if depth > cfg.maxStackDepth then (x, .io (.error e))
           else failed x e (depth + 1) rest
-        | .ok _ h => (x.setHeap h, .abort .illTyped)
-        | .fatal e h => (x.setHeap h, .fatal e)
+        | .ok _ x => (x, .abort .illTyped)
+        | .fatal e x => (x, .fatal e)
         | .abort a => (x, .abort a)
       | _ => (x, .abort .badObjectState)
     | .flatMapK =>
@@ -301,11 +532,11 @@ def succeeded (x : Exec M) (result : Val) (depth : Nat) : List ContK → Exec M 
       match x.fib.objectState with
       | .fn f :: os =>
         let x := x.setObj os
-        match tryUser env f result x.heap with
-        | .ok (.prog p) h => (x.setHeap h, .io p)
-        | .caught e h => failed (x.setHeap h) e (depth + 1) rest
-        | .ok _ h => (x.setHeap h, .abort .illTyped)
-        | .fatal e h => (x.setHeap h, .fatal e)
+        match tryUser mm env f result x with
+        | .ok (.prog p) x => (x, .io p)
+        | .caught e x => failed x e (depth + 1) rest
+        | .ok _ x => (x, .abort .illTyped)
+        | .fatal e x => (x, .fatal e)
         | .abort a => (x, .abort a)
       | _ => (x, .abort .badObjectState)
     -- FIB:1245
@@ -355,11 +586,11 @@ def failed (x : Exec M) (error : Err) (depth : Nat) : List ContK → Exec M × F
       match x.fib.objectState with
       | .fn f :: os =>
         let x := x.setObj os
-        match tryUser env f (.err error) x.heap with
-        | .ok (.prog p) h => (x.setHeap h, .io p)
-        | .caught e h => failed (x.setHeap h) e (depth + 1) rest
-        | .ok _ h => (x.setHeap h, .abort .illTyped)
-        | .fatal e h => (x.setHeap h, .fatal e)
+        match tryUser mm env f (.err error) x with
+        | .ok (.prog p) x => (x, .io p)
+        | .caught e x => failed x e (depth + 1) rest
+        | .ok _ x => (x, .abort .illTyped)
+        | .fatal e x => (x, .fatal e)
         | .abort a => (x, .abort a)
       | _ => (x, .abort .badObjectState)
     -- FIB:1317-1319 `onCancelFailureK`
@@ -391,20 +622,20 @@ def raised (x : Exec M) (ex : Err) : Exec M × Flow :=
 
 /-- A user call result in a value position: `if (error == null) succeeded(r, 0) else
 failed(error, 0)` (`FIB:288-290`, `FIB:333`, `FIB:367`). -/
-def afterValue (x : Exec M) : TryRes → Exec M × Flow
-  | .ok (.ret r) h => succeededK cfg mm env (x.setHeap h) r 0
-  | .caught e h => failedK cfg mm env (x.setHeap h) e 0
-  | .ok _ h => (x.setHeap h, .abort .illTyped)
-  | .fatal e h => (x.setHeap h, .fatal e)
+def afterValue (x : Exec M) : TryRes M → Exec M × Flow
+  | .ok (.ret r) x' => succeededK cfg mm env x' r 0
+  | .caught e x' => failedK cfg mm env x' e 0
+  | .ok _ x' => (x', .abort .illTyped)
+  | .fatal e x' => (x', .fatal e)
   | .abort a => (x, .abort a)
 
 /-- A user call result in a program position: `try f(v) catch { case NonFatal(t) =>
 failed(t, 0) }` (`FIB:398-405`, `FIB:428-435`). -/
-def afterProg (x : Exec M) : TryRes → Exec M × Flow
-  | .ok (.prog p) h => (x.setHeap h, .io p)
-  | .caught e h => failedK cfg mm env (x.setHeap h) e 0
-  | .ok _ h => (x.setHeap h, .abort .illTyped)
-  | .fatal e h => (x.setHeap h, .fatal e)
+def afterProg (x : Exec M) : TryRes M → Exec M × Flow
+  | .ok (.prog p) x' => (x', .io p)
+  | .caught e x' => failedK cfg mm env x' e 0
+  | .ok _ x' => (x', .abort .illTyped)
+  | .fatal e x' => (x', .fatal e)
   | .abort a => (x, .abort a)
 
 /-- The value of a "leaf" tag that `Map`, `FlatMap` and `Attempt` read in their fast
@@ -416,6 +647,50 @@ def leafValue (x : Exec M) : IO → Option Val
   | .monotonic => some (.nat x.heap.clock)
   | .readEC => some (.ec x.fib.currentCtx)
   | _ => none
+
+/-- The `Get` branch (`FIB:771-883`). When the fiber suspends, the run loop returns: the
+result is `Flow.io IO.endFiber` and the fiber has no outcome. -/
+def contGet (x : Exec M) (s : Nat) : Exec M × Flow :=
+  match x.heap.conts[s]? with
+  | none => (x, .abort .badContState)
+  | some st =>
+    -- FIB:781-786: `fin = IO { state.compareAndSet(state.waiting, null) }`; push it; `OnCancelK`
+    let x := { x with fib := { x.fib with
+      finalizers := .delay (.rt (.contGetFin s)) :: x.fib.finalizers } }
+    let x := x.pushCont .onCancelK
+    match st.value with
+    | .initial =>
+      -- FIB:788 CAS(null, waiting) succeeds; FIB:800 `state.wasFinalizing = finalizing`
+      let x := x.setContState s { st with value := .waiting, wasFinalizing := x.fib.finalizing }
+      -- FIB:802-810: stack tracing is on by default; one more finalizer and `OnCancelK`
+      let x := { x with fib := { x.fib with
+        finalizers := .delay (.rt (.monitorDeregister s)) :: x.fib.finalizers } }
+      let x := x.pushCont .onCancelK
+      -- FIB:819 `suspended.getAndSet(true)`
+      let x := { x with fib := { x.fib with suspended := true } }
+      -- FIB:825
+      if shouldFinalize mm x.fib then
+        -- FIB:834 `resume()`: no other thread took the run loop, so it succeeds;
+        -- FIB:835-837 `shouldFinalize()` is still true
+        let x := { x with fib := { x.fib with suspended := false } }
+        let (x, fin) := prepareFiberForCancelation cfg mm x none
+        (x, .io fin)
+      else
+        -- the run loop returns; `cb` resumes the fiber later
+        (x, .io .endFiber)
+    -- FIB:849-863: "impossible"; Scala would throw a `MatchError`
+    | .waiting => (x, .abort .badContState)
+    | .result r =>
+      -- FIB:865-882
+      if !shouldFinalize mm x.fib then
+        match r with
+        | .left (.err t) => failedK cfg mm env x t 0
+        | .right a => succeededK cfg mm env x a 0
+        | _ => (x, .abort .illTyped)
+      else if x.fib.outcome.isNone then
+        let (x, fin) := prepareFiberForCancelation cfg mm x none
+        (x, .io fin)
+      else (x, .io .endFiber)
 
 end Unwind
 
@@ -449,11 +724,12 @@ def Loop.flush {M : Type} (l : Loop M) : Loop M :=
 inductive StepResult (M : Type) where
   /-- The run loop goes on with this state. -/
   | continue (l : Loop M)
-  /-- Auto-yield (`FIB:233-238`): `resumeTag = AutoCedeR`, `resumeIO = cur`, and the fiber
-  is rescheduled. The scheduler decides when it runs again. `Cede` will also give this. -/
+  /-- Auto-yield (`FIB:233-238`) or `Cede` (`FIB:886-888`): the fiber set its resume tag and
+  put itself at the end of the ready list (`Heap.ready`). The scheduler decides when it runs
+  again. -/
   | yielded (x : Exec M)
   /-- `runLoop` returned at `EndFiber` (`FIB:220-222`) but the fiber has no outcome: it
-  waits for an async callback. No implemented branch gives this yet. -/
+  waits for an async callback (`Get`), or another fiber took its run loop. -/
   | suspended (x : Exec M)
   /-- The fiber completed with this outcome (`done`, `FIB:1092`). -/
   | done (oc : Outcome) (x : Exec M)
@@ -475,6 +751,7 @@ def toStep (l : Loop M) (r : Exec M × Flow) (nc na : Nat) : StepResult M :=
   | .fatal e => .fatal e r.1
   | .uncaught e => .uncaught e r.1
   | .abort a => .aborted a r.1
+  | .yield => .yielded r.1
 
 /-- The dispatch on `cur0.tag` (`FIB:258-1071`), after the `shouldFinalize` check.
 `nc`, `na` are `nextCancelation`, `nextAutoCede`. -/
@@ -487,7 +764,7 @@ def dispatch (l : Loop M) (nc na : Nat) : StepResult M :=
   -- FIB:263-269 `Error`
   | .error ex => ret (raised cfg mm env x ex) nc
   -- FIB:271-292 `Delay`: the thunk is inside `try`
-  | .delay thunk => ret (afterValue cfg mm env x (tryUser env thunk .unit x.heap)) nc
+  | .delay thunk => ret (afterValue cfg mm env x (tryUser mm env thunk .unit x)) nc
   -- FIB:295-299 `RealTime`
   | .realTime => ret (succeededK cfg mm env x (.nat x.heap.clock) 0) nc
   -- FIB:302-306 `Monotonic`
@@ -498,15 +775,15 @@ def dispatch (l : Loop M) (nc na : Nat) : StepResult M :=
   | .map ioe f =>
     match ioe with
     -- FIB:337-339 over `Pure`: `next(v)` with `f` inside `try`
-    | .pure v => ret (afterValue cfg mm env x (tryUser env f v x.heap)) (nc - 1)
+    | .pure v => ret (afterValue cfg mm env x (tryUser mm env f v x)) (nc - 1)
     -- FIB:341-347 over `Error`: `f` is never called
     | .error ex => ret (raised cfg mm env x ex) (nc - 1)
     -- FIB:349-368 over `Delay`: `f(thunk())` in one `try`
-    | .delay thunk => ret (afterValue cfg mm env x (tryUser2 env thunk f x.heap)) (nc - 1)
+    | .delay thunk => ret (afterValue cfg mm env x (tryUser2 mm env thunk f x)) (nc - 1)
     -- FIB:370-380 over `RealTime`, `Monotonic`, `ReadEC`
     | .realTime | .monotonic | .readEC =>
       match leafValue x ioe with
-      | some v => ret (afterValue cfg mm env x (tryUser env f v x.heap)) (nc - 1)
+      | some v => ret (afterValue cfg mm env x (tryUser mm env f v x)) (nc - 1)
       | none => ret (x, .abort .illTyped) nc
     -- FIB:382-385 general case
     | _ => ret ((x.pushObj (.fn f)).pushCont .mapK, .io ioe) nc
@@ -514,15 +791,15 @@ def dispatch (l : Loop M) (nc na : Nat) : StepResult M :=
   | .flatMap ioe f =>
     match ioe with
     -- FIB:408-410 over `Pure`
-    | .pure v => ret (afterProg cfg mm env x (tryUser env f v x.heap)) (nc - 1)
+    | .pure v => ret (afterProg cfg mm env x (tryUser mm env f v x)) (nc - 1)
     -- FIB:412-418 over `Error`
     | .error ex => ret (raised cfg mm env x ex) (nc - 1)
     -- FIB:420-437 over `Delay`: `f(thunk())` in one `try`
-    | .delay thunk => ret (afterProg cfg mm env x (tryUser2 env thunk f x.heap)) (nc - 1)
+    | .delay thunk => ret (afterProg cfg mm env x (tryUser2 mm env thunk f x)) (nc - 1)
     -- FIB:439-449 over `RealTime`, `Monotonic`, `ReadEC`
     | .realTime | .monotonic | .readEC =>
       match leafValue x ioe with
-      | some v => ret (afterProg cfg mm env x (tryUser env f v x.heap)) (nc - 1)
+      | some v => ret (afterProg cfg mm env x (tryUser mm env f v x)) (nc - 1)
       | none => ret (x, .abort .illTyped) nc
     -- FIB:451-454 general case
     | _ => ret ((x.pushObj (.fn f)).pushCont .flatMapK, .io ioe) nc
@@ -537,11 +814,11 @@ def dispatch (l : Loop M) (nc na : Nat) : StepResult M :=
       else ret (succeededK cfg mm env x (.left (.err t)) 0) (nc - 1)
     -- FIB:477-500: the thunk inside `try`; an error becomes `Left`
     | .delay thunk =>
-      match tryUser env thunk .unit x.heap with
-      | .ok (.ret r) h => ret (succeededK cfg mm env (x.setHeap h) (.right r) 0) (nc - 1)
-      | .caught e h => ret (succeededK cfg mm env (x.setHeap h) (.left (.err e)) 0) (nc - 1)
-      | .ok _ h => ret (x.setHeap h, .abort .illTyped) (nc - 1)
-      | .fatal e h => ret (x.setHeap h, .fatal e) (nc - 1)
+      match tryUser mm env thunk .unit x with
+      | .ok (.ret r) x => ret (succeededK cfg mm env x (.right r) 0) (nc - 1)
+      | .caught e x => ret (succeededK cfg mm env x (.left (.err e)) 0) (nc - 1)
+      | .ok _ x => ret (x, .abort .illTyped) (nc - 1)
+      | .fatal e x => ret (x, .fatal e) (nc - 1)
       | .abort a => ret (x, .abort a) (nc - 1)
     -- FIB:502-512
     | .realTime | .monotonic | .readEC =>
@@ -571,12 +848,12 @@ def dispatch (l : Loop M) (nc na : Nat) : StepResult M :=
   | .uncancelable body =>
     let (m, id) := mm.enter x.fib.mask
     let x := x.setMask m
-    match tryUser env body (.poll id x.fib.id) x.heap with
-    | .ok (.prog p) h => ret ((x.setHeap h).pushCont .uncancelableK, .io p) nc
+    match tryUser mm env body (.poll id x.fib.id) x with
+    | .ok (.prog p) x => ret (x.pushCont .uncancelableK, .io p) nc
     -- FIB:572-573 `IO.raiseError(t)`
-    | .caught e h => ret ((x.setHeap h).pushCont .uncancelableK, .io (.error e)) nc
-    | .ok _ h => ret (x.setHeap h, .abort .illTyped) nc
-    | .fatal e h => ret (x.setHeap h, .fatal e) nc
+    | .caught e x => ret (x.pushCont .uncancelableK, .io (.error e)) nc
+    | .ok _ x => ret (x, .abort .illTyped) nc
+    | .fatal e x => ret (x, .fatal e) nc
     | .abort a => ret (x, .abort a) nc
   -- FIB:585-602 `UnmaskRunLoop`: "the outer block wins"
   | .unmaskRunLoop ioa id self =>
@@ -584,12 +861,35 @@ def dispatch (l : Loop M) (nc na : Nat) : StepResult M :=
       ret ((x.setMask (mm.unmask x.fib.mask)).pushCont .unmaskK, .io ioa) nc
     else
       ret (x, .io ioa) nc
-  -- FIB:604-769 `IOCont`, FIB:771-886 `Get`: need the `ContState` race (step 8)
-  | .ioCont _ => ret (x, .abort (.unsupportedTag 14)) nc
-  | .contGet _ => ret (x, .abort (.unsupportedTag 15)) nc
-  -- `Cede`, `Start`, `RacePair`, `Sleep` (FIB:888-981): need the scheduler (step 8)
-  | .cede => ret (x, .abort (.unsupportedTag 16)) nc
-  | .start _ => ret (x, .abort (.unsupportedTag 17)) nc
+  -- FIB:604-769 `IOCont`
+  | .ioCont body =>
+    -- FIB:642 `val state = new ContState(finalizing)`
+    let s := x.heap.conts.length
+    let x := { x with heap := { x.heap with
+      conts := x.heap.conts ++ [{ fiber := x.fib.id, wasFinalizing := x.fib.finalizing }] } }
+    -- FIB:759-767 `try body[IO].apply(cb, get, FunctionK.id)`; `cb` and `get` are `Val.cont s`
+    match tryUser mm env body (.cont s) x with
+    | .ok (.prog p) x => ret (x, .io p) nc
+    -- FIB:763-764 `IO.raiseError(t)`
+    | .caught e x => ret (x, .io (.error e)) nc
+    | .ok _ x => ret (x, .abort .illTyped) nc
+    | .fatal e x => ret (x, .fatal e) nc
+    | .abort a => ret (x, .abort a) nc
+  -- FIB:771-883 `Get`
+  | .contGet s => ret (contGet cfg mm env x s) nc
+  -- FIB:885-888 `Cede`: `resumeTag = CedeR; rescheduleFiber(currentCtx, this)`, then return
+  | .cede =>
+    let x := { x with fib := { x.fib with resumeTag := .cedeR } }
+    ret (x.enqueue (.fiber x.fib.id), .yield) nc
+  -- FIB:890-906 `Start`
+  | .start ioa =>
+    -- FIB:893-900 `new IOFiber(localState, null, cur.ioa, ec, runtime)` (no callback)
+    let id := x.fibers.length
+    let child := Fiber.new mm id x.fib.localState x.fib.currentCtx ioa none
+    let x := { x with fibers := x.fibers ++ [child] }
+    -- FIB:904 `scheduleFiber(ec, fiber)`, FIB:906 `succeeded(fiber, 0)`
+    ret (succeededK cfg mm env (x.enqueue (.fiber id)) (.fiber id) 0) nc
+  -- `RacePair`, `Sleep` (FIB:908-981): not mirrored yet
   | .racePair _ _ => ret (x, .abort (.unsupportedTag 18)) nc
   | .sleep _ => ret (x, .abort (.unsupportedTag 19)) nc
   -- FIB:983-1011 `EvalOn`
@@ -602,12 +902,12 @@ def dispatch (l : Loop M) (nc na : Nat) : StepResult M :=
   | .blocking _ _ => ret (x, .abort (.unsupportedTag 21)) nc
   -- FIB:1058-1063 `Local`: `cur.f(localState)` has NO `try`
   | .local f =>
-    match callUser env f x.fib.localState x.heap with
-    | .ok (.ret (.pair s v), h) =>
-      let x := { x.setHeap h with fib := { x.fib with localState := s } }
+    match callUser mm env f x.fib.localState x with
+    | .ok (.ret (.pair s v), x) =>
+      let x := { x with fib := { x.fib with localState := s } }
       ret (succeededK cfg mm env x v 0) nc
-    | .ok (.throw e, h) => ret (x.setHeap h, .uncaught e) nc
-    | .ok (_, h) => ret (x.setHeap h, .abort .illTyped) nc
+    | .ok (.throw e, x) => ret (x, .uncaught e) nc
+    | .ok (_, x) => ret (x, .abort .illTyped) nc
     | .error a => ret (x, .abort a) nc
   -- FIB:1065-1066 `IOTrace`
   | .ioTrace => ret (succeededK cfg mm env x .trace 0) nc
@@ -641,8 +941,9 @@ def step (observe : Bool) (l : Loop M) : StepResult M :=
       let nextAutoCede := nextAutoCede - nextCancelation
       if nextAutoCede ≤ 0 then
         -- FIB:234-238 auto-yield
-        .yielded { l.exec with fib := { l.exec.fib with
-          resumeTag := .autoCedeR, resumeIO := some cur } }
+        -- FIB:236-237 `rescheduleFiber(currentCtx, this)`
+        .yielded ({ l.exec with fib := { l.exec.fib with
+          resumeTag := .autoCedeR, resumeIO := some cur } }.enqueue (.fiber l.exec.fib.id))
       else
         -- FIB:242-245
         if shouldFinalize mm l.exec.fib then

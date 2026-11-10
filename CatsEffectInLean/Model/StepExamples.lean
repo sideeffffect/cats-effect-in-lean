@@ -168,8 +168,9 @@ example : both (.local (.user 21)) = same (.uncaught e1, .unit) := by decide +ke
 example : both (.flatMap (.pure .unit) (.user 0)) = same (.aborted .illTyped, .unit) := by
   decide +kernel
 
--- Ex 16. Tags of the concurrency step are not done yet: an explicit `unsupportedTag`.
-example : both .cede = same (.aborted (.unsupportedTag 16), .unit) := by decide +kernel
+-- Ex 16. `Cede` yields and the single-fiber driver runs the fiber again (`cedeR`,
+-- FIB:1453-1455). `Sleep` is not mirrored yet: an explicit `unsupportedTag`.
+example : both .cede = same (.done (.succeeded .unit), .unit) := by decide +kernel
 example : both (.flatMap (.sleep 1) (.user 4)) = same (.aborted (.unsupportedTag 19), .unit) := by
   decide +kernel
 

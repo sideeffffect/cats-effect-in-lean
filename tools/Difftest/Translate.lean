@@ -97,8 +97,10 @@ inductive TrErr where
 def unsupportedReason : String → String
   | "join" | "cancel" =>
     "fib.join/fib.cancel read the IOFiber fields _join/_cancel when the term is built " ++
-    "(IOFiber.scala:142-205); user code sees only Ref cells"
-  | "refNew" => "Ref.unsafe allocates a Ref cell; UserEffect has no allocation"
+    "(IOFiber.scala:142-205); the model has View.outcomes and IO.joinOf/IO.cancelOf, " ++
+    "but this translation does not use them yet (no fiber-handle mapping)"
+  | "refNew" => "Ref.unsafe allocates a Ref cell; UserEffect.allocRef exists, " ++
+    "but this translation does not use it yet"
   | "deferredNew" | "deferredGet" | "deferredComplete" =>
     "IODeferred cells are not visible to user code and have no mirror yet (Phase 2 step 9)"
   | _ => "unknown"
