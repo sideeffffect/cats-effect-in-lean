@@ -3,3 +3,5 @@
 .bsp/
 __pycache__/
 !inventory/*.csv
+!test/AuditFixtures/*.csv
+/test/AuditFixtures/Generated/

@@ -65,3 +65,4 @@ The user's global gitignore (`~/.gitignore_global`) ignores `*.csv`. The first c
 - [Agent workflow and review protocol](agent-workflow.md)
 - [Source layout](../cats-effect/source-layout.md)
 - [Differential testing](differential-testing.md)
+- [Registry and audit](registry-and-audit.md)

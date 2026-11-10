@@ -1,0 +1,3 @@
+# Audit fixture only. Not a Cats Effect bug. The audit checks only that this file exists.
+id: fx-sub-add-cancel
+title: "Fixture: natural subtraction does not cancel"

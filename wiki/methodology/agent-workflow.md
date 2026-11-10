@@ -49,3 +49,4 @@ Subagents in git worktrees (`worktree-agent-<hex>`), one module each; merge gate
 - [julia-in-lean](../precedents/julia-in-lean.md)
 - [Proof hygiene and agent tooling](../lean/proof-hygiene-and-agent-tooling.md)
 - [Lessons for Cats Effect in Lean](lessons-for-cats-effect.md)
+- [Registry and audit](registry-and-audit.md)

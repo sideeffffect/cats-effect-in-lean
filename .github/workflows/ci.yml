@@ -50,6 +50,25 @@ jobs:
           export PATH="$HOME/.elan/bin:$PATH"
           lake check
 
+      # Registry audit: theorem types are exactly `prop` / `¬ prop`, only allowed
+      # axioms, registry and inventory agree (wiki/methodology/registry-and-audit.md).
+      - name: Registry audit
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          lake exe audit
+
+      # The audit must accept a good fixture registry and reject planted faults.
+      - name: Registry audit self-test
+        run: scripts/test_audit.sh
+
+  inventory:
+    name: Inventory check
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 scripts/check_inventory.py
+
   forbidden:
     name: Forbidden proof escapes
     runs-on: ubuntu-26.04
