@@ -1,0 +1,495 @@
+# lean-action README (GitHub Action for Lean CI)
+
+> Source: https://github.com/leanprover/lean-action
+> Collected: 2026-11-10
+> Published: Unknown (fetched 2026-11-10)
+
+# lean-action - CI for Lean Projects
+
+lean-action provides steps to build, test, and lint [Lean](https://github.com/leanprover/lean4) projects on GitHub
+
+## Quick Setup
+
+To setup `lean-action` to run on pushes and pull request in your repo, create the following `ci.yml` file the `.github/workflows`
+
+```yml
+name: CI
+
+on:
+  push:
+    branches: ["main"] # replace "main" with the default branch
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      # uses lean standard action with all default input values
+      - uses: leanprover/lean-action@v1
+```
+
+> [!IMPORTANT]
+`lean-action` is tested on `ubuntu-latest`, `macos-latest`, and `windows-latest` GitHub-hosted runners.
+We recommend using one of these runners for the best experience,
+however if you encounter an issue when using a different runner, please still open an issue.
+
+## Caching `.lake` directory with GitHub's `actions\cache`
+By default, `lean-action` uses [`actions\cache`](https://github.com/actions/cache) to cache the `.lake` directory and speed up builds.
+The GitHub cache is restored before automatic configuration and `mk_all-check`, so those steps can reuse cached dependencies and build artifacts.
+The cache is saved after building, testing, and linting, so it includes artifacts produced by all three steps.
+A test or lint failure still allows completed build artifacts to be cached; setup or build failures do not.
+Saving is skipped when the exact cache key was restored.
+
+> [!NOTE]
+GitHub caching is distinct from Mathlib caching with `lake exe cache get`
+
+### Mathlib cache endpoint
+`lean-action` runs `lake exe cache get` with `MATHLIB_CACHE_GET_URL` set to `https://cache.mathlib.org/mathlib4`.
+Mathlib cache clients that read this variable download from that URL. Older clients ignore it.
+To use a different endpoint, set `MATHLIB_CACHE_GET_URL` in the `env` of your workflow, job, or step.
+`lean-action` keeps that value.
+To use the cache client's default endpoint, set `MATHLIB_CACHE_GET_URL` to an empty string.
+`lean-action` then unsets the variable before it runs `lake exe cache get`.
+
+### Cache keys
+`lean-action` uses [cache keys](https://github.com/actions/cache?tab=readme-ov-file#creating-a-cache-key) to save and restore caches.
+
+First it uses a primary key,
+composed of the runner operating system, the runner architecture (X86, X64, ARM, ARM64), the Lake manifest, and the git commit hash,
+to save/restore caches from an exact git commit.
+
+If there is no primary key cache hit, `lean-action` uses a fallback key, 
+composed of the operating system, the architecture, and the Lake manifest but not the git commit hash,
+to restore a cache from a previous commit.
+
+### Troubleshooting problems with caching
+Because caches are shared across different jobs,
+caching build files can lead to unexpected behavior and errors.
+
+To determine if the GitHub cache is causing problems you can disable caching with the `use-github-cache` input.
+```yml
+- uses: leanprover/lean-action@v1
+  with:
+    use-github-cache: false
+```
+
+For more complex workflows, you may want more control over how the `actions\cache` caches the build in your workflow,
+(.e.g., modifying the cache key to respect a build matrix)
+you can wrap `lean/action` with `use-github-cache: false` in your own call to `actions\cache`.
+
+## Configuring which features `lean-action` runs
+
+Most use cases only require a subset of `lean-action`'s features
+in a specific GitHub workflow.
+Additionally, you may want to break up usage of `lean-action`
+across multiple workflows with different triggers,
+e.g., one workflow for PRs and another workflow scheduled by a cron job.
+
+To support these use cases,
+`lean-action` provides inputs to specify the subset of desired features of `lean-action`.
+
+### Directly specifying a desired feature with specific feature inputs
+
+Each feature of `lean-action` has a corresponding input which users can set to `true` or `false`.
+Specific feature inputs have the highest precedence
+when `lean-action` determines which features to run.
+When a feature input is set `lean-action` will always try to run the corresponding step.
+If `lean-action` is unable to successfully run the step, `lean-action` will fail.
+
+`lean-action` provides the following feature inputs:
+
+- `build`
+- `test`
+- `lint`
+- `mk_all-check`
+- `check-reservoir-eligibility`
+- `leanchecker`
+- `nanoda`
+
+### Automatic configuration
+
+After feature inputs, `lean-action` uses the `auto-config` input
+to determine if it should use the Lake workspace to decide which steps to run automatically.
+When `auto-config: true`, `lean-action` will use the Lake workspace to detect targets
+and run the corresponding Lake command.
+When `auto-config: false`, `lean-action` will only run features specified directly through specific feature inputs.
+Users can combine `auto-config` with specific feature inputs to override the automatic configuration of `lean-action`.
+
+`lean-action` can automatically configure the following features:
+
+- `build`
+- `test`
+- `lint`
+
+### Breaking up `lean-action` across workflows
+
+Sometimes it is useful to break up usage of `lean-action`
+across multiple workflows with different triggers,
+e.g., one workflow for PRs and another workflow scheduled by a cron job.
+`auto-config: false` allows users to run only a specific subset of features of `lean-action`.
+
+For example, run only `leanchecker` in a cron job workflow:
+
+```yaml
+- name: "run `lean-action` with only `leanchecker: true`"
+  id: lean-action
+  uses: leanprover/lean-action@v1
+  with:
+    auto-config: false
+    leanchecker: true
+```
+
+### Differences between using `auto-config` and feature inputs
+
+When you specify a feature with a feature input, `lean-action` will fail if it can't complete that step.
+However, if you use `auto-config`,
+`lean-action` will only fail if it detects a target in the Lake workspace and the detected target fails.
+
+For example, if the `lakefile.lean` contains an improperly configured `test_driver` target
+and you configure `lean-action` with `test: true`, `lean-action` will fail.
+However the same improperly configured `test_driver` may not cause a `lean-action` failure with `auto-config: true`,
+because `lean-action` may not detect the `test_driver` in the Lake workspace.
+
+To be certain `lean-action` runs a step, specify the desire feature with a feature input.
+
+## Customization
+
+`lean-action` provides optional configuration inputs to customize the behavior for your specific workflow.
+
+```yaml
+- uses: leanprover/lean-action@v1
+  with:
+    
+    # Automatically configure `lean-action` based on the Lake workspace.
+    # When set to "true", `lean-action` will use the Lake workspace to determine
+    # the set of features to run on the repository, such as `lake build` and `lake test`.
+    # Even when set to "true", the user can still override the auto configuration
+    # with the `build` and `test` inputs.
+    # Allowed values: "true" or "false".
+    # Default: "true"
+    auto-config: ""
+    
+    # Run `lake build`.
+    # Note, this input takes precedence over `auto-config`.
+    # Allowed values: "true" | "false" | "default".
+    build: ""
+
+    # Run `lake test`.
+    # Note, this input takes precedence over `auto-config`.
+    # Allowed values: "true" | "false" | "default".
+    test: ""
+    
+    # Run `lake lint`.
+    # Note, this input takes precedence over `auto-config`.
+    # Allowed values: "true" | "false" | "default".
+    lint: ""
+
+    # Check all files are imported with `lake exe mk_all --check`.
+    # Allowed values: "true" | "false".
+    mk_all-check: ""
+
+    # Arguments to pass to `lake exe mk_all --check {mk_all-args}`.
+    # For example, `mk_all-args: "--lib Carleson"` will run `lake exe mk_all --check --lib Carleson`,
+    # restricting the check to the `Carleson` library.
+    # By default, `lean-action` calls `lake exe mk_all --check` with no additional arguments.
+    mk_all-args: ""
+
+    # Build arguments to pass to `lake build {build-args}`.
+    # For example, `build-args: "--quiet"` will run `lake build --quiet`.
+    # By default, `lean-action` calls `lake build` with no arguments.
+    build-args: ""
+
+    # Test arguments to pass to `lake test {test-args}`.
+    # For example, `test-args: "--quiet"` will run `lake test --quiet`.
+    # By default, `lean-action` calls `lake test` with no arguments.
+    test-args: ""
+
+    # Lint arguments to pass to `lake lint {lint-args}`.
+    # For example, `lint-args: "--quiet"` will run `lake lint --quiet`.
+    # By default, `lean-action` calls `lake lint` with no arguments.
+    lint-args: ""
+
+    # By default, `lean-action` attempts to automatically detect a Mathlib dependency and run `lake exe cache get` accordingly.
+    # Setting `use-mathlib-cache` will override automatic detection and run (or not run) `lake exe cache get`.
+    # Project must be downstream of Mathlib to use the Mathlib cache.
+    # Allowed values: "true" | "false" | "auto".
+    # Default: "auto"
+    use-mathlib-cache: ""
+
+    # Check if the repository is eligible for the Reservoir.
+    # Allowed values: "true" | "false".
+    # Default: "false"
+    check-reservoir-eligibility: ""
+    
+    # Check environment with leanchecker.
+    # Uses the bundled `leanchecker` binary on Lean `nightly-2026-01-09` / `v4.28.0-rc1`
+    # and newer, and falls back to the external `lean4checker` repository on older versions.
+    # Note: Mathlib-dependent projects should set `LEAN_NUM_THREADS`,
+    # see "Run leanchecker on a project with a Mathlib dependency".
+    # Allowed values: "true" | "false".
+    # Default: "false"
+    leanchecker: ""
+
+    # Extra arguments to pass to `lake env leanchecker {leanchecker-args}`.
+    # For example, `leanchecker-args: "-v"` enables verbose output, and
+    # `leanchecker-args: "MyPkg.Core MyPkg.Extras"` restricts checking to the
+    # listed module prefixes. Only takes effect when `leanchecker: true`.
+    # Default: ""
+    leanchecker-args: ""
+
+    # Deprecated alias for `leanchecker`.
+    lean4checker: ""
+
+    # Check environment with nanoda external type checker.
+    # nanoda is an independent Lean 4 type checker written in Rust.
+    # Requires Rust toolchain (will be installed automatically if not present).
+    # Allowed values: "true" | "false".
+    # Default: "false"
+    nanoda: ""
+
+    # When running nanoda, permit the sorryAx axiom.
+    # Set to "false" if your project should have no sorry placeholders.
+    # Allowed values: "true" | "false".
+    # Default: "true"
+    nanoda-allow-sorry: ""
+
+    # Audit the project's axioms with leanprover-community/axiom-audit: fail if any declaration
+    # depends on an axiom outside the allowlist (catches sorry, native_decide, home-rolled axioms).
+    # Allowed values: "true" | "false".
+    # Default: "false"
+    axiom-audit: ""
+
+    # Comma-separated allowlist of axioms for axiom-audit (no spaces).
+    # Default: "propext,Classical.choice,Quot.sound"
+    axiom-audit-allow: ""
+
+    # The root namespace axiom-audit should audit. If empty, the lakefile's library name is used.
+    # Default: ""
+    axiom-audit-root: ""
+
+    # Enable GitHub caching.
+    # Allowed values: "true" or "false".
+    # If use-github-cache input is not provided, the action will use GitHub caching by default.
+    # Default: "true"
+    use-github-cache: ""
+
+    # The directory where `lean-action` will look for a Lake package and run `lake build`, etc.
+    # Allowed values: a valid directory containing a Lake package.
+    # If lake-package-directory is not provided, `lean-action` will use the root directory of the repository by default.
+    lake-package-directory: ""
+
+    # Always reinstall the Lean toolchain if it is a transient one, hosted on the lean4-pr-releases repository.
+    # This ensures that CI always uses the latest build of that toolchain.
+    # This setting only applies to `lean4-pr-releases/pr-release-XXXX` toolchains:
+    # regular Lean toolchain releases remain cached.
+    # The toolchain version is determined from the `lean-toolchain` file.
+    # Allowed values: "true" | "false".
+    # Default: "false"
+    reinstall-transient-toolchain: ""
+```
+
+## Output Parameters
+
+`lean-action` provides the following output parameters for downstream steps:
+
+- `build-status`
+  - Values: "SUCCESS" | "FAILURE" | ""
+- `test-status`
+  - Values: "SUCCESS" | "FAILURE" | ""
+- `lint-status`
+  - Values: "SUCCESS" | "FAILURE" | ""
+- `mk_all-status`
+  - Values: "SUCCESS" | "FAILURE" | ""
+- `nanoda-status`
+  - Values: "SUCCESS" | "FAILURE" | ""
+- `axiom-audit-status`
+  - Values: "SUCCESS" | "FAILURE" | ""
+
+Note, a value of empty string indicates `lean-action` did not run the corresponding feature.
+
+### Example: Use `test-status` output parameter in downstream step
+
+```yaml
+- name: "run `lean-action` with `lake test`" 
+  id: lean-action
+  uses: leanprover/lean-action@v1
+  continue-on-error: true
+  with:
+    test: true
+
+- name: log `lean-action` `test-status` output
+  env:
+    TEST_STATUS: ${{ steps.lean-action.outputs.test-status }}
+  run: echo "Test status: $TEST_STATUS"
+```
+
+## Additional Examples
+
+### Check package for reservoir eligibility
+
+```yaml
+- uses: leanprover/lean-action@v1
+  with:
+    check-reservoir-eligibility: true
+```
+
+### Don't run `lake test` or use Mathlib cache
+
+```yaml
+- uses: leanprover/lean-action@v1
+  with:
+    test: false
+    use-mathlib-cache: false
+```
+
+### Run lake build with `--wfail`
+
+```yaml
+- uses: leanprover/lean-action@v1
+  with:
+    build-args: "--wfail"
+```
+
+### Run additional steps after `lean-action` using the Lean environment
+
+After calling `lean-action` you can leverage the Lean environment in later workflow steps.
+
+For example, `leanprover-community/import-graph` uses the setup from `lean-action` to test the `graph` executable with `lake exe graph`:
+
+```yaml
+steps:
+  - uses: leanprover/lean-action@v1
+    with:
+      check-reservoir-eligibility: true
+  # use setup from lean-action to perform the following steps
+  - name: verify `lake exe graph` works
+    run: |
+      lake exe graph
+      rm import_graph.dot
+```
+
+### Run leanchecker on a project with a Mathlib dependency
+
+`leanchecker` checks modules in parallel, and each parallel check loads the
+module's full import environment.
+For Mathlib-dependent projects this can exhaust the memory of a GitHub-hosted
+runner, causing the job to hang and then fail with "The hosted runner lost
+communication with the server", with no logs.
+
+Cap the parallelism by setting `LEAN_NUM_THREADS` on the `lean-action` step:
+
+```yaml
+- uses: leanprover/lean-action@v1
+  env:
+    LEAN_NUM_THREADS: "1"
+  with:
+    leanchecker: "true"
+```
+
+Higher values trade memory for speed.
+
+## Axiom Allowlist Audit with axiom-audit
+
+[axiom-audit](https://github.com/leanprover-community/axiom-audit) checks that every declaration in your library depends only on an allowlist of axioms (by default `propext`, `Classical.choice`, `Quot.sound`). Because it inspects the compiled kernel environment, it catches what a `grep` cannot: `sorry`/`admit` (`sorryAx`), `native_decide` (`Lean.ofReduceBool`), and any home-rolled `axiom`, including ones reaching in through imports.
+
+The tool is cloned and built with your project's own toolchain, then run against your compiled environment, so it needs a recent enough Lean (see the axiom-audit README). It is opt-in (default off).
+
+### Enable the axiom audit
+
+```yaml
+- uses: leanprover/lean-action@v1
+  with:
+    axiom-audit: true
+```
+
+### Customize the allowlist or root namespace
+
+By default the audit runs over the lakefile's library namespace and allows `propext,Classical.choice,Quot.sound`. To change either:
+
+```yaml
+- uses: leanprover/lean-action@v1
+  with:
+    axiom-audit: true
+    axiom-audit-allow: "propext,Classical.choice,Quot.sound,sorryAx"  # e.g. tolerate sorry
+    axiom-audit-root: "MyLib"                                          # if it differs from the library name
+```
+
+## External Type Checking with nanoda
+
+[nanoda](https://github.com/ammkrn/nanoda_lib) is an independent Lean 4 type checker written in Rust. It provides additional assurance that your project's declarations are well-typed by verifying them with a completely separate implementation.
+
+### Enable nanoda verification
+
+```yaml
+- uses: leanprover/lean-action@v1
+  with:
+    nanoda: true
+```
+
+### Require no sorry placeholders
+
+By default, nanoda permits the `sorryAx` axiom for projects with incomplete proofs. To require all proofs be complete:
+
+```yaml
+- uses: leanprover/lean-action@v1
+  with:
+    nanoda: true
+    nanoda-allow-sorry: false
+```
+
+### Daily nanoda verification with notifications
+
+For daily verification runs with automatic failure notifications, use the reusable workflow:
+
+```yaml
+# .github/workflows/nanoda-daily.yml
+name: Daily nanoda verification
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    uses: leanprover/lean-action/.github/workflows/nanoda-daily.yml@v1
+    # Optional: configure notification method
+    # with:
+    #   notify: 'issue'  # default: creates GitHub issue on failure
+    # For webhook (Slack/Discord):
+    # with:
+    #   notify: 'webhook'
+    # secrets:
+    #   webhook-url: ${{ secrets.WEBHOOK_URL }}
+    # For Zulip:
+    # with:
+    #   notify: 'zulip'
+    #   zulip-org-url: 'leanprover.zulipchat.com'
+    # secrets:
+    #   zulip-api-key: ${{ secrets.ZULIP_API_KEY }}
+```
+
+## Projects which use `lean-action`
+
+- [leanprover-community/aesop](https://github.com/leanprover-community/aesop/blob/master/.github/workflows/build.yml#L16)
+- [leanprover-community/import-graph](https://github.com/leanprover-community/import-graph/blob/main/.github/workflows/build.yml#L8)
+
+## Keep the action updated with `dependabot`
+
+Because Lean is under heavy development, changes to Lean or Lake could break outdated versions of `lean-action`. You can configure [dependabot](https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/about-dependabot-version-updates) to automatically create a PR to update `lean-action` when a new stable version is released.
+
+Here is an example `.github/dependabot.yml` which configures `dependabot` to check daily for updates to all GitHub actions in your repository:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: "github-actions" 
+    directory: "/"
+    schedule:
+      interval: "daily"
+```
+
+See the [dependabot documentation](https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file) for all configuration options.
