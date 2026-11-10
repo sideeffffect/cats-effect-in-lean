@@ -1,0 +1,113 @@
+id: CE-0004
+title: "SyncIO handles a fatal raiseError as an ordinary error, IO does not (SyncIO#to and syncStep disagree)"
+status: draft  # bug candidate from review batch 2 (decision 38); Lean refutation done 2026-11-10, waits for review
+priority: low
+kind: twin
+area: core
+files:
+  - core/shared/src/main/scala/cats/effect/IOFiber.scala:263   # runLoop case 1 (Error): if (!UnsafeNonFatal(ex)) onFatalFailure(ex) (lines 265-269)
+  - core/shared/src/main/scala/cats/effect/IOFiber.scala:1597  # onFatalFailure: shut down all runtimes, rethrow
+  - core/shared/src/main/scala/cats/effect/SyncIO.scala:257    # runLoop case 2 (Error): runLoop(failed(cur.t, 0)), no fatal check
+  - core/shared/src/main/scala/cats/effect/SyncIO.scala:193    # SyncIO#to: SyncIO.Error(t) => F.raiseError(t)
+  - core/shared/src/main/scala/cats/effect/IO.scala:2357       # SyncStep.interpret: IO.Error => G.raiseError(t)
+  - core/shared/src/main/scala/cats/effect/unsafe/UnsafeNonFatal.scala:37  # fatal = VirtualMachineError | ThreadDeath | LinkageError | ControlThrowable
+functions:
+  - SyncIO.raiseError / SyncIO#unsafeRunSync (run loop case 2)
+  - IO.raiseError / IOFiber.runLoop (case 1)
+  - SyncIO#to[IO]
+  - IO#syncStep(limit)
+summary: >
+  Since PR #3811 (issue #3767, Cats Effect 3.5.x) the IO run loop treats IO.raiseError(e) with a
+  fatal e (VirtualMachineError, LinkageError, ThreadDeath, ControlThrowable) like a fatal throw:
+  it calls onFatalFailure, which shuts down all runtimes and rethrows, so no handler sees it. The
+  SyncIO run loop did not get the same check: SyncIO.raiseError(fatal) is an ordinary error that
+  handleErrorWith and attempt catch. The two public bridges between the types then disagree.
+  For sio = SyncIO.raiseError(fatal).handleErrorWith(_ => SyncIO.pure(1)),
+  sio.unsafeRunSync() and sio.to[IO].syncStep(Int.MaxValue).unsafeRunSync() give 1 / Right(1),
+  but sio.to[IO].unsafeRunSync() throws the fatal error and shuts down the runtime. In the
+  same way IO.raiseError(fatal).handleErrorWith(_ => IO.pure(1)) is fatal when it runs, but
+  Right(1) through IO#syncStep, which breaks AsyncLaws.syncStepIdentity for fatal errors.
+likelihood: >
+  Very low. Application code seldom raises a fatal error as a value (raiseError of an
+  OutOfMemoryError or StackOverflowError); a maintainer called this a test-only pattern in
+  #549. Fatal errors that the JVM throws inside a SyncIO thunk are not affected: the SyncIO
+  Suspend branch already lets them escape (SyncIO.scala:244-249). The difference shows only when
+  a program wraps a caught fatal error into raiseError (for example rethrow of an attempt result
+  from outside SyncIO) and then crosses between SyncIO and IO.
+maybe_intended: >
+  Likely partly intended. Before #3811 the maintainers said that with fatal errors "all bets are
+  off" and that IO(throw e) <-> IO.raiseError(e) "only holds if e is non-fatal" (djspiewak in
+  #549, 2019). #3811 then made IO.raiseError(fatal) fatal on purpose, with tests
+  (RaiseFatalErrorAttempt, RaiseFatalErrorHandle, ... in tests/shared/src/main/scala/catseffect/examples.scala).
+  The issue and the PR do not mention SyncIO, so the missing SyncIO check is most likely an
+  oversight, not a decision. No documentation describes either behavior.
+reproducer: reproducers/CE-0004/Repro.scala
+output:
+  # stderr (the runtime's report of the fatal error) is interleaved in a real run; stdout below
+  v3.7.1: |
+    A SyncIO.unsafeRunSync: 1
+    B to[IO].syncStep(Int.MaxValue).unsafeRunSync: Right(1)
+    C to[IO].unsafeRunSync: threw Fatal
+    SyncIO recovers from the fatal error, IO does not: DIFFERENT
+    REPRODUCED CE-0004
+  # series/3.x = 3.7.1-89-de84c01 (origin/series/3.x de84c01f76), publishLocal snapshot of 2026-11-10
+  series/3.x: |
+    A SyncIO.unsafeRunSync: 1
+    B to[IO].syncStep(Int.MaxValue).unsafeRunSync: Right(1)
+    C to[IO].unsafeRunSync: threw Fatal
+    SyncIO recovers from the fatal error, IO does not: DIFFERENT
+    REPRODUCED CE-0004
+  # series/3.7.x = 3.7.1-15-2f94201 (origin/series/3.7.x 2f9420145f), publishLocal snapshot of 2026-11-10
+  series/3.7.x: |
+    A SyncIO.unsafeRunSync: 1
+    B to[IO].syncStep(Int.MaxValue).unsafeRunSync: Right(1)
+    C to[IO].unsafeRunSync: threw Fatal
+    SyncIO recovers from the fatal error, IO does not: DIFFERENT
+    REPRODUCED CE-0004
+expected: |
+  A, B and C agree: either all three throw the fatal error (SyncIO gets the IO check), or all
+  three give 1 / Right(1). Then the last line is NOT REPRODUCED CE-0004.
+promised_by:
+  - "Scaladoc of SyncIO#to, core/shared/src/main/scala/cats/effect/SyncIO.scala:190-191: 'Translates this SyncIO to any F[_] data type that implements Sync' (a translation keeps the result)"
+  - "AsyncLaws.syncStepIdentity, laws/shared/src/main/scala/cats/effect/laws/AsyncLaws.scala:84-88: F.syncStep(fa, limit).flatMap { case Left(fa) => fa; case Right(a) => F.pure(a) } <-> fa"
+  - "Twin consistency (AGENTS.md properties, source a): IO and SyncIO run loops treat the same Error node differently; issue #3767 asked that raiseError(fatal) surface the error 'as expected', and only IO was changed"
+cause: >
+  PR #3811 added `if (!UnsafeNonFatal(ex)) onFatalFailure(ex)` to the Error branches of
+  IOFiber.runLoop (IOFiber.scala:263-269 and the Map/FlatMap/Attempt fast paths). The SyncIO run
+  loop (SyncIO.scala:257-259) was not changed. SyncIO#to (SyncIO.scala:198) and
+  SyncStep.interpret (IO.scala:2357) move an Error node from one run loop to the other without
+  any check, so the same error value meets two policies.
+possible_fix: >
+  Add the same check to SyncIO.runLoop case 2: `if (!UnsafeNonFatal(cur.t)) throw cur.t`, so a
+  fatal error leaves unsafeRunSync as a fatal throw from a Suspend thunk already does
+  (SyncIO.scala:244-249). There is no runtime to shut down in SyncIO; through to[IO] or syncStep
+  the IO side then calls onFatalFailure. The Lean fixed twin (SyncIOEnv.fixFatalRaise,
+  Model/SyncIO.lean) is this fix; it satisfies the property on the bounded domain
+  (fixed_twin). Alternative: document that raiseError of a fatal error is undefined behavior.
+duplicates:
+  upstream: []
+  related:
+    - "typelevel/cats-effect#3767 (closed): IO.raiseError(...) doesn't immediately surface fatal errors - IO only"
+    - "typelevel/cats-effect#3811 (merged into series/3.5.x, 2023-11-23): Immediately surface fatal errors in IO.raiseError - changes IOFiber only"
+    - "typelevel/cats-effect#549 (closed, 2019): IO.raiseError(e) <-> IO(throw e) is violated for fatal errors - maintainers: laws hold only for non-fatal errors"
+    - "typelevel/cats-effect#4505 (open): OutOfMemoryError not propagated when IO originates from CompletableFuture - different path (async callbacks)"
+    - "typelevel/cats-effect#4653 (closed PR): Propagate fatal errors from async/cont callbacks - different path"
+  queries:
+    - "gh search issues 'SyncIO fatal' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'SyncIO raiseError fatal' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'raiseError fatal error' -R typelevel/cats-effect (2026-11-10): #4505, #3767, #549"
+    - "gh search issues 'fatal raiseError attempt' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'syncStep fatal' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'SyncIO to fatal' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'fatal error handleErrorWith' -R typelevel/cats-effect (2026-11-10): #4505"
+    - "gh search prs 'raiseError fatal' -R typelevel/cats-effect (2026-11-10): #4653, #3811"
+    - "gh search prs 'fatal SyncIO' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search prs 'fatal errors raiseError' -R typelevel/cats-effect (2026-11-10): #3811"
+lean:
+  property: CatsEffectInLean.Props.Calibration.raiseErrorTwin   # CatsEffectInLean/Props/Calibration/FatalRaise.lean
+  theorem: CatsEffectInLean.Proofs.Calibration.FatalRaise.raiseErrorTwin_refuted   # CatsEffectInLean/Proofs/Calibration/FatalRaise.lean
+  registry: core.SyncIO.runLoop.Error.fatalTwin
+  counterexample: "e = fatal (code 0): IO.raiseError(e).handleErrorWith(_ => IO.pure(1)), limit Int.MaxValue; direct summary fatal e; stepped Succeeded(1) for every SyncIO fuel >= 7 and every step-only schedule"
+  model: CatsEffectInLean/Model/Step.lean (IOFiber Error branch), CatsEffectInLean/Model/SyncIO.lean (SyncIO runLoop .error), CatsEffectInLean/Model/SyncStep.lean (interpret)
+  fixed_twin: "Proofs.Calibration.FatalRaise.fixed_twin: SyncIOEnv.fixFatalRaise = true satisfies StepIdentityFor for e in {fatal 0, fatal 5, nonFatal 0, interrupted 0}; v3.7.1 satisfies it for the non-fatal two (v371_nonFatal) and fails it for the fatal two (v371_fatal_fails)"
+  ordinary_inputs: "core.SyncIO.runLoop.Error.fatalTwin.nonFatal (Props.Calibration.raiseErrorTwinNonFatal): open; proven only on the bounded domain (v371_nonFatal)"

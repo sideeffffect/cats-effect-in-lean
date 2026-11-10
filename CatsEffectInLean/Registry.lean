@@ -6,6 +6,8 @@ import CatsEffectInLean.Props.Calibration.ResourceEval
 import CatsEffectInLean.Proofs.Calibration.ResourceEval
 import CatsEffectInLean.Props.Calibration.QueueTimeout
 import CatsEffectInLean.Proofs.Calibration.QueueTimeout
+import CatsEffectInLean.Props.Calibration.FatalRaise
+import CatsEffectInLean.Proofs.Calibration.FatalRaise
 
 /-!
 # Property registry
@@ -98,9 +100,14 @@ def registry : List Entry := [
     thm := some ``Proofs.Calibration.syncStepIdentitySyncIO_refuted
     bug := some "bugs/CE-0001.yaml"
     note := "AsyncLaws.syncStepIdentity for IO#syncStep with G = SyncIO, single-fiber driver, \
-      step-only schedules (no external cancel, decision 26), WellFormed fa/env; counterexample = \
+      step-only schedules (no external cancel, decision 26), WellFormed fa/env with opaque polls \
+      (decision 37), non-fatal errors only (NonFatalOnly, decision 38; fatal errors are CE-0004), \
+      observations up to Poll identity (eraseObs); counterexample = \
       case 4 of reproducers/CE-0001 (IO.uncancelable(_ => IO.canceled *> flag.set(true))). \
-      Rows: only those the witness exercises; the SyncIO run-loop rows went back to todo." },
+      Rows: only those the witness exercises; the SyncIO run-loop rows went back to todo. \
+      Fixed twin (decision 39): Model/SyncStepFixed.lean mirrors upstream PR #4700; it satisfies \
+      the statement on 10 bounded programs (Proofs.Calibration.SyncStepTwin.fixed_twin), v3.7.1 \
+      fails 5 of them (v371_fails)." },
   { id := "kernel.Resource.eval.preservesUncancelable"
     rows := ["kernel.Resource.eval", "kernel.Resource.allocatedCase", "kernel.Resource.pure"]
     prop := ``Props.Calibration.resourceEvalPreservesUncancelable
@@ -119,7 +126,7 @@ def registry : List Entry := [
       "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.take",
       "std.Queue.UnboundedAsyncQueue.tryTake", "std.UnsafeUnbounded.put",
       "std.UnsafeUnbounded.take", "std.UnsafeUnbounded.Cell.apply",
-      "core.IO.timeout", "core.IO.timeoutTo", "core.IO.racePair",
+      "core.IO.timeout", "core.IO.racePair",
       "core.IOFiber.runLoop.RacePair", "core.IO.asyncCheckAttempt"]
     prop := ``Props.Calibration.QueueTimeout.takeTimeoutNoLostElement
     status := .refuted
@@ -128,7 +135,29 @@ def registry : List Entry := [
     note := "No lost element for program A of reproducers/CE-0003 (offer xs; take.timeout(d) in a \
       started fiber; cancel it; join; drain), all xs, d, s and pick schedules. Counterexample: \
       xs = [42], d = 1000, s = 1, FIFO schedule: the take racer completes Succeeded(42) after \
-      the consumer is canceled; the racePair finalizer drops the outcome." }
+      the consumer is canceled; the racePair finalizer drops the outcome. Row core.IO.timeoutTo \
+      is not listed: the model mirrors timeoutTo only with the TimeoutException fallback of \
+      IO#timeout (review batch 2), so the row stays todo." },
+  { id := "core.SyncIO.runLoop.Error.fatalTwin"
+    rows := ["core.IOFiber.runLoop.Error", "core.SyncIO.runLoop.Error"]
+    prop := ``Props.Calibration.raiseErrorTwin
+    status := .refuted
+    thm := some ``Proofs.Calibration.FatalRaise.raiseErrorTwin_refuted
+    bug := some "bugs/CE-0004.yaml"
+    note := "For every error e, IO.raiseError(e).handleErrorWith(_ => IO.pure(1)) (limit \
+      Int.MaxValue) has the same observations directly (IO run loop) and through syncStep \
+      (SyncIO run loop), over all step-only schedules. Counterexample: fatal e. Direct: fatal \
+      (IOFiber.scala:265-269 onFatalFailure); stepped: Succeeded(1) (SyncIO.scala:257-259 has \
+      no check). Fixed twin (SyncIOEnv.fixFatalRaise) holds on the bounded domain (fixed_twin); \
+      v3.7.1 holds on its non-fatal members (v371_nonFatal)." },
+  { id := "core.SyncIO.runLoop.Error.fatalTwin.nonFatal"
+    rows := ["core.IOFiber.runLoop.Error", "core.SyncIO.runLoop.Error"]
+    prop := ``Props.Calibration.raiseErrorTwinNonFatal
+    status := .«open»
+    note := "Ordinary inputs of CE-0004 (AGENTS.md section 6). Proven only for the bounded \
+      domain e in {nonFatal 0, interrupted 0} (Proofs.Calibration.FatalRaise.v371_nonFatal). \
+      A proof for all codes needs a lemma that runs do not depend on the error code (decide \
+      cannot check a free code)." }
 ]
 
 end CatsEffectInLean

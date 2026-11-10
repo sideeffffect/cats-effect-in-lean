@@ -102,9 +102,32 @@ theorem r_calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
       simp [user, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK, WF.sub, alloc, fa,
         IOI.uncancelable, uid, hl, hc, hc0]
 
+theorem r_opaque : WF.PollOpaque r.toEnv := by
+  obtain ⟨hl, hc, hc0, hc2⟩ := ids_ok
+  refine WF.pollOpaque_of_const r.toEnv (fun id => user.call (id / 2) .unit []) [0, 2]
+    { out := .throw { code := 0 } } (fun id arg v hid => ?_) (by decide +kernel) ?_ ?_
+    (fun _ _ => rfl)
+  · simp [REnv.toEnv, REnv.callV, hid, r]
+    rcases id / 2 with _ | _ | k <;> rfl
+  · intro id hid hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false, not_or] at hk
+    obtain ⟨h0, h2⟩ := hk
+    obtain h | h | h : id / 2 = 0 ∨ id / 2 = 1 ∨ 2 ≤ id / 2 := by omega
+    · omega
+    · omega
+    · obtain ⟨k, hk⟩ := Nat.exists_eq_add_of_le h
+      simp only [hk, show 2 + k = k + 2 by omega]; rfl
+  · intro σ _ k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · rfl
+    · simp [user, alloc, fa, IOI.uncancelable, uid, WF.rnResult, WF.rnIO,
+        WF.rnFn_user_of_all σ 279459022985 (by decide +kernel),
+        WF.rnFn_user_of_all σ 0 (by decide +kernel)]
+
 theorem r_wellFormed (p : IO) (hp : WF.progOK isLib (fun h => ([] : List Handle).contains h) p = true) :
     r.WellFormed p := by
-  refine ⟨⟨hp, fun id hid arg v => r_calls id hid arg v⟩, fun _ => rfl, ?_, ?_⟩
+  refine ⟨⟨hp, fun id hid arg v => r_calls id hid arg v, r_opaque⟩, fun _ => rfl, ?_, ?_⟩
   · intro _ _ q h; cases h; rfl
   · intro _ _ _ h; cases h
 

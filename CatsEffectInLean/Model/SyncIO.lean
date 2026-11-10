@@ -27,6 +27,17 @@ JVM stack. `null` values do not exist in Lean.
 
 namespace CatsEffectInLean.Model
 
+/-- Not Cats Effect v3.7.1: the rewraps of a `Left` rest in the fixed twin of `syncStep`
+(upstream PR #4700, `Model/SyncStepFixed.lean`). -/
+inductive Rewrap where
+  /-- `Left(IO.Uncancelable(DeferredPoll.Bind(deferred d, rest)))`. -/
+  | unc (d : Nat)
+  /-- `Left(rest.onCancel(fin))`. -/
+  | onCancel (fin : IO)
+  /-- `Left(deferred d (rest))` (a `poll(rest)` of `DeferredPoll` `d`). -/
+  | deferred (d : Nat)
+  deriving DecidableEq, Repr
+
 /-- A pure function `g` inside `SFn.pureMap`. -/
 inductive SMap where
   /-- `a => Right((a, limit))` (`IO.scala:2358-2360`). -/
@@ -42,6 +53,9 @@ inductive SMap where
   | hewSel (f : Fn)
   /-- `_.map(_._1)` of `asyncForIO.syncStep` (`IO.scala:2177`). -/
   | dropLimit
+  /-- Not Cats Effect v3.7.1: `{ case Left(rest) => Left(k(rest)); case r => r }` of the fixed
+  twin (`Model/SyncStepFixed.lean`). The v3.7.1 `interpret` never builds it. -/
+  | rewrap (k : Rewrap)
   deriving DecidableEq, Repr
 
 /-- A closure inside a `SyncIO` node. Each case is one Scala lambda. The meaning is
@@ -179,6 +193,10 @@ inductive SCall (M : Type) where
 structure SyncIOEnv (M : Type) where
   /-- Apply closure `f` to `arg` with the world `x`. -/
   call : Nat → SFn → SVal → Exec M → SCall M
+  /-- Not Cats Effect v3.7.1: the switch of the CE-0004 fixed twin (decision 39). If `true`,
+  the `Error` branch throws a fatal error out of `unsafeRunSync`, as `IOFiber` does
+  (`IOFiber.scala:265-269`). Cats Effect v3.7.1 is `false`. -/
+  fixFatalRaise : Bool := false
 
 /-- The state of one `unsafeRunSync` call (`SIO:229-232`). -/
 structure SRun (M : Type) where
@@ -335,8 +353,11 @@ def runLoop : (fuel : Nat) → SyncIO → SRun M → SRes M
         else .thrown e x
       | .outOfFuel => .outOfFuel
       | .abort a => .abort a
-    -- SIO:257-259 `case 2`: `runLoop(failed(cur.t, 0))`
-    | .error t => go (failed senv fuel r t 0 r.conts)
+    -- SIO:257-259 `case 2`: `runLoop(failed(cur.t, 0))`; no fatal check (CE-0004). The
+    -- `fixFatalRaise` twin throws a fatal `t` out of `unsafeRunSync`.
+    | .error t =>
+      if senv.fixFatalRaise && !t.isNonFatal then .thrown t r.x
+      else go (failed senv fuel r t 0 r.conts)
     -- SIO:261-267 `case 3`: push `f`, push `MapK`, `runLoop(cur.ioe)`
     | .map ioe f => runLoop fuel ioe { r with objs := f :: r.objs, conts := .mapK :: r.conts }
     -- SIO:269-275 `case 4`: push `f`, push `FlatMapK`, `runLoop(cur.ioe)`

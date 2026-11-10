@@ -1,7 +1,7 @@
 # Queue and timeout model (CE-0003)
 
 > Sources: Cats Effect source at v3.7.1 (`Queue.scala:105-106`, `:160-167`, `:871-988`; `UnsafeUnbounded.scala:23-113`; `IO.scala:795-860`, `:1353-1368`, `:1418-1431`, `:1996-2104`; `Sync.scala:61-62`; `Async.scala:168`; `Outcome.scala:73-74`); own Lean work and scala-cli run, 2026-11-10
-> Raw: [Queue and timeout notes](../../raw/cats-effect/2026-11-10-queue-timeout-notes.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
+> Raw: [Review 2 fixes notes](../../raw/cats-effect/2026-11-10-review2-ce0001-ce0004-notes.md); [Queue and timeout notes](../../raw/cats-effect/2026-11-10-queue-timeout-notes.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
 
 ## Overview
 
@@ -31,7 +31,7 @@ No existing model file changed. Library code is written over the public API, so 
 ## Property and counterexample
 
 - Closures capture handles as handle values (`Val.ref q`, `Val.cont s`, `Val.poll m p`, `Val.fiber c`), so `WellFormed` sees them in the id.
-- `takeTimeoutNoLostElement`: hypothesis `WellFormed isLib [] env (progA xs d s)` (decision 27); for all `xs`, `d`, `s` and pick schedules, program A (`Queue.unbounded`; `q.take.timeout(d).start`; `sleep s`; offer `xs`; `consumer.cancel`; `join`; drain with `xs.length` `tryTake` calls) that ends `Succeeded` returns each element exactly once (`List.Perm`). No hypotheses. Promise: undisputed invariant "no lost element"; support `IO.scala:800-802`.
+- `takeTimeoutNoLostElement`: hypothesis `WellFormed isLib [] env (progA xs d s)` (decision 27); for all `xs`, `d`, `s` and pick schedules, program A (`Queue.unbounded`; `q.take.timeout(d).start`; `sleep s`; offer `xs`; `consumer.cancel`; `join`; drain with `xs.length` `tryTake` calls) that ends `Succeeded` returns each element exactly once (`List.Perm`). No other hypotheses. Promise: undisputed invariant "no lost element"; support `IO.scala:800-802` and the `notifyAnyway` comment `Queue.scala:936-940`. Not `Queue.scala:365-366`: that comment is about the `Synchronous` queue (review batch 2).
 - Witness: `xs = [42]`, `d = 1000`, `s = 1`, FIFO (empty choice list). After `offer` wakes the `take` racer and `consumer.cancel` takes over the consumer, the racer takes `42` and completes; its race callback loses against the cancel (`IOFiber.scala:711-715`); the `racePair` finalizer cancels both children; `join` = `Canceled`, `tryTake` = `None`.
 - A schedule that runs the cancel fiber of the racer first gives `Some(42)`: the statement is not trivially false.
 - The witness is well-formed (`cx_wellFormed`): the start program by `decide +kernel`; each `PLam` case by `call_ok` (uses `q` and `consumer` only after it got them; reads only the outcome of `consumer`). The proof needs the codec roundtrip `natToVal_valToNat`.
@@ -44,7 +44,8 @@ No existing model file changed. Library code is written over the public API, so 
 
 ## Open points
 
-- No difftest support for queue ops. The `Queue` mirror is checked only by this one reproducer shape, not by the 50,000-case gate.
+- Difftest (format v1, [differential testing](../methodology/differential-testing.md)): of the 58,957 agreeing cases, `queueNew` 9.0 %, `queueOffer` 5.8 %, `queueTake` 8.3 %, `queueTryTake` 6.1 %, `timeout` 12.5 % (`tpl_queue` is the CE-0003 shape). The fixed case `q-ce0003-a-fifo` replays the Lean FIFO schedule on the real library: `left unit`, join `canceled`. Below the 50,000-per-op level. `timeoutTo` with a user fallback is not mirrored (1,043 unsupported cases), so row `core.IO.timeoutTo` is `todo` (review batch 2).
+- Fixed twin (decision 39): not done. Draft PR #4710 rewrites `IOFiber` cancelation (no finalizer stack, `onCancelGraceful`), so no small twin exists. Plan in `bugs/CE-0003.yaml` (`lean.fixed_twin`).
 - Not modelled: `tryOffer`, `size`, bounded/dropping/circular queues, the `Concurrent` queues, `timeoutAndForget`, `Duration.Inf`.
 - Program B of the reproducer (nested `timeout`, no outside cancel) is not stated in Lean.
 

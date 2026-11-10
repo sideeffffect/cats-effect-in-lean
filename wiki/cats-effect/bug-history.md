@@ -1,7 +1,7 @@
 # Cats Effect bug history and target areas
 
 > Sources: typelevel/cats-effect issues labelled `:beetle: bug` and 3.x release notes, collected 2026-11-10
-> Raw: [Bug history notes](../../raw/cats-effect/2026-11-10-ce-bug-history-notes.md); [3.x release bug fixes](../../raw/cats-effect/cats-effect-3x-release-bug-fixes.md); [Open bug status check](../../raw/cats-effect/2026-11-10-open-bug-status-check.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md); [SyncIO and syncStep mirror notes](../../raw/cats-effect/2026-11-10-syncstep-mirror-notes.md); [Resource mirror notes](../../raw/cats-effect/2026-11-10-resource-mirror-notes.md)
+> Raw: [Review 2 fixes notes](../../raw/cats-effect/2026-11-10-review2-ce0001-ce0004-notes.md); [Bug history notes](../../raw/cats-effect/2026-11-10-ce-bug-history-notes.md); [3.x release bug fixes](../../raw/cats-effect/cats-effect-3x-release-bug-fixes.md); [Open bug status check](../../raw/cats-effect/2026-11-10-open-bug-status-check.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md); [SyncIO and syncStep mirror notes](../../raw/cats-effect/2026-11-10-syncstep-mirror-notes.md); [Resource mirror notes](../../raw/cats-effect/2026-11-10-resource-mirror-notes.md)
 
 ## Overview
 
@@ -54,17 +54,20 @@ All five are open issues and all five are present at v3.7.1. No release after v3
 
 ## Calibration bug records and reproducers (Phase 5, Scala side)
 
-Draft records with deterministic `scala-cli` reproducers. Run all with `scripts/run_reproducers.sh` (not in CI). Lean status: all three are refuted in Lean. CE-0001: registry entry `core.IO.syncStep.syncStepIdentitySyncIO` ([SyncIO and syncStep model](syncio-and-syncstep-model.md)). CE-0002: `kernel.Resource.eval.preservesUncancelable` ([Resource model](resource-model.md)). CE-0003: `std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement` ([Queue and timeout model](queue-model.md)). Review batch 1 found the CE-0001 property HOLLOW (it allows external cancel); a fix is in progress.
+Draft records with deterministic `scala-cli` reproducers. Run all with `scripts/run_reproducers.sh` (not in CI). Lean status: all three are refuted in Lean (CE-0004, a new candidate, too). CE-0001: registry entry `core.IO.syncStep.syncStepIdentitySyncIO` ([SyncIO and syncStep model](syncio-and-syncstep-model.md)). CE-0002: `kernel.Resource.eval.preservesUncancelable` ([Resource model](resource-model.md)). CE-0003: `std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement` ([Queue and timeout model](queue-model.md)). Review batch 1 found the CE-0001 property HOLLOW (it allows external cancel); a fix is in progress.
 
 | Record | Upstream | Promise (short) | Reproducer method | v3.7.1 |
 |---|---|---|---|---|
 | [CE-0001](../../bugs/CE-0001.yaml) | #4687 | `AsyncLaws.syncStepIdentity` (`AsyncLaws.scala:84`) | `TestControl`; direct vs `syncStep` remainder, cancel after 10 ms | REPRODUCED (4/4 cases); Lean: refuted (case 4) |
 | [CE-0002](../../bugs/CE-0002.yaml) | #4627 | `Resource.eval` "Preserves interruptibility of `fa`" (`Resource.scala:986`) | `TestControl`; `eval` vs `make` twin | REPRODUCED (3/3 cases); Lean: refuted (case C) |
 | [CE-0003](../../bugs/CE-0003.yaml) | #4571 | No lost element; `IO#timeout` returns the source outcome (`IO.scala:800`) | `TestControl` seeds 0–499 | REPRODUCED (328/500 and 37/500 seeds); Lean: refuted (program A, FIFO schedule) |
+| [CE-0004](../../bugs/CE-0004.yaml) | none (new; related #3767, #3811, #549) | `SyncIO#to` translates (`SyncIO.scala:190`); `AsyncLaws.syncStepIdentity` | no runtime for `SyncIO`; one fatal `IO` run, last | REPRODUCED on 3.7.1, `series/3.x`, `series/3.7.x`; Lean: refuted (`raiseErrorTwin`, fatal `e`) |
 
 Results on `series/3.x` and `series/3.7.x` snapshots: see the records and the [raw notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md).
 
 - CE-0003 is a `racePair` defect. Under `TestControl`, the external-cancel form loses the element in most seeds, so the Lean model needs only a small schedule search to find it. Confirmed: the FIFO schedule (no choices) of the model already loses the element (`takeTimeoutNoLostElement_refuted`).
+- CE-0004 (review batch 2, decision 38): `IO.raiseError(fatal)` calls `onFatalFailure` (`IOFiber.scala:263-269`, PR #3811), `SyncIO.raiseError(fatal)` is an ordinary error (`SyncIO.scala:257-259`). `SyncIO#to[IO]` and `IO#syncStep` move a program between the two policies. Priority low, likely partly intended (maintainers keep fatal errors out of the laws, #549); no duplicate found. Not a calibration bug: it is the first new candidate. CE-0001 is now stated for non-fatal errors only. [SyncIO and syncStep model](syncio-and-syncstep-model.md).
+- Fixed twins (decision 39): CE-0001 has a mirror of PR #4700 that satisfies the property on 10 programs; CE-0004 has a one-line `SyncIO` twin; CE-0003 has none (PR #4710 rewrites `IOFiber` cancelation).
 - CE-0001: case 4 (`IO.uncancelable(_ => IO.canceled *> flag.set(true))`) needs no external cancel. It is the Lean counterexample (`syncStepIdentitySyncIO_refuted`). Also 4/4 on `series/3.x` and `series/3.7.x`.
 - CE-0002: `Resource.make(fa)(noop)` is the twin that keeps `fa` masked. The record compares the two. Case C (`Resource.eval(IO.uncancelable(_ => IO.canceled)).allocatedCase` vs the same under `IO.uncancelable`) needs no time and no external cancel. It is the Lean counterexample (`resourceEvalPreservesUncancelable_refuted`). The fix on `series/3.7.x` passes all 3 cases.
 

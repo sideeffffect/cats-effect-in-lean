@@ -1,7 +1,7 @@
 # Outcome sets, `Eqv`/`EqvP`, the enumerators and the IO laws
 
 > Sources: own Phase 2 step 10 and Phase 4 work (`CatsEffectInLean/Model/Outcomes.lean`, `SchedP.lean`, `Enum.lean`, `EnumP.lean`, `IOInstance.lean`, `EnumExamples.lean`, `EnumPExamples.lean`, `Props/IO/MonadCancelLaws.lean`, `Proofs/IO/MonadCancelLaws.lean`), Lean v4.35.0, 2026-11-10; Cats Effect v3.7.1 (`IO.scala`, `MonadCancelLaws.scala`, `MonadCancelTests.scala`, `testkit/.../TestInstances.scala`); scala-cli smoke test on CE 3.7.1 with `TestControl`
-> Raw: [Enumerator and first laws notes](../../raw/lean-tooling/2026-11-10-enumerator-and-first-laws-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md); [Preemptive EqvP notes](../../raw/project-decisions/2026-11-10-preemptive-eqv-notes.md)
+> Raw: [Review 2 fixes notes](../../raw/cats-effect/2026-11-10-review2-ce0001-ce0004-notes.md); [Enumerator and first laws notes](../../raw/lean-tooling/2026-11-10-enumerator-and-first-laws-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md); [Preemptive EqvP notes](../../raw/project-decisions/2026-11-10-preemptive-eqv-notes.md)
 
 ## Overview
 
@@ -65,9 +65,11 @@ Without task count and log, a terminating program has a finite state space under
 
 - A `Handle` (fiber, `Ref`, `Deferred`, poll, `ContState`) is a capability. Scala code gets one only as a value.
 - A user call holds the handles of its argument, of its closure value (`captured id`, from the closure codec), of the program scope `H0`, and what it reaches through held cells (`Reach`).
-- `progOK` (decidable): no forged fiber, poll or `ContState` id; no `EndFiber`; user ids even; odd ids only for library closures (`lib id`) with held captures; `Fn.rt` only for public operations (`cancel`, `join`, `Deferred` get/complete, `void`).
+- `progOK` (decidable): no forged fiber, poll or `ContState` id; no `EndFiber`; user ids even; odd ids only for library closures (`lib id`) with held captures; `Fn.rt` only for public operations (`cancel`, `join`, `Deferred` get/complete, `void`). `UnmaskRunLoop(p, m, s)` only with `m ≠ 0` (decision 37): user code makes it only by applying a real poll (`IO.applyPoll`); `IdPoll` (`m = 0`) is the identity.
 - `CallOK` (for each even id, argument and heap view): the result depends only on held cells (and on the cell counts); effects and output use held handles; new cells are held.
-- `WellFormed lib H0 env p := progOK lib (H0.contains ·) p ∧ ∀ even id, ∀ arg v, CallOK lib H0 env id arg v`. `WellFormedIO env p` is the plain-`IO` case (`lib = false`, `H0 = []`).
+- `PollOpaque env` (clause 6, decision 37): poll values are opaque to user code. For every renaming `σ` of poll handles that keeps mask id 0, a call on renamed inputs (closure id with its captured values, argument, view) gives the renamed result (`rnId`, `rnVal`, `rnView`, `rnResult`; `rnIO` maps `UnmaskRunLoop(p, m, s)` to `IO.applyPoll (rnIO p) (σ m s)`). So user code cannot branch on a mask id or tell `IdPoll` from the run loop's poll. Scala: `Poll` is a trait with only `apply`; the two implementations are anonymous private classes; only reflection or `Object` methods could tell them apart. Helper for constant user code: `WF.pollOpaque_of_const`.
+- `WellFormed lib H0 env p := progOK lib (H0.contains ·) p ∧ (∀ even id, ∀ arg v, CallOK lib H0 env id arg v) ∧ PollOpaque env`. `WellFormedIO env p` is the plain-`IO` case (`lib = false`, `H0 = []`).
+- Clause 6 broke the CE-0002 witness proof (`ResourceEval.lean`, `r_wellFormed` needs the third conjunct); a tested patch is in the [review 2 notes](../../raw/cats-effect/2026-11-10-review2-ce0001-ce0004-notes.md).
 - The start-program part is `decide +kernel`. The user-code part is a `∀`, so a witness needs a short proof.
 - Gotcha: a small id can decode to a closure value with a handle (id `218` decodes to `fiber 0`). Build test ids with `Codec.userFn (cloVal ...)`.
 - The two proven laws do not use the hypothesis. Their twins `*_all` state them without it.
