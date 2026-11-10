@@ -1,7 +1,7 @@
 # Cats Effect bug history and target areas
 
 > Sources: typelevel/cats-effect issues labelled `:beetle: bug` and 3.x release notes, collected 2026-11-10
-> Raw: [Bug history notes](../../raw/cats-effect/2026-11-10-ce-bug-history-notes.md); [3.x release bug fixes](../../raw/cats-effect/cats-effect-3x-release-bug-fixes.md)
+> Raw: [Bug history notes](../../raw/cats-effect/2026-11-10-ce-bug-history-notes.md); [3.x release bug fixes](../../raw/cats-effect/cats-effect-3x-release-bug-fixes.md); [Open bug status check](../../raw/cats-effect/2026-11-10-open-bug-status-check.md)
 
 ## Overview
 
@@ -36,9 +36,24 @@ Full list with titles and URLs is in the raw notes.
 
 Calibration idea: a faithful model must be able to refute the properties behind the known open bugs. If it cannot, the model is wrong or too abstract.
 
+## Status of the calibration bugs (checked 2026-11-10)
+
+All five are open issues and all five are present at v3.7.1. No release after v3.7.1 exists. Fixes go to `series/3.7.x` first and are merged forward into `series/3.x` later.
+
+| Bug | Fix PR | Merged? | Code at v3.7.1 |
+|---|---|---|---|
+| #4687 `syncStep` | #4700 (open), tests #4686 (open) | no | `core/shared/src/main/scala/cats/effect/IO.scala:2390`, `:2396` (`SyncStep.interpret`) |
+| #4627 `Resource.eval` | #4630 | yes, `series/3.7.x` only (`2f94201`, 2026-10-12); not on `series/3.x`; not released | `kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:485`, `:508`, `:526` (`allocatedCase`) |
+| #4571 `take.timeout` | #4710 (draft); #4641 closed unmerged | no | `core/shared/src/main/scala/cats/effect/IOFiber.scala:909` (`RacePair`); cause is `racePair`, not `Queue` |
+| #4483 `Queue#mapK` | none | no | `std/shared/src/main/scala/cats/effect/std/Queue.scala:51` |
+| #4697 `Resource` timeout `reportFailure` | #4712 (open) | no | `kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:1455` (no `racePair` override) |
+
+- #4627 stays open only because #4630 targets a non-default branch. For the `series/3.x` reproducer run, also run on `series/3.7.x`.
+- #4697 is likely a `Resource` form of #2962 ("unfixable in general"). It is a weak calibration target.
+- New bug-labelled issues since 2026-08-23: only #4674 (`LocalQueue`; open PRs #4688, #4696). It is a runtime target (Phase 9).
+
 ## Open questions
 
-- Do the open bugs #4687, #4627, #4571 already have fix PRs on `series/3.x`? Check before working on them.
 - #4488 (a fiber cancelled before it first runs never registers its finalizers) is "as designed". Treat as a spec decision, not a bug.
 
 ## See Also
