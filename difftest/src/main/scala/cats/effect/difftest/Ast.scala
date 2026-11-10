@@ -91,6 +91,11 @@ enum Prog:
   case BracketCase(acq: Prog, x: String, use: Prog, y: String, rel: Prog, tag: Long)
   /** `IO.bracketFull(poll => acq)(x => use)((x, oc) => ...)` (release as in `BracketCase`). */
   case BracketFull(poll: String, acq: Prog, x: String, use: Prog, y: String, rel: Prog, tag: Long)
+  // ---- format v2 (Phase 6, track Res)
+  /** `I_R(r).use(x => k)`. */
+  case RUse(r: Res, x: String, k: Prog)
+  /** `I_R(r).allocated.flatMap { case (x, rel) => k.flatMap(b => rel.as(b)) }`. */
+  case RAllocated(r: Res, x: String, k: Prog)
 
 /** A `Resource[IO, Val]` (format v1). It occurs only under `AllocatedCase`. */
 enum Res:
@@ -98,6 +103,8 @@ enum Res:
   case REval(e: Prog)
   case RMake(acq: Prog, x: String, rel: Prog)
   case RFlatMap(r: Res, x: String, k: Res)
+  /** `I_R(a).both(I_R(b)).map { case (x, y) => VPair(x, y) }` (format v2, track Res). */
+  case RBoth(a: Res, b: Res)
 
 /** One entry of a replay choice list. */
 enum Choice:

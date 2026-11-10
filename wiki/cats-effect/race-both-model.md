@@ -60,6 +60,7 @@ Side effects on shared difftest code: `gen.py` weights for the v2 productions (d
 - [Kernel typeclasses model](kernel-typeclasses-model.md)
 - [Scheduler model](scheduler-model.md)
 - [Queue and timeout model](queue-model.md)
+- [Resource use, allocated, both, and CE-0020](resource-use-both-model.md) (`Resource#both` runs its finalizers with `GenSpawn#both`)
 - [Outcome sets, Eqv and the IO laws](../semantics/outcome-equivalence.md)
 - [Difftest program format](../methodology/difftest-program-format.md)
 - [Registry and audit](../methodology/registry-and-audit.md)

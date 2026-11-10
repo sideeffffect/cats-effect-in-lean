@@ -47,6 +47,9 @@ RUNTIME_MIN = 0.15
 # Format v2 (track G): a lower share is enough (4 more ops share the weight)
 V2G_OPS = ('guarantee', 'bracket', 'bracketCase', 'bracketFull')
 V2G_MIN = 0.03
+# Format v2 (track Res): `use`, `allocated`, `Resource.both` (static count)
+V2RES_OPS = ('rUse', 'rAllocated', 'rBoth')
+V2RES_MIN = 0.02
 
 
 def check(cond, msg):
@@ -58,7 +61,7 @@ def check(cond, msg):
 def main():
     t0 = time.time()
     # 1. type checker
-    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race', 'bracket')
+    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race', 'bracket', 'resuse')
              for x in (drive.REPO / f'difftest/cases/{f}.jsonl').read_text().splitlines() if x.strip()]
     check(all(well_typed(c['prog']) for c in basic), f"type checker accepts all {len(basic)} golden cases")
     N1 = {'t': 'nat', 'v': 1}
@@ -86,6 +89,10 @@ def main():
          'use': {'op': 'poll', 'poll': 'p', 'e': {'op': 'cede'}}, 'y': 'o', 'rel': {'op': 'cede'}},
         {'op': 'bracketCase', 'acq': {'op': 'cede'}, 'x': 'a', 'use': {'op': 'cede'}, 'y': 'o',
          'rel': {'op': 'map', 'e': {'op': 'pure', 'v': {'t': 'var', 'x': 'o'}}, 'fn': 2}},
+        # format v2 (track Res): `rBoth` only at a resource position; its value is a pair
+        {'op': 'rBoth', 'a': {'op': 'rPure', 'v': N1}, 'b': {'op': 'rPure', 'v': N1}},
+        {'op': 'rUse', 'res': {'op': 'rBoth', 'a': {'op': 'rPure', 'v': N1}, 'b': {'op': 'rPure', 'v': N1}},
+         'x': 'v', 'k': {'op': 'map', 'e': {'op': 'pure', 'v': {'t': 'var', 'x': 'v'}}, 'fn': 2}},
     ]
     for p in bad:
         try:
@@ -111,6 +118,9 @@ def main():
     v2gcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2G_OPS}
     lowg = {op: f for op, f in v2gcov.items() if f < V2G_MIN}
     check(not lowg, f"each format v2 op of track G in >= {V2G_MIN:.0%} of {N} cases {lowg}")
+    v2rcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2RES_OPS}
+    lowr = {op: f for op, f in v2rcov.items() if f < V2RES_MIN}
+    check(not lowr, f"each format v2 op of track Res in >= {V2RES_MIN:.0%} of {N} cases {lowr}")
 
     # 3 + 4. Scala runs: no generator bug, deterministic
     tcs = [gen.to_testcontrol(c, t) for c in a[:N // 2] for t in (1, 2)]

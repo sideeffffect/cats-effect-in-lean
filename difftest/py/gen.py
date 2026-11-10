@@ -93,6 +93,8 @@ WEIGHTS = {
     'race': 2.5, 'raceOutcome': 2.5, 'both': 2.5, 'bothOutcome': 2.5, 'tpl_comb': 5, 'tpl_combCancel': 2.5,
     # format v2 (track G)
     'guarantee': 1.0, 'bracket': 0.8, 'bracketCase': 0.8, 'bracketFull': 0.8, 'tpl_bracket': 1.0,
+    # format v2 (track Res)
+    'rUse': 0.8, 'rAllocated': 0.6, 'res_both': 2.0, 'tpl_resBoth': 0.8,
 }
 
 # Other knobs (probabilities and ranges).
@@ -538,6 +540,19 @@ class Gen:
         if self.res_ok(t):
             opts.append((w['allocatedCase'], lambda: {'op': 'allocatedCase', 'res': self.g_res(t, env, size - 1, cc)}))
 
+        # ---- format v2 (track Res): `use`, `allocated` of a resource tree; `both` in g_res
+        if size >= 2:
+            def g_ruse(op):
+                s = self.small_type()
+                sr, sk = self.split_size(size, 2)
+                x = self.fresh('x', env)
+                return {'op': op, 'res': self.g_res(s, env, sr, cc), 'x': x,
+                        'k': self.prog(t, {**env, x: ('val', s)}, sk, cc)}
+            opts.append((w['rUse'], lambda: g_ruse('rUse')))
+            opts.append((w['rAllocated'], lambda: g_ruse('rAllocated')))
+        if size >= 5:
+            opts.append((w['tpl_resBoth'], lambda: self.tpl_res_both(t, env, size, cc)))
+
         # ---- format v2 (track R): type-directed combinators
         if size >= 3 and t[0] in ('either', 'pair'):
             kind = 'race' if t[0] == 'either' else 'both'
@@ -677,6 +692,12 @@ class Gen:
                 first = self.res_make(s, env, sa, ctx) if self.r.random() < 0.5 else self.g_res(s, env, sa, ctx)
                 return {'op': 'rFlatMap', 'res': first, 'x': x, 'k': k}
             opts.append((w['res_flatMap'], g_flat))
+        if size >= 3 and t[0] == 'pair':
+            # format v2 (track Res): `rBoth(a, b)` of value type pair(a, b)
+            def g_both():
+                sa, sb = self.split_size(size, 2)
+                return {'op': 'rBoth', 'a': self.g_res(t[1], env, sa, ctx), 'b': self.g_res(t[2], env, sb, ctx)}
+            opts.append((w['res_both'], g_both))
         return self.pick(opts)()
 
     def res_make(self, t, env, size, ctx):
@@ -701,6 +722,21 @@ class Gen:
                           (1, {'op': 'sleep', 'ms': 1}), (1, {'op': 'never'})])
         rest = {'op': 'rEval', 'e': {'op': 'seq', 'ps': [stop, self.prog(t, kenv, max(1, sk - 2), ctx)]}}
         return {'op': 'allocatedCase', 'res': {'op': 'rFlatMap', 'res': self.res_make(s, renv, sm, ctx), 'x': y, 'k': rest}}
+
+    def tpl_res_both(self, t, env, size, ctx):
+        """rUse(rBoth(rMake(..), rMake(..)), x, k) (format v2, track Res). The release of one side
+        often raises an error (the shape of CE-0020: the other side's release can be canceled)."""
+        renv = self.res_env(env)
+        a, b = self.small_type(), self.small_type()
+        sa, sb, sk = self.split_size(size - 1, 3)
+        ra, rb = self.res_make(a, renv, sa, ctx), self.res_make(b, renv, sb, ctx)
+        if self.r.random() < 0.5:
+            ra['rel'] = {'op': 'seq', 'ps': [ra['rel'], {'op': 'raise', 'code': self.code()}]}
+        if self.r.random() < 0.3:
+            a, b, ra, rb = b, a, rb, ra
+        x = self.fresh('x', env)
+        k = self.prog(t, {**env, x: ('val', pair(a, b))}, sk, ctx)
+        return {'op': 'rUse', 'res': {'op': 'rBoth', 'a': ra, 'b': rb}, 'x': x, 'k': k}
 
     def tpl_queue(self, t, env, size, ctx):
         """bind q = queueNew in a producer/consumer scenario: consumers `take` (often with

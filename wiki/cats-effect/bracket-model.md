@@ -52,6 +52,8 @@ Phase 6, track G. The model mirrors `IO#guarantee`, `IO#guaranteeCase`, `IO#brac
 
 Why open: a proof for all programs needs a simulation or a state invariant over `Sched.tickP` and all of `Step.lean`. Not done.
 
+Caveat (found by track Res, 2026-11-10): `MarkersOnly` also restricts odd (library) ids. A library closure that calls a marker function (for example `bfBody` with a marker field) emits the marker, so the hypothesis can be false for every `LibEnv`. The two invariants may be vacuous; to check in review batch 4. Track Res uses `UserMarkersOnly` (even ids only).
+
 ## Difftest (format v2)
 
 Ops `guarantee`, `bracket`, `bracketCase`, `bracketFull` ([format](../methodology/difftest-program-format.md)). Agreement: per op 51,290 to 55,575 agreeing cases over seeds 1-3 (details in the raw note). The language cannot make a throwing `use`, so CE-0005 is only in the reproducer.
@@ -62,6 +64,7 @@ After the merge with tracks R and D (one format v2 with `race`, `raceOutcome`, `
 
 - [Kernel typeclasses model](kernel-typeclasses-model.md)
 - [Resource model and CE-0002](resource-model.md)
+- [Resource use, allocated, both, and CE-0020](resource-use-both-model.md)
 - [Outcome sets, Eqv and the IO laws](../semantics/outcome-equivalence.md)
 - [Difftest program format](../methodology/difftest-program-format.md)
 - [Bug history](bug-history.md)

@@ -147,3 +147,8 @@
 
 ## [2026-11-10] ingest | Track G merged with tracks R and D
 - Updated: guarantee and bracket model (merged difftest counts, weights, TwinChecks), Difftest program format (one format v2 section; 999998 fix of track D kept, track G Scala text fix dropped)
+
+## [2026-11-10] ingest | Track Res: Resource use, allocated, both; CE-0020
+- New: Resource use, allocated, both, and CE-0020 (cats-effect/resource-use-both-model.md)
+- Updated: Resource model (limits), guarantee and bracket model (MarkersOnly caveat), race and both model (See Also), Bug history (CE-0020), Difftest program format (track Res ops), index
+- Raw: raw/cats-effect/2026-11-10-track-res-resource-notes.md

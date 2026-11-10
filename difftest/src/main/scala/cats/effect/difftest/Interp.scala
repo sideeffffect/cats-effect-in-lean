@@ -280,6 +280,11 @@ final class Interp(h: Harness):
       IO.bracketFull[Val, Val](poll => run(acq, env + (q -> Bound.P(poll))))(a => run(use, env + (x -> Bound.V(a))))(
         caseRelease("bracketFull", x, y, rel, tag, env))
 
+    // ---- format v2 (Phase 6, track Res)
+    case Prog.RUse(r, x, k) => res(r, env).use(v => run(k, env + (x -> Bound.V(v))))
+    case Prog.RAllocated(r, x, k) =>
+      res(r, env).allocated.flatMap { case (a, rel) => run(k, env + (x -> Bound.V(a))).flatMap(b => rel.as(b)) }
+
   /** `(a, oc) => ocVal(oc).flatMap(o => IO.delay(emit fin) *> run(rel, env + x + y).void)` (format v2). */
   private def caseRelease(op: String, x: String, y: String, rel: Prog, tag: Long, env: Env)
       : (Val, Outcome[IO, Throwable, Val]) => IO[Unit] =
@@ -295,3 +300,4 @@ final class Interp(h: Harness):
     case Res.REval(e) => Resource.eval(run(e, env))
     case Res.RMake(acq, x, rel) => Resource.make(run(acq, env))(a => run(rel, env + (x -> Bound.V(a))).void)
     case Res.RFlatMap(r0, x, k) => res(r0, env).flatMap(v => res(k, env + (x -> Bound.V(v))))
+    case Res.RBoth(a, b) => res(a, env).both(res(b, env)).map { case (x, y) => VPair(x, y) }

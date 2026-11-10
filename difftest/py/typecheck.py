@@ -280,6 +280,10 @@ class Checker:
                 renv[p['y']] = ('val', ('outcome', t))
             self.prog(p['rel'], renv)
             return t
+        # ---- format v2 (track Res)
+        if op in ('rUse', 'rAllocated'):
+            a = self.res(p['res'], env)
+            return self.prog(p['k'], {**env, p['x']: ('val', a)})
         if op == 'syncStep':
             raise TypeErr("syncStep below the root")
         if op in RES_OPS:
@@ -300,10 +304,12 @@ class Checker:
         if op == 'rFlatMap':
             a = self.res(r['res'], env)
             return self.res(r['k'], {**env, r['x']: ('val', a)})
+        if op == 'rBoth':
+            return ('pair', self.res(r['a'], env), self.res(r['b'], env))
         raise TypeErr(f"op {op!r} at a resource position")
 
 
-RES_OPS = ('rPure', 'rEval', 'rMake', 'rFlatMap')
+RES_OPS = ('rPure', 'rEval', 'rMake', 'rFlatMap', 'rBoth')
 MAX_LIMIT = 2**31 - 1
 
 

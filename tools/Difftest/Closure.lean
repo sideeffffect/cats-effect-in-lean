@@ -207,6 +207,23 @@ inductive Lam where
   | brcFinThen
   /-- `bracketFull`: `poll => I(acq)`. -/
   | bfAcq
+  -- format v2 (track Res): `rUse`, `rAllocated`, `rBoth` run on the mirror
+  -- `Model/ResourceUse.lean`; these are the program lambdas and the resource codes.
+  /-- `rUse`: `x => I(k)` (the `use` function). `vals = env`. -/
+  | ruUse
+  /-- `rAllocated`: `{ case (x, rel) => I(k).flatMap(b => rel.as(b)) }`. `vals = env`. -/
+  | raK
+  /-- `rAllocated`: `b => rel.as(b)`. `vals = [rel]` (the `USrc` code of `rel`). -/
+  | raRelAs
+  /-- `rUse`/`rAllocated`: the resource code of `I_R(res)` (`UEnv.resOf`). `vals = env`. -/
+  | ruRes
+  /-- `rBoth`: the resource code of `I_R(a)`. `vals = env`. -/
+  | rbA
+  /-- `rBoth`: the resource code of `I_R(b)`. `vals = env`. -/
+  | rbB
+  /-- `rBoth`: `{ case (x, y) => VPair(x, y) }` of `.map`, as the `REnv.bind` code of
+  `flatMap(a => Resource.pure(f(a)))` (`Resource.scala:396-397`). `vals = []`. -/
+  | rbPair
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -221,7 +238,8 @@ def Lam.all : List Lam :=
    .raceSrcA, .raceSrcB, .raceK, .roK, .mkLeft, .mkRight, .pairK, .boK, .boK2, .boK3,
    .timeoutFb,
    .gSrcE, .gSrcFin, .gFinEmit, .gFinThen, .brAcqSrc, .brUse, .brRel, .brFinEmit, .brRelThen,
-   .brcRel, .brcFinK, .brcFinEmit, .brcFinThen, .bfAcq]
+   .brcRel, .brcFinK, .brcFinEmit, .brcFinThen, .bfAcq,
+   .ruUse, .raK, .raRelAs, .ruRes, .rbA, .rbB, .rbPair]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?

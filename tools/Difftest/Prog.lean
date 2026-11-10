@@ -163,6 +163,13 @@ inductive Prog where
   | bracketCase (acq use rel : Prog) (tag : Nat)
   /-- `IO.bracketFull(poll => I(acq))(x => I(use))((x, oc) => …)`; `acq` binds the poll. -/
   | bracketFull (acq use rel : Prog) (tag : Nat)
+  -- format v2 (Phase 6, track Res)
+  /-- `I_R(res).use(x => I(k))`; `res` is a resource node, `k` binds `x`. -/
+  | rUse (res k : Prog)
+  /-- `I_R(res).allocated.flatMap { case (x, rel) => I(k).flatMap(b => rel.as(b)) }`. -/
+  | rAllocated (res k : Prog)
+  /-- Resource node: `I_R(a).both(I_R(b)).map { case (x, y) => pair x y }`. -/
+  | rBoth (a b : Prog)
   deriving DecidableEq, Repr
 
 /-- Number of nodes. Nodes are numbered in pre-order from 0; the children of a node with
@@ -170,7 +177,8 @@ number `n` are `n + 1` and `n + 1 + size first`. -/
 def Prog.size : Prog → Nat
   | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
   | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k
-  | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => 1 + e.size + k.size
+  | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k
+  | .rUse e k | .rAllocated e k | .rBoth e k => 1 + e.size + k.size
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => 1 + e.size
   | .guarantee e k _ => 1 + e.size + k.size
@@ -184,7 +192,8 @@ def Prog.at? : Prog → Nat → Option Prog
     match p with
     | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
     | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k
-    | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k =>
+    | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k
+    | .rUse e k | .rAllocated e k | .rBoth e k =>
       if i < e.size then e.at? i else k.at? (i - e.size)
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => e.at? i
@@ -215,6 +224,7 @@ def Prog.opName : Prog → String
   | .bothOutcome .. => "bothOutcome"
   | .guarantee .. => "guarantee" | .bracket .. => "bracket" | .bracketCase .. => "bracketCase"
   | .bracketFull .. => "bracketFull"
+  | .rUse .. => "rUse" | .rAllocated .. => "rAllocated" | .rBoth .. => "rBoth"
 
 /-- The two sub-programs of a v2 combinator (`race`, `raceOutcome`, `both`, `bothOutcome`). -/
 def Prog.combArgs? : Prog → Option (Prog × Prog)
@@ -226,7 +236,8 @@ def Prog.ops (p : Prog) : List String :=
   p.opName :: match p with
     | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
     | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k
-    | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => e.ops ++ k.ops
+    | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k
+    | .rUse e k | .rAllocated e k | .rBoth e k => e.ops ++ k.ops
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => e.ops
     | .guarantee e k _ => e.ops ++ k.ops
@@ -248,6 +259,9 @@ def Prog.eagerReads : Prog → Bool
   -- format v2: `guarantee` builds `e` and `fin` at once; `bracket`/`bracketCase` build `acq`
   | .guarantee e k _ => e.eagerReads || k.eagerReads
   | .bracket a _ _ _ | .bracketCase a _ _ _ => a.eagerReads
+  -- track Res: `use`/`allocated` build `I_R(res)` at once; `rBoth` builds both sides at once
+  | .rUse e _ | .rAllocated e _ => e.eagerReads
+  | .rBoth e k => e.eagerReads || k.eagerReads
   | _ => false
 
 /-- The resource restriction: no `IO` program inside a resource node reads state when it is
@@ -258,7 +272,8 @@ def Prog.resViewFree : Prog → Bool
   | .rMake a r => !a.eagerReads && !r.eagerReads && a.resViewFree && r.resViewFree
   | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
   | .racePair e k | .case _ e k | .timeoutTo e k _ | .rFlatMap e k => e.resViewFree && k.resViewFree
-  | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => e.resViewFree && k.resViewFree
+  | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k
+  | .rUse e k | .rAllocated e k | .rBoth e k => e.resViewFree && k.resViewFree
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e => e.resViewFree
   | .guarantee e k _ => e.resViewFree && k.resViewFree
@@ -304,9 +319,9 @@ def v1Ops : List String :=
    "allocatedCase", "rPure", "rEval", "rMake", "rFlatMap"]
 /-- Ops of format v2 (`Json.V2Ops`): a decode error in a v0 or v1 case. -/
 def v2Ops : List String := ["race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket",
-  "bracketCase", "bracketFull"]
+  "bracketCase", "bracketFull", "rUse", "rAllocated", "rBoth"]
 /-- The resource ops. -/
-def resOps : List String := ["rPure", "rEval", "rMake", "rFlatMap"]
+def resOps : List String := ["rPure", "rEval", "rMake", "rFlatMap", "rBoth"]
 /-- `Json.DefaultMaxSteps` in `Json.scala`. -/
 def defaultMaxSteps : Nat := 10000
 /-- Number of user functions (`UserFns.size`). -/
@@ -431,7 +446,7 @@ partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .i
   if ver < 1 && v1Ops.contains op then fail s!"{ctx}: not in format v0 (use v 1)"
   if ver < 2 && v2Ops.contains op then fail s!"{ctx}: not in format v{ver} (use v 2)"
   if pos == .res && !resOps.contains op then
-    fail s!"{ctx}: not a resource op (expected rPure, rEval, rMake or rFlatMap)"
+    fail s!"{ctx}: not a resource op (expected rPure, rEval, rMake, rFlatMap or rBoth)"
   if pos == .io && resOps.contains op then fail s!"{ctx}: a resource op outside a resource position"
   let only (ks : List String) : D Unit := keys o ("op" :: ks) ctx
   let p (k : String) (s : Scope := scope) : D Prog := do decodeProgIn (← field o k ctx) s ver
@@ -549,6 +564,14 @@ partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .i
     only ["poll", "acq", "x", "use", "y", "rel", "tag"]; let q ← s "poll"; let x ← s "x"; let y ← s "y"
     pure (.bracketFull (← p "acq" ((q, .p) :: scope)) (← p "use" ((x, .v) :: scope))
       (← p "rel" ((y, .v) :: (x, .v) :: scope)) (← tag))
+  -- format v2 (track Res)
+  | "rUse" =>
+    only ["res", "x", "k"]; let x ← s "x"
+    pure (.rUse (← r "res") (← p "k" ((x, .v) :: scope)))
+  | "rAllocated" =>
+    only ["res", "x", "k"]; let x ← s "x"
+    pure (.rAllocated (← r "res") (← p "k" ((x, .v) :: scope)))
+  | "rBoth" => only ["a", "b"]; pure (.rBoth (← r "a") (← r "b"))
   | _ => fail s!"unknown op '{op}'"
 
 /-- Reject a v2 op anywhere in `j` (a case of format v0 or v1; `Json.checkNoV2`). -/
