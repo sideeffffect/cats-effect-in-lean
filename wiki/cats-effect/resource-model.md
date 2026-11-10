@@ -1,7 +1,7 @@
 # Resource model and CE-0002
 
 > Sources: Cats Effect source at v3.7.1 (`Resource.scala:156-196`, `:388`, `:464-531`, `:826-993`, `:1167-1232`; `IO.scala:138`, `:532-533`, `:605-606`, `:903-904`, `:2017-2102`); own Lean work and scala-cli runs, 2026-11-10
-> Raw: [Resource mirror notes](../../raw/cats-effect/2026-11-10-resource-mirror-notes.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md)
+> Raw: [Resource mirror notes](../../raw/cats-effect/2026-11-10-resource-mirror-notes.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
 
 ## Overview
 
@@ -11,7 +11,7 @@ The second refuted property of the project. `Resource.eval(fa).allocatedCase` is
 
 | File | Content |
 |---|---|
-| `Model/ValCodec.lean` | Injective code `Val → Nat` and its decoder (for closure ids) |
+| `Model/Codec.lean` | The one closure codec (decision 31): `Val ↔ Nat` code, roundtrip theorem `natToVal_valToNat`, id convention `libFn`/`userFn` |
 | `Model/Resource.lean` | `Res` ADT, `allocatedCase` loop, `make`, closures `Clo`, release values `RelFn`, `REnv` |
 | `Model/ResourceExamples.lean` | 15 checks: success, release on error, release on cancel, LIFO, `ExitCase`, cases B and C, fix of PR #4630 |
 | `Props/Calibration/ResourceEval.lean` | `resourceEvalPreservesUncancelable` |
@@ -29,11 +29,12 @@ The second refuted property of the project. `Resource.eval(fa).allocatedCase` is
 - A library lambda that captures data is a `Clo` constructor. Its id is `2 * valToNat c.toVal + 1` (odd). User function `k` has id `2k` (`uid k`). `REnv.toEnv` decodes odd ids and runs the mirror (`cloCall`).
 - Function values (`ExitCase => F[Unit]`) and `release(a)` of `make` are `Val` descriptors (`RelFn`, `ioRelease`).
 - `REnv` user code: `user` (ordinary `UserEnv`), `bind` (the `S => Resource` functions), `acquire`, `release`. `bind` and `release` are pure Lean functions (restriction: no side effects).
-- No change of `Syntax.lean` or `Step.lean` was needed. Other library code with closures (for example `use`, `Queue`) can use the same device.
+- No change of `Syntax.lean` or `Step.lean` was needed. `Queue` and `timeout` use the same codec (`Model/Codec.lean`; the former `ValCodec` is now the only codec, decision 31).
+- `isLib id`: odd and decodes to a `Clo`. `REnv.WellFormed r p` = `WellFormed isLib [] r.toEnv p` plus: `acquire k` passes `progOK` with no handles; `release k a` and `bind k a` build only values with the handles of `a` (`Res.ok`).
 
 ## Property
 
-`resourceEvalPreservesUncancelable`: for all `REnv`, `g`, and ids `b`, `u` with `b = _ => g` and `u = _ => alloc`:
+`resourceEvalPreservesUncancelable`: for all `REnv`, `g`, and ids `b`, `u` with `b = _ => g` and `u = _ => alloc`, and `r.WellFormed` for both sides (type invariant, decision 27; see [Outcome sets](../semantics/outcome-equivalence.md)):
 
 ```
 fa    = IO.uncancelable(_ => g)
@@ -50,6 +51,7 @@ Why this reads "preserves interruptibility": `fa` is uncancelable (its body igno
 - Right: `Succeeded(((), _ => F.unit))` at fuel 8.
 - Wrong-function test: the fix of PR #4630 gives `Succeeded` on both sides (examples `fixed_lhs`, `fixed_rhs`). The real `series/3.7.x` snapshot with the fix agrees (case C ok).
 - Ordinary input: the witness is an ordinary program, so no separate property is needed.
+- The witness is well-formed: `alloc_wellFormed`, `rhs_wellFormed` (start program by `decide +kernel`; user code by cases on `id / 2`: it ignores the view, has no effects, and returns `IO.canceled`, `alloc` or a throw).
 
 ## Gotchas
 

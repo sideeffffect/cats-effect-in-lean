@@ -1,12 +1,12 @@
 # Outcome sets, `Eqv`, the bounded enumerator and the IO laws
 
 > Sources: own Phase 2 step 10 and Phase 4 work (`CatsEffectInLean/Model/Outcomes.lean`, `Enum.lean`, `IOInstance.lean`, `EnumExamples.lean`, `Props/IO/MonadCancelLaws.lean`, `Proofs/IO/MonadCancelLaws.lean`), Lean v4.35.0, 2026-11-10; Cats Effect v3.7.1 (`IO.scala`, `MonadCancelLaws.scala`, `MonadCancelTests.scala`, `testkit/.../TestInstances.scala`); scala-cli smoke test on CE 3.7.1 with `TestControl`
-> Raw: [Enumerator and first laws notes](../../raw/lean-tooling/2026-11-10-enumerator-and-first-laws-notes.md)
+> Raw: [Enumerator and first laws notes](../../raw/lean-tooling/2026-11-10-enumerator-and-first-laws-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
 
 ## Overview
 
 This article defines what `lhs <-> rhs` means for `IO` in the model, how to enumerate outcomes in a bound, and which `IO` laws are settled.
-Two `MonadCancel` laws for `IO` are proven. Two are `open`. None is refuted.
+Two `MonadCancel` laws for `IO` are proven. Two are `open`. None is refuted. All four have the hypothesis `WellFormedIO` on both sides. Open entries do not make their inventory rows `modelled` (decision 28).
 
 ## Observation and `Eqv`
 
@@ -29,6 +29,19 @@ def Eqv cfg mm env (p q : IO) : Prop := ∀ o, outcomes cfg mm env p o ↔ outco
 - `outcomesExt`/`EqvExt` also allow `RChoice.cancel`. Not used by registered laws yet.
 - The IO laws use `cfg := {}` (512/1024 thresholds) and `counterMaskModel` (the `IOFiber` mirror).
 
+## `WellFormed`: the domain of all properties (decision 27)
+
+`CatsEffectInLean/Model/WellFormed.lean`. A type invariant on a start program `p` and user code `env`: they are a program that Scala can write. Every registered property that quantifies over programs or user code has it as a hypothesis. Each refutation proves that its witness is well-formed.
+
+- A `Handle` (fiber, `Ref`, `Deferred`, poll, `ContState`) is a capability. Scala code gets one only as a value.
+- A user call holds the handles of its argument, of its closure value (`captured id`, from the closure codec), of the program scope `H0`, and what it reaches through held cells (`Reach`).
+- `progOK` (decidable): no forged fiber, poll or `ContState` id; no `EndFiber`; user ids even; odd ids only for library closures (`lib id`) with held captures; `Fn.rt` only for public operations (`cancel`, `join`, `Deferred` get/complete, `void`).
+- `CallOK` (for each even id, argument and heap view): the result depends only on held cells (and on the cell counts); effects and output use held handles; new cells are held.
+- `WellFormed lib H0 env p := progOK lib (H0.contains ·) p ∧ ∀ even id, ∀ arg v, CallOK lib H0 env id arg v`. `WellFormedIO env p` is the plain-`IO` case (`lib = false`, `H0 = []`).
+- The start-program part is `decide +kernel`. The user-code part is a `∀`, so a witness needs a short proof.
+- Gotcha: a small id can decode to a closure value with a handle (id `218` decodes to `fiber 0`). Build test ids with `Codec.userFn (cloVal ...)`.
+- The two proven laws do not use the hypothesis. Their twins `*_all` state them without it.
+
 ## Bounded enumerator
 
 - `choiceLists alpha d`: all choice lists of length ≤ `d` over `alpha`. `enumObs`/`enumResults` run each one. A list is used only at task boundaries; after its end the scheduler picks index 0.
@@ -50,7 +63,7 @@ def Eqv cfg mm env (p q : IO) : Prop := ∀ o, outcomes cfg mm env p o ↔ outco
 | `canceledAssociatesLeftOverFlatMap` | proven | `fa` never runs; both sides: `Canceled`, empty trace. Proof by `rfl` on each run. |
 | `forceRCanceledShortCircuits` | proven | Same shape; `forceR` = `handleError(_ => ()).productR`. |
 | `onCancelAssociatesOverUncancelableBoundary` | open | Believed true. The NB comment is about the monad laws, not this law. Needs a simulation proof. |
-| `uncancelablePollIsIdentity` | open | Bounded counterexample in the model (see below); not a proof of `¬`. |
+| `uncancelablePollIsIdentity` | open | Bounded difference in the model also for well-formed programs (see below). Cause: `Eqv` sees iteration counts. Not a CE bug. |
 | other 13 laws | not stated for IO | |
 
 Wrong-function test: `canceled := unit` breaks the first law (`EnumExamples.canceledLeft_wrongFunction_differs`); `forceR a b := b` breaks the second.
@@ -58,7 +71,9 @@ Wrong-function test: `canceled := unit` breaks the first law (`EnumExamples.canc
 ## Finding: auto-yield makes iteration counts observable
 
 `uncancelable(poll => poll(fa))` runs two more iterations than `fa`. With `fa = emit 1 >> 509 flatMaps >> emit 2` and a cancel at the first auto-yield, the left side can end `Canceled` with trace `[1]`; the right side cannot. The model finds this at exactly `n = 509`. Real CE 3.7.1 under `TestControl` (20 seeds) shows the same, at the same `n`.
-In `Eqv` the canceller is a child that names fiber 0 (model user code can name any fiber id; Scala code cannot get the root handle). Open question: restrict `env`, or count laws in a context.
+In `Eqv` that canceller was a child that names fiber 0, a forged id. `WellFormedIO` now excludes it.
+The effect stays without forged ids (re-run 2026-11-10): with `fa = start(emit 9) >> emit 1 >> n flatMaps >> emit 2` (picks 3, depth 3, fuel 1300), the sets differ only at `n = 508`. The left side also has the trace `[1, 9, 2]`: its auto-yield comes before `emit 2`, so the child runs. The run stops when the root completes, so the right side never shows `9`.
+Decision 29: add a preemption choice at any run-loop iteration to `Eqv` (the real runtime runs fibers in parallel). Not done yet; until then the entry stays `open`.
 
 ## See Also
 

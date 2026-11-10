@@ -1,7 +1,7 @@
 # Queue and timeout model (CE-0003)
 
 > Sources: Cats Effect source at v3.7.1 (`Queue.scala:105-106`, `:160-167`, `:871-988`; `UnsafeUnbounded.scala:23-113`; `IO.scala:795-860`, `:1353-1368`, `:1418-1431`, `:1996-2104`; `Sync.scala:61-62`; `Async.scala:168`; `Outcome.scala:73-74`); own Lean work and scala-cli run, 2026-11-10
-> Raw: [Queue and timeout notes](../../raw/cats-effect/2026-11-10-queue-timeout-notes.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md)
+> Raw: [Queue and timeout notes](../../raw/cats-effect/2026-11-10-queue-timeout-notes.md); [Calibration reproducers notes](../../raw/cats-effect/2026-11-10-calibration-reproducers-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
 
 ## Overview
 
@@ -11,11 +11,11 @@ The second refuted property. `Queue.take.timeout(d)` in a fiber that another fib
 
 | File | Content |
 |---|---|
-| `Model/Codec.lean` | Lossless closure ids: bit-interleaving `pair`, `encList`, `Val.enc`, decoders (structural on fuel) |
-| `Std/Queue.lean` | `QLam` (15 closures), `call`, `newIO`, `offerIO`, `tryTakeIO`, `takeIO`; `UnsafeUnbounded` as `Ref` cells |
-| `Model/Timeout.lean` | `TLam` (11 closures), `timeoutIO src d`, `neverIO`, `fallbackIO`; source given by `srcIO : Nat → IO` |
-| `Props/Calibration/QueueTimeout.lean` | Program A, `env` (namespaces 1 queue, 2 timeout, 3 program), `takeTimeoutNoLostElement` |
-| `Proofs/Calibration/QueueTimeout.lean` | `cx_run` (`decide +kernel`), `takeTimeoutNoLostElement_refuted` |
+| `Model/Codec.lean` | The one closure codec (decision 31): `Val ↔ Nat` bit-string code, roundtrip theorem, `cloVal ns tag fields`, `libFn` (odd id), `userFn` (even id) |
+| `Std/Queue.lean` | `QLam` (15 library closures, `toVal`/`ofFields`), `call`, `newIO`, `offerIO`, `tryTakeIO`, `takeIO`; `UnsafeUnbounded` as `Ref` cells |
+| `Model/Timeout.lean` | `TLam` (11 library closures), `timeoutIO src d`, `neverIO`, `fallbackIO`; source given by `srcIO : Val → IO` (`src = Val.ref q`) |
+| `Props/Calibration/QueueTimeout.lean` | Program A (`PLam`, user closures with even ids), `dispatch` (odd: namespace 1 queue, 2 timeout; even: namespace 3 program), `isLib`, `takeTimeoutNoLostElement` |
+| `Proofs/Calibration/QueueTimeout.lean` | `cx_run` (`decide +kernel`), `cx_wellFormed`, `takeTimeoutNoLostElement_refuted` |
 
 No existing model file changed. Library code is written over the public API, so it is `UserEnv` code, not a new `RtFn` case.
 
@@ -30,14 +30,16 @@ No existing model file changed. Library code is written over the public API, so 
 
 ## Property and counterexample
 
-- `takeTimeoutNoLostElement`: for all `xs`, `d`, `s` and pick schedules, program A (`Queue.unbounded`; `q.take.timeout(d).start`; `sleep s`; offer `xs`; `consumer.cancel`; `join`; drain with `xs.length` `tryTake` calls) that ends `Succeeded` returns each element exactly once (`List.Perm`). No hypotheses. Promise: undisputed invariant "no lost element"; support `IO.scala:800-802`.
+- Closures capture handles as handle values (`Val.ref q`, `Val.cont s`, `Val.poll m p`, `Val.fiber c`), so `WellFormed` sees them in the id.
+- `takeTimeoutNoLostElement`: hypothesis `WellFormed isLib [] env (progA xs d s)` (decision 27); for all `xs`, `d`, `s` and pick schedules, program A (`Queue.unbounded`; `q.take.timeout(d).start`; `sleep s`; offer `xs`; `consumer.cancel`; `join`; drain with `xs.length` `tryTake` calls) that ends `Succeeded` returns each element exactly once (`List.Perm`). No hypotheses. Promise: undisputed invariant "no lost element"; support `IO.scala:800-802`.
 - Witness: `xs = [42]`, `d = 1000`, `s = 1`, FIFO (empty choice list). After `offer` wakes the `take` racer and `consumer.cancel` takes over the consumer, the racer takes `42` and completes; its race callback loses against the cancel (`IOFiber.scala:711-715`); the `racePair` finalizer cancels both children; `join` = `Canceled`, `tryTake` = `None`.
 - A schedule that runs the cancel fiber of the racer first gives `Some(42)`: the statement is not trivially false.
+- The witness is well-formed (`cx_wellFormed`): the start program by `decide +kernel`; each `PLam` case by `call_ok` (uses `q` and `consumer` only after it got them; reads only the outcome of `consumer`). The proof needs the codec roundtrip `natToVal_valToNat`.
 
 ## Gotchas
 
 - `IO.never` is `async(_ => pure(Some(unit)))` (a finalizer `IO.unit`), not `pure(None)`.
-- A `2^a * (2b + 1)` list code explodes for nested codes (towers of 2). Use bit interleaving.
+- A `2^a * (2b + 1)` list code explodes for nested codes (towers of 2). Bit interleaving also grows: its bit length doubles at each nesting level. The project now uses the linear bit-string code of `Model/Codec.lean` (decision 31); the CE-0003 proof went from 0.93 s to 1.11 s.
 - The FIFO model schedule is not a `TestControl` seed. `TestControl` seed 0 does not lose, seed 1 does.
 
 ## Open points
