@@ -83,10 +83,13 @@ def registry : List Entry := [
     rows := ["laws.MonadCancelLaws.uncancelablePollIsIdentity"]
     prop := ``Props.IO.MonadCancelLaws.uncancelablePollIsIdentity
     status := .«open»
-    note := "Bounded counterexample in the model, not proven: fa starts a child that cancels \
-      fiber 0 (user code can name any fiber id), then runs 509 flatMaps. The left side has 2 more \
-      run-loop iterations, so its auto-yield comes earlier and the child cancels it before an \
-      emit. Scala code cannot name the root fiber; decide if env must be restricted." },
+    note := "Open. Statement now has WellFormedIO (decision 27), so the old bounded counterexample \
+      (a child cancels fiber 0, a forged id) is excluded. Re-run 2026-11-10 with a well-formed fa \
+      = start(emit 9) >> emit 1 >> n flatMaps >> emit 2 (picks 3, depth 3, fuel 1300, n = 500..515): \
+      the outcome sets still differ, at n = 508 only. Left side also has trace [1, 9, 2]: its 2 \
+      extra run-loop iterations move the auto-yield before emit 2, so the child runs first. Cause: \
+      Eqv sees iteration counts, not a CE promise (decision 29: add a preemption choice to Eqv; \
+      not done yet). Do not refute; prove after the Eqv change." },
   { id := "core.IO.syncStep.syncStepIdentitySyncIO"
     rows := ["core.IO.syncStep#2", "core.IO.IOAsync.syncStep", "core.SyncStep.MaxSteps",
       "core.SyncStep.interpret#2", "core.SyncIO.unsafeRunSync"]

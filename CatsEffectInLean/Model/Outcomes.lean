@@ -51,7 +51,14 @@ another fiber of the program, the finalizers, and their trace. `outcomesExt` and
 
 User code is a parameter (`env`). It can build any `IO` term. So it can also call `cancel` on a
 fiber id that the program did not receive from `start` (for example the root, id 0). Scala user
-code cannot do this. Statements about `outcomes` hold for these programs too.
+code cannot do this. `Eqv` itself does not exclude these programs; the registered properties
+add the hypothesis `WellFormed` (`CatsEffectInLean/Model/WellFormed.lean`, decision 27), which
+excludes them.
+
+Known gap (decision 29, not done): `Eqv` still sees run-loop iteration counts through the
+auto-yield position when the program has more than one fiber. With well-formed programs,
+`uncancelable(poll => poll(fa))` and `fa` differ for `fa = start(emit 9) >> emit 1 >> 508
+flatMaps >> emit 2` (left side also has the trace `[1, 9, 2]`).
 -/
 
 namespace CatsEffectInLean.Model
