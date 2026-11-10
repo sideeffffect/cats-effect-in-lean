@@ -25,6 +25,8 @@
 - `decide_cbv` on a chunk fails at once with "maximum recursion depth" (also with `maxRecDepth 10000000`).
 - Final layout: 49 chunks sized from the profile (up to 250 states early, about 50 late; a single 500-state chunk at the start needed 8.85 GB, so the profile underestimates early chunks), 5 per module, modules chained by imports so that `lake` builds them one after another.
 
+- CI cost: `lake build` of the chunk chain about 30 min (peak RSS 8.3 GB per process, module `RaceLawChunks4`); `lake check` about 38 min (leanchecker peak about 7.4 GB).
+
 ## Other results of the round
 
 - F1b proven (`Frame.result_stable`): a `ContState` cell with `.result v` keeps it in every later state ("first callback result wins"). Added as a fourth `Frame`/`SFrame` field (`Sticky`).
