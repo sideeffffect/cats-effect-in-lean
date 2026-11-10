@@ -106,3 +106,8 @@
 - Created: Resource model and CE-0002; Created: Queue and timeout model
 - Updated: Bug history (all 3 calibration bugs refuted in Lean)
 - Updated: Project plan (status, decisions 26–31)
+
+## [2026-11-10] ingest | Review-1 fixes, difftest v1, idpoll model bug fix
+- Updated: Outcome sets and Eqv (WellFormed), SyncIO and syncStep model, Resource model, Queue model, Registry and audit
+- Updated: Difftest program format (v1), Differential testing (status, idpoll)
+- Updated: Project plan (status, decisions 32–34)

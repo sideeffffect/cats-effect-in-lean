@@ -49,6 +49,8 @@ Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effe
 - Decisions 22–25 (laws judged in isolation by default; single-fiber driver allowed when stated; `racePair` loser report twin is a Phase 8 candidate).
 - Phase 5: all 3 calibration bugs refuted in Lean and reproduced on v3.7.1 ([Resource model](../cats-effect/resource-model.md), [Queue model](../cats-effect/queue-model.md)).
 - Review batch 1: 3 FAITHFUL, 2 HOLLOW (CE-0001 property, `uncancelablePollIsIdentity` statement). Gate not passed yet. Fixes: decisions 26–31.
+- Review-1 fixes done: one codec, `WellFormed` hypothesis on all entries, CE-0001 without external cancel (rows 27 → 5), stricter audit (open entries mark no rows; 23 rows `modelled`).
+- Difftest v1 (`syncStep`, `Resource`, `Queue`, `timeout`): 58,957 cases agree; idpoll model bug fixed (decisions 32–34). Next: review batch 2.
 - Phase 3 steps 1–2 (Scala runner) done: [Difftest program format v0](difftest-program-format.md). sbt is not in CI yet.
 - Later decisions: generator programs are well-typed (a `TypeError` is a generator bug); `Val` and `IO` stay separate until a combinator needs `IO` in a value.
 

@@ -55,3 +55,9 @@ Decisions after review batch 1 (`review/2026-11-10-review-batch-1.md`) and the C
 29. Auto-yield position (iteration counts) is not a CE promise. Default for law `Eqv`: allow a preemption at any run-loop iteration, which matches the multi-threaded runtime. Q3 in `QUESTIONS.md` records this.
 30. Mirrors of `syncStep`/SyncIO, `Resource` and `Queue` need difftest support before their rows pass review (method rule: difftest before properties).
 31. The two closure codecs (`Model/Codec.lean`, `Model/ValCodec.lean`) must become one. The merge put `ValCodec` in its own namespace as a stop-gap.
+
+Decisions after the review-1 fixes and difftest v1:
+
+32. A known model bug keeps CI red until the mirror is fixed. CI never passes `--allow-known-model-bugs` (that would weaken a gate). The idpoll bug was fixed the same day (`IO.applyPoll`).
+33. `Eqv` keeps the cut at root completion (as `IOApp` and CE's law-test `Eq[IO]`). Effects of child fibers after the root ends are not observed; leak and liveness properties state them separately.
+34. Next gate step: review batch 2 of all registry entries after the fixes. The Phase 5 gate passes only when the 3 calibration refutations are FAITHFUL.

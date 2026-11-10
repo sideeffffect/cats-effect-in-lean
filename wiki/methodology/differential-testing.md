@@ -1,7 +1,7 @@
 # Differential testing of the Lean model against Cats Effect
 
 > Sources: synthesized from wiki articles on python-formalization, julia-in-lean, formalization precedents, CE source layout, Lean tooling (2026-11-10); TestControl spike (2026-11-10); generator and driver build (2026-11-10); first Lean-vs-Scala replay runs (2026-11-10); generator coverage work (2026-11-10); `RacePair`/`Sleep` runs (2026-11-10); format v1 runs (`syncStep`, `Resource`, `Queue`, `timeout`; 2026-11-10)
-> Raw: [Difftest v1 notes](../../raw/project-decisions/2026-11-10-difftest-v1-notes.md); [RacePair and Sleep notes](../../raw/cats-effect/2026-11-10-racepair-sleep-notes.md); [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Generator coverage notes](../../raw/project-decisions/2026-11-10-generator-coverage-notes.md); [Generator and driver notes](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [python-formalization difftest harness](../../raw/python-formalization/2026-10-29-lean-core-and-difftest-harness.md); [Harness code copy](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [Cedar DRT + Lean FFI](../../raw/lean-tooling/cedar-spec-drt-and-lean-ffi-readmes.md); [TestControl docs](../../raw/lean-tooling/cats-effect-testcontrol-docs.md); [TestControl spike notes](../../raw/cats-effect/2026-11-10-testcontrol-spike-notes.md); [Netsem](../../raw/formalization-precedents/2018-10-netsem-engineering-with-logic-tcp-test-oracle.md); [SibylFS](../../raw/formalization-precedents/2015-10-sibylfs-formal-spec-oracle-based-testing-posix.md); [Orchestrator merge notes](../../raw/project-decisions/2026-11-10-orchestrator-merge-notes.md)
+> Raw: [Difftest v1 notes](../../raw/project-decisions/2026-11-10-difftest-v1-notes.md); [RacePair and Sleep notes](../../raw/cats-effect/2026-11-10-racepair-sleep-notes.md); [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Generator coverage notes](../../raw/project-decisions/2026-11-10-generator-coverage-notes.md); [Generator and driver notes](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [python-formalization difftest harness](../../raw/python-formalization/2026-10-29-lean-core-and-difftest-harness.md); [Harness code copy](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [Cedar DRT + Lean FFI](../../raw/lean-tooling/cedar-spec-drt-and-lean-ffi-readmes.md); [TestControl docs](../../raw/lean-tooling/cats-effect-testcontrol-docs.md); [TestControl spike notes](../../raw/cats-effect/2026-11-10-testcontrol-spike-notes.md); [Netsem](../../raw/formalization-precedents/2018-10-netsem-engineering-with-logic-tcp-test-oracle.md); [SibylFS](../../raw/formalization-precedents/2015-10-sibylfs-formal-spec-oracle-based-testing-posix.md); [Orchestrator merge notes](../../raw/project-decisions/2026-11-10-orchestrator-merge-notes.md); [idpoll notes](../../raw/project-decisions/2026-11-10-idpoll-fix-notes.md)
 
 ## Overview
 
@@ -94,6 +94,13 @@ Replay mode, all nine fields compared. Details: [First difftest agreement notes]
 ## Triage bins for a mismatch
 
 model bug · harness/glue bug · deliberate model simplification · intended CE behaviour (spec decision) · underspecified (ask maintainers) · real CE bug. Expect most early mismatches to be model bugs. A human sets the bin in the corpus entry (`triage`: `model-bug`, `harness-bug`, `model-simplification`, `intended-ce-behaviour`, `underspecified`, `ce-bug`; default `untriaged`).
+
+## Status after difftest v1 (2026-11-10)
+
+- Format v1 adds `syncStep`, `Resource` (`make`, `eval`, `flatMap`, `pure`, `allocatedCase`), `Queue.unbounded` (`offer`, `take`, `tryTake`) and `timeout`.
+- 6 seeds x 10,000 replay cases: 58,957 agree, 0 mismatch. Unsupported: 1,043 cases, all `timeoutTo` with a user fallback.
+- The 3 calibration witnesses (CE-0001 case 4, CE-0002 case C, CE-0003 program A) are fixed cases, and they agree.
+- Model bug found and fixed: "idpoll" ([idpoll notes](../../raw/project-decisions/2026-11-10-idpoll-fix-notes.md)). A known model bug must keep CI red until fixed; CI never uses `--allow-known-model-bugs`.
 
 ## Gotcha: sbt class path cache
 
