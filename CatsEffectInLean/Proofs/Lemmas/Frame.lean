@@ -29,21 +29,56 @@ variable {M : Type}
 /-- The owner fibers of the `ContState` cells. -/
 def owners (h : Heap) : List Nat := h.conts.map (·.fiber)
 
-/-- One `Exec` transition keeps F1 and F2. -/
+/-- F1b: a cell that holds a result keeps it (`ContVal.result`). -/
+def Sticky (a b : List ContState) : Prop :=
+  ∀ (i : Nat) (v : Val), (a[i]?).map ContState.value = some (ContVal.result v) →
+    (b[i]?).map ContState.value = some (ContVal.result v)
+
+theorem Sticky.refl (a : List ContState) : Sticky a a := fun _ _ h => h
+
+theorem Sticky.trans {a b c : List ContState} (h1 : Sticky a b) (h2 : Sticky b c) : Sticky a c :=
+  fun i v h => h2 i v (h1 i v h)
+
+theorem sticky_append (a b : List ContState) : Sticky a (a ++ b) := by
+  intro i v h
+  have hi : i < a.length := by
+    cases hh : a[i]? with
+    | none => rw [hh] at h; cases h
+    | some _ => exact (List.getElem?_eq_some_iff.mp hh).1
+  rw [List.getElem?_append_left hi]; exact h
+
+theorem sticky_set {a : List ContState} {s : Nat} {st st' : ContState} (hs : a[s]? = some st)
+    (hv : ∀ v, st.value = .result v → st'.value = .result v) : Sticky a (a.set s st') := by
+  intro i v h
+  rw [List.getElem?_set]
+  split
+  · next hi =>
+    subst hi
+    rw [hs] at h
+    simp only [Option.map_some, Option.some.injEq] at h
+    have hl := (List.getElem?_eq_some_iff.mp hs).1
+    simp [hl, hv v h]
+  · exact h
+
+/-- One `Exec` transition keeps F1, F1b and F2. -/
 structure Frame (x y : Exec M) : Prop where
   conts : owners x.heap <+: owners y.heap
   fibers : x.fibers.length ≤ y.fibers.length
   handles : x.heap.handles ≤ y.heap.handles
+  results : Sticky x.heap.conts y.heap.conts
 
-theorem Frame.refl (x : Exec M) : Frame x x := ⟨List.prefix_refl _, Nat.le_refl _, Nat.le_refl _⟩
+theorem Frame.refl (x : Exec M) : Frame x x :=
+  ⟨List.prefix_refl _, Nat.le_refl _, Nat.le_refl _, Sticky.refl _⟩
 
 theorem Frame.trans {x y z : Exec M} (a : Frame x y) (b : Frame y z) : Frame x z :=
-  ⟨a.conts.trans b.conts, Nat.le_trans a.fibers b.fibers, Nat.le_trans a.handles b.handles⟩
+  ⟨a.conts.trans b.conts, Nat.le_trans a.fibers b.fibers, Nat.le_trans a.handles b.handles,
+    a.results.trans b.results⟩
 
 /-- A transition that keeps the cells, the fiber count and the handle counter. -/
-theorem Frame.of_eq {x y : Exec M} (hc : owners y.heap = owners x.heap)
+theorem Frame.of_eq {x y : Exec M} (hc : y.heap.conts = x.heap.conts)
     (hf : y.fibers.length = x.fibers.length) (hh : y.heap.handles = x.heap.handles) : Frame x y :=
-  ⟨hc ▸ List.prefix_refl _, hf ▸ Nat.le_refl _, hh ▸ Nat.le_refl _⟩
+  ⟨by simp only [owners, hc]; exact List.prefix_refl _, hf ▸ Nat.le_refl _, hh ▸ Nat.le_refl _,
+    hc ▸ Sticky.refl _⟩
 
 theorem list_set_self {α : Type} (l : List α) (i : Nat) (a : α) (h : l[i]? = some a) :
     l.set i a = l := by
@@ -81,9 +116,13 @@ theorem frame_log_right {x y : Exec M} (h : Frame x y) (e : TraceEv) : Frame x (
   h.trans (Frame.of_eq rfl rfl rfl)
 
 theorem frame_setContState {x : Exec M} {s : Nat} {st st' : ContState}
-    (hs : x.heap.conts[s]? = some st) (hf : st'.fiber = st.fiber) :
+    (hs : x.heap.conts[s]? = some st) (hf : st'.fiber = st.fiber)
+    (hv : ∀ v, st.value = .result v → st'.value = .result v) :
     Frame x (x.setContState s st') :=
-  Frame.of_eq (owners_setCont x.heap s st st' hs hf) rfl rfl
+  ⟨by
+    show owners x.heap <+: (x.heap.conts.set s st').map (·.fiber)
+    rw [owners_setCont x.heap s st st' hs hf]; exact List.prefix_refl _,
+    Nat.le_refl _, Nat.le_refl _, sticky_set hs hv⟩
 
 @[simp] theorem setFib_heap (x : Exec M) (t : Nat) (f : Fiber M) : (x.setFib t f).heap = x.heap := by
   unfold Exec.setFib; split <;> rfl
@@ -104,11 +143,14 @@ theorem frame_setContState {x : Exec M} {s : Nat} {st st' : ContState}
     (x.setDeferred d c).fibers = x.fibers := rfl
 
 theorem frame_setContState' {x : Exec M} {s : Nat} {st' : ContState}
-    (hs : (x.heap.conts[s]?).map (·.fiber) = some st'.fiber) :
+    (hs : (x.heap.conts[s]?).map (·.fiber) = some st'.fiber)
+    (hv : ∀ v, (x.heap.conts[s]?).map (·.value) = some (.result v) → st'.value = .result v) :
     Frame x (x.setContState s st') := by
   cases h : x.heap.conts[s]? with
   | none => simp [h] at hs
-  | some st => simp [h] at hs; exact frame_setContState h hs.symm
+  | some st =>
+    simp only [h, Option.map_some, Option.some.injEq] at hs hv
+    exact frame_setContState h hs.symm hv
 
 /-- Close a goal `Frame x (op (op ... y))` from `Frame x y` in context. -/
 macro "frame_tac" : tactic => `(tactic| (
@@ -127,11 +169,12 @@ theorem frame_contCallback (mm : MaskModel M) (s : Nat) (r : Val) (x : Exec M) :
   split
   · frame_tac
   · next st hs =>
-    have h1 := fun v => frame_setContState (x := x) (st' := { st with value := v }) hs rfl
+    have h1 := fun v hv => frame_setContState (x := x) (st' := { st with value := v }) hs rfl hv
     split
     · exact Frame.refl _
-    · exact h1 _
-    · have hy := h1 (.result r)
+    · next hval => exact h1 _ (by intro w hw; rw [hval] at hw; cases hw)
+    · next hval =>
+      have hy := h1 (.result r) (by intro w hw; rw [hval] at hw; cases hw)
       generalize x.setContState s { st with value := .result r } = y at hy ⊢
       simp only []
       repeat' split
@@ -177,13 +220,15 @@ theorem frame_rtCall (mm : MaskModel M) (k : RtFn) (arg : Val) (x : Exec M) :
        obtain ⟨-, rfl⟩ := h)
   all_goals first
     | frame_tac
-    | exact frame_setContState' (by simp_all)
+    | exact frame_setContState' (by simp_all) (by simp_all)
     | exact (frame_setDeferred_right (Frame.refl _) _ _).trans (frame_foldl_contCallback _ _ _ _)
-    | (refine ⟨?_, ?_, ?_⟩ <;> first
+    | (refine ⟨?_, ?_, ?_, ?_⟩ <;> first
         | exact List.prefix_refl _
         | exact Nat.le_refl _
+        | exact Sticky.refl _
+        | exact sticky_append _ _
         | (simp [owners]; done)
-        | skip)
+        | (simp only [setFib_heap]; exact Sticky.refl _))
 
 /-! ## User calls -/
 
@@ -419,12 +464,14 @@ theorem map_set_fiber (l : List ContState) (s : Nat) (st st' : ContState)
 /-- Close `Frame x y` when `y` is `x` after field updates of `fib`, the ready list, the trace,
 or a `ContState` write that keeps the owner (hypothesis `hs` in context). -/
 macro "frame_fields" : tactic => `(tactic| (
-  refine ⟨?_, ?_, ?_⟩ <;>
+  refine ⟨?_, ?_, ?_, ?_⟩ <;>
   simp (config := { failIfUnchanged := false }) [owners, Exec.setContState, Exec.pushCont,
     Exec.setConts, Exec.setObj, Exec.setMask, Exec.enqueue, Exec.log] <;>
   first
     | exact List.prefix_refl _
     | exact Nat.le_refl _
+    | exact Sticky.refl _
+    | exact sticky_append _ _
     | (rw [map_set_fiber _ _ _ _ (by assumption) rfl])
     | (simp; done)))
 
@@ -437,10 +484,10 @@ theorem frame_contGet (x : Exec M) (s : Nat) : Frame x (contGet cfg mm env x s).
     split
     · split
       · refine Frame.trans ?_ (frame_prepare cfg mm _ _)
-        refine ⟨?_, ?_, ?_⟩ <;>
+        refine ⟨?_, ?_, ?_, sticky_set hs (by intro v hv; simp_all)⟩ <;>
           simp [owners, Exec.setContState, Exec.pushCont, Exec.setConts, List.map_set, hs, list_set_self,
             List.getElem?_map]
-      · refine ⟨?_, ?_, ?_⟩ <;>
+      · refine ⟨?_, ?_, ?_, sticky_set hs (by intro v hv; simp_all)⟩ <;>
           simp [owners, Exec.setContState, Exec.pushCont, Exec.setConts, List.map_set, hs, list_set_self,
             List.getElem?_map]
     · frame_fields
@@ -570,23 +617,27 @@ structure SFrame (s t : Sched M) : Prop where
   conts : owners s.liveHeap <+: owners t.liveHeap
   fibers : s.liveFibers.length ≤ t.liveFibers.length
   handles : s.liveHeap.handles ≤ t.liveHeap.handles
+  results : Sticky s.liveHeap.conts t.liveHeap.conts
 
-theorem SFrame.refl (s : Sched M) : SFrame s s := ⟨List.prefix_refl _, Nat.le_refl _, Nat.le_refl _⟩
+theorem SFrame.refl (s : Sched M) : SFrame s s :=
+  ⟨List.prefix_refl _, Nat.le_refl _, Nat.le_refl _, Sticky.refl _⟩
 
 theorem SFrame.trans {s t u : Sched M} (a : SFrame s t) (b : SFrame t u) : SFrame s u :=
-  ⟨a.conts.trans b.conts, Nat.le_trans a.fibers b.fibers, Nat.le_trans a.handles b.handles⟩
+  ⟨a.conts.trans b.conts, Nat.le_trans a.fibers b.fibers, Nat.le_trans a.handles b.handles,
+    a.results.trans b.results⟩
 
 /-- Lift an `Exec` frame to the scheduler. -/
 theorem SFrame.of_exec {s t : Sched M} {x y : Exec M} (h : Frame x y)
     (hs : s.liveHeap = x.heap) (hsf : s.liveFibers.length = x.fibers.length)
     (ht : t.liveHeap = y.heap) (htf : t.liveFibers.length = y.fibers.length) : SFrame s t :=
-  ⟨hs ▸ ht ▸ h.conts, hsf ▸ htf ▸ h.fibers, hs ▸ ht ▸ h.handles⟩
+  ⟨hs ▸ ht ▸ h.conts, hsf ▸ htf ▸ h.fibers, hs ▸ ht ▸ h.handles, hs ▸ ht ▸ h.results⟩
 
-/-- The owners, the fiber count and the handle counter are all that `SFrame` sees. -/
+/-- The cells, the fiber count and the handle counter are all that `SFrame` sees. -/
 theorem SFrame.of_live {s t u : Sched M} (h : SFrame s t)
-    (hh : owners u.liveHeap = owners t.liveHeap ∧ u.liveHeap.handles = t.liveHeap.handles)
+    (hh : u.liveHeap.conts = t.liveHeap.conts ∧ u.liveHeap.handles = t.liveHeap.handles)
     (hf : u.liveFibers.length = t.liveFibers.length) : SFrame s u :=
-  ⟨hh.1 ▸ h.conts, hf ▸ h.fibers, hh.2 ▸ h.handles⟩
+  ⟨by simp only [owners, hh.1]; exact h.conts, hf ▸ h.fibers, hh.2 ▸ h.handles,
+    hh.1 ▸ h.results⟩
 
 section Sched
 variable (cfg : Config) (mm : MaskModel M) (env : UserEnv)
@@ -656,14 +707,14 @@ theorem sframe_advance (s : Sched M) (hc : s.cur = none) : SFrame s s.advance :=
   unfold Sched.advance
   split
   · exact SFrame.refl s
-  · refine (SFrame.refl s).of_live ?_ ?_ <;> simp [owners, Sched.liveHeap, Sched.liveFibers, hc]
+  · refine (SFrame.refl s).of_live ?_ ?_ <;> simp [Sched.liveHeap, Sched.liveFibers, hc]
 
 theorem sframe_pick (s : Sched M) (hc : s.cur = none) (r : List Task) (n : Nat)
     (lg : List LogEntry) (t : Task) :
     SFrame s (Sched.runTask cfg mm env
       ({ s with heap := { s.heap with ready := r }, tasks := n, log := lg } : Sched M) t) := by
   refine sframe_runTask cfg mm env s _ ?_ (by simp [hc]) t
-  refine (SFrame.refl s).of_live ?_ ?_ <;> simp [owners, Sched.liveHeap, Sched.liveFibers, hc]
+  refine (SFrame.refl s).of_live ?_ ?_ <;> simp [Sched.liveHeap, Sched.liveFibers, hc]
 
 theorem sframe_cancel (s : Sched M) (hc : s.cur = none) (cf : Fiber M) (n : Nat)
     (lg : List LogEntry) :
@@ -671,7 +722,7 @@ theorem sframe_cancel (s : Sched M) (hc : s.cur = none) (cf : Fiber M) (n : Nat)
       (resume cfg mm env { fib := cf, heap := s.heap, fibers := s.fibers ++ [cf] })).checkBroken := by
   have h0 : Frame { fib := cf, heap := s.heap, fibers := s.fibers }
       { fib := cf, heap := s.heap, fibers := s.fibers ++ [cf] } :=
-    ⟨List.prefix_refl _, by simp, Nat.le_refl _⟩
+    ⟨List.prefix_refl _, by simp, Nat.le_refl _, Sticky.refl _⟩
   exact sframe_after_exec _ (h0.trans (frame_resume cfg mm env _)) (by simp [Sched.liveHeap, hc])
     (by simp [Sched.liveFibers, hc]) _
 
@@ -691,7 +742,7 @@ theorem sframe_tick (s : Sched M) (maxTasks : Nat) (cs : List RChoice) :
     all_goals first
       | (refine (SFrame.refl s).of_live ?_ ?_ <;>
           (try simp only [liveHeap_stop, liveFibers_stop]) <;>
-          (try simp [owners, Sched.liveHeap, Sched.liveFibers, Sched.advance, hc]) <;> done)
+          (try simp [Sched.liveHeap, Sched.liveFibers, Sched.advance, hc]) <;> done)
       | exact sframe_advance s hc
       | exact sframe_pick cfg mm env s hc _ _ _ _
       | exact sframe_cancel cfg mm env s hc _ _ _
@@ -730,6 +781,13 @@ theorem owner_stable (fuel : Nat) (cs : List PChoice) (s : Sched M) (i r : Nat)
   have hi : i < (List.map (·.fiber) s.liveHeap.conts).length :=
     (List.getElem?_eq_some_iff.mp h).1
   rw [List.getElem?_append_left hi, h]
+
+/-- F1b: a `ContState` cell that holds a result keeps it in every later state of every run
+("the first callback result wins"). -/
+theorem result_stable (fuel : Nat) (cs : List PChoice) (s : Sched M) (i : Nat) (v : Val)
+    (h : (s.liveHeap.conts[i]?).map (·.value) = some (.result v)) :
+    ((runSchedStateP cfg mm env fuel cs s).liveHeap.conts[i]?).map (·.value) = some (.result v) :=
+  (sframe_runSchedStateP cfg mm env fuel cs s).results i v h
 
 end Sched
 
