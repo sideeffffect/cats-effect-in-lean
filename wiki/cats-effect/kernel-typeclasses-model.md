@@ -72,13 +72,15 @@ IO-class entry points: `IO#bracket` 338 → `IO#bracketCase` 370 → `IO.bracket
 ## Findings
 
 - `raceDerivesFromRacePairLeft/Right` (`GenSpawnLaws.scala:28-88`): the law's `results` does not wrap `racePair` in `poll`, but `race` does. The law cannot see the difference: it shows only when someone cancels the racing fiber from outside.
-- The kernel `guaranteeCase` drops a finalizer error with no trace. `IO` reports it (`reportError`). The outcome is the same.
+- The kernel `guaranteeCase` drops a finalizer error with no trace. `IO` reports it (`reportError`). The outcome is the same. Checked in the model (track G): only `Obs.reports` differs.
+- `IO.bracketFull` vs the kernel `bracketFull`: they differ when a cancel is pending after acquire and `use` throws (CE-0005, [guarantee and bracket model](bracket-model.md)).
 - `IO.onError` adds an `IO.unit *>` step when `pf` is not defined. Test this with the difftest before you call it a difference.
 - `GenSpawnTests` has a deprecated `spawn` overload (`:33-127`) without `fiberJoinIsGuaranteeCase`.
 - Lemmas (proven): if an instance keeps the default `guarantee`, `guaranteeIsGuaranteeCase` holds for each reflexive `Eqv`. With the `Uncancelable` mixin, nine `MonadCancel` laws hold the same way. So these laws test something only for an instance that overrides the method. For `IO`, `guaranteeIsGuaranteeCase` compares two different bodies (`IO:496` vs `IO:523`).
 
 ## See Also
 
+- [guarantee and bracket model, CE-0005](bracket-model.md)
 - [Outcome sets, `Eqv` and the IO laws](../semantics/outcome-equivalence.md)
 
 - [Semantics](semantics.md)

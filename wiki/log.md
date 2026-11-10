@@ -131,3 +131,8 @@
 
 ## [2026-11-10] ingest | Phase 6 start: batches and decisions 47-52
 - Updated: Project plan (status)
+
+## [2026-11-10] ingest | Phase 6 track G: guarantee, bracket*, CE-0005
+- Created: guarantee and bracket model, CE-0005
+- Updated: Difftest program format (format v2 ops, failure text of UserError 999998), Resource model (IO#guarantee now mirrored), Kernel typeclasses model (twin results), Bug history (CE-0005)
+- Raw: raw/cats-effect/2026-11-10-track-g-bracket-notes.md

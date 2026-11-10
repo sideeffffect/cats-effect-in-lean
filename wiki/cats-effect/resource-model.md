@@ -74,7 +74,7 @@ Why `EqvP`, not `Eqv` (review batch 2): the right side has one more run-loop ite
 
 ## Limits
 
-- Application of `rel2` (`Resource.scala:490`) is not mirrored: it needs `IO#guarantee` and `reportError` (`ec.reportFailure`). It gives a fatal throw with code 900002. `allocatedCase` never applies `rel2` itself.
+- Application of `rel2` (`Resource.scala:490`) is not mirrored. `IO#guarantee` and `reportError` are mirrored since track G (`Model/Bracket.lean`, `UserEffect.report`; see [guarantee and bracket model](bracket-model.md)); batch 6.2 can use them. It gives a fatal throw with code 900002. `allocatedCase` never applies `rel2` itself.
 - Ill-typed values give a fatal throw with code 900001 (impossible in Scala).
 - Not mirrored: `fold`/`use`, `allocated`, `map`, `both`, `race`, `timeout` (case A). Inventory rows `make`, `flatMap`, `apply*` stay `todo` (mirrored, but no registered property names them).
 
@@ -86,3 +86,4 @@ Why `EqvP`, not `Eqv` (review batch 2): the right side has one more run-loop ite
 - [Scheduler model](scheduler-model.md)
 - [Kernel evaluation of the model](../lean/kernel-evaluation.md)
 - [Registry and audit](../methodology/registry-and-audit.md)
+- [guarantee and bracket model, CE-0005](bracket-model.md)

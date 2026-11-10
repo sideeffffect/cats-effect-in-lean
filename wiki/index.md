@@ -32,6 +32,7 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [Kernel typeclasses model](cats-effect/kernel-typeclasses-model.md) | MonadCancel/GenSpawn ops over abstract F; default-body mirrors; 33 laws as Props with Eqv parameter; IO twin table; unregistered default-instance lemmas | 2026-11-10 |
 | [SyncIO and syncStep model](cats-effect/syncio-and-syncstep-model.md) | SyncIO run loop and SyncStep.interpret (G = SyncIO) mirror; syncStepIdentitySyncIO refuted (CE-0001, reproducer case 4) | 2026-11-10 |
 | [Resource model and CE-0002](cats-effect/resource-model.md) | Resource ADT + allocatedCase mirror (F = IO), closure-id codec; resourceEvalPreservesUncancelable refuted (CE-0002, reproducer case C) | 2026-11-10 |
+| [guarantee and bracket model, CE-0005](cats-effect/bracket-model.md) | IO#guarantee/guaranteeCase/bracket*/IO.bracketFull + kernel twins mirror; UserEffect.report; difftest v2; bracketFull twin refuted (CE-0005), 4 open | 2026-11-10 |
 | [Queue and timeout model](cats-effect/queue-model.md) | UnboundedAsyncQueue + IO#timeout/timeoutTo/never mirror; takeTimeoutNoLostElement refuted by the FIFO schedule (CE-0003) | 2026-11-10 |
 
 ## semantics

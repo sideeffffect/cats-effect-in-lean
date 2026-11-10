@@ -103,6 +103,25 @@ Decision 30: the `syncStep`/`SyncIO`, `Resource` and `Queue` mirrors need diffte
 - Resource restriction (Lean): `REnv.bind`, `REnv.acquire`, `REnv.release` take no heap view. So a program inside a resource node must not read state when Scala builds it (`join`, `cancel`, `deferredGet` at an eager position, `Prog.eagerReads`). Such a case is `unsupported` (`resource-reads-state`). The generator never makes one.
 - Known model bug `idpoll` (2026-11-10): the `Timeout` and `Resource` mirrors build `UnmaskRunLoop(fa, 0, 0)` for the `IdPoll` of `syncStep`, so the root fiber stays masked after it. Shrunk cases: `difftest/corpus/known-idpoll-*.json`. Details: [Difftest v1 notes](../../raw/project-decisions/2026-11-10-difftest-v1-notes.md).
 
+## Format v2 (track G)
+
+Decision 51. New ops (Scala runner, Lean decoder/translator and generator in one change):
+
+| op | fields | term |
+|----|--------|------|
+| `guarantee` | `e`, `fin`, `tag`? | `I(e).guarantee(IO.delay(emit fin) *> I(fin).void)` |
+| `bracket` | `acq`, `x`, `use`, `rel`, `tag`? | `I(acq).bracket(a => I(use)[x := a])(a => IO.delay(emit fin) *> I(rel)[x := a].void)` |
+| `bracketCase` | `acq`, `x`, `use`, `y`, `rel`, `tag`? | `I(acq).bracketCase(a => I(use)[x := a])((a, oc) => ocVal(oc).flatMap(o => IO.delay(emit fin+oc) *> I(rel)[x := a, y := o].void))` |
+| `bracketFull` | `poll`, `acq`, `x`, `use`, `y`, `rel`, `tag`? | `IO.bracketFull(p => I(acq)[poll := p])(…)(…)` (use and release as `bracketCase`) |
+
+- Events: `{"ev":"fin","op":"guarantee"|"bracket","tag":n}`, `{"ev":"fin","op":"bracketCase"|"bracketFull","tag":n,"oc":O}`.
+- `use` does not see `y` or the poll; `rel` sees `x` and `y`.
+- Lean side: the ops run on the mirror `Model/Bracket.lean` (`Bracket.guaranteeIO`, `bracketIO`, `bracketCaseIO`, `bracketFullIO`); `Env.bracketSrcIO` rebuilds `I(e)`, `I(fin)` and `I(acq)` from the build-time snapshot; trace event `TraceEv.finV2`.
+- `Prog.eagerReads`: `guarantee` builds `e` and `fin` at once; `bracket`/`bracketCase` build `acq`.
+- Fixed cases `cases/bracket.jsonl` (`cases/gen_v2.py`). Generator: weights `guarantee`, `bracket*`, `tpl_bracket` (bracket in a child that the parent cancels).
+- Failure text: the value language identifies `UserError(999998)` with `TimeoutException` (`CodeOf`), and the Lean side has one `Err` for both. Since track G the Scala `reportFailure` prints both as `TimeoutException` (found by 2 generated cases: `raise` of a code that `handleErrorWith` bound from a timeout).
+- See [guarantee and bracket model](../cats-effect/bracket-model.md).
+
 ## User function table
 
 `call(fn, v)` first emits `{"ev":"call","fn":fn,"arg":v}`, then applies the function. Lean must implement the same table.
@@ -191,7 +210,7 @@ Code: `tools/Difftest/` (`lean_lib Difftest`, `lean_exe cediff`). It is test cod
 
 ## Limits of v0 and v1
 
-- No `both`, `race`, `bracket`, `IO.blocking`, `evalOn`, `memoize`. Of `Resource` only `allocatedCase` over `pure`/`eval`/`make`/`flatMap` (no `use`, `allocated`, `map`); of `std` only `Queue.unbounded` (`offer`, `take`, `tryTake`).
+- No `both`, `race`, `IO.blocking`, `evalOn`, `memoize`. Of `Resource` only `allocatedCase` over `pure`/`eval`/`make`/`flatMap` (no `use`, `allocated`, `map`); of `std` only `Queue.unbounded` (`offer`, `take`, `tryTake`).
 - `syncStep` only at the root, and only `G = SyncIO` with `unsafeRunSync` (not `to[IO]`).
 - No recursion or loops in the language; programs are finite trees.
 - Replay labels only the root and handled fibers by handle. CE-internal fibers (none in v0 ops except the `racePair` pair) get plain `f<k>` labels.
