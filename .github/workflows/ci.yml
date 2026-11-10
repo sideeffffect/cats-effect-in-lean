@@ -30,8 +30,12 @@ jobs:
         with:
           build-args: "--wfail"
           leanchecker: "true"
+          # Without this, leanchecker looks for a module named after the
+          # package («Cats-effect-in-lean»), which does not exist.
+          leanchecker-args: "CatsEffectInLean"
           axiom-audit: "true"
           axiom-audit-allow: "propext,Classical.choice,Quot.sound"
+          axiom-audit-root: "CatsEffectInLean"
 
       # `lake check` builds in a bwrap sandbox. Ubuntu restricts the user
       # namespaces that bwrap needs, so grant them to bwrap only.
