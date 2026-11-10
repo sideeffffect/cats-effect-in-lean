@@ -98,7 +98,9 @@ def registry : List Entry := [
     thm := some ``Proofs.Calibration.syncStepIdentitySyncIO_refuted
     bug := some "bugs/CE-0001.yaml"
     note := "AsyncLaws.syncStepIdentity for IO#syncStep with G = SyncIO, single-fiber driver, \
-      step-only schedules (no external cancel, decision 26), WellFormed fa/env; counterexample = \
+      step-only schedules (no external cancel, decision 26), WellFormed fa/env with opaque polls \
+      (decision 37), non-fatal errors only (NonFatalOnly, decision 38; fatal errors are CE-0004), \
+      observations up to Poll identity (eraseObs); counterexample = \
       case 4 of reproducers/CE-0001 (IO.uncancelable(_ => IO.canceled *> flag.set(true))). \
       Rows: only those the witness exercises; the SyncIO run-loop rows went back to todo." },
   { id := "kernel.Resource.eval.preservesUncancelable"

@@ -137,9 +137,12 @@ theorem reach_closed : ∀ s ∈ reach, noSusp s = true ∧ nx (.step true) s �
     nx (.step false) s ∈ reach ∧ nx (.cancel 0) s ∈ reach := by
   decide +kernel
 
-/-- No state in `reach` shows the direct observation. -/
-theorem reach_obs : ∀ s ∈ reach, ofSolo s ≠ cxDirect := by
+/-- No state in `reach` shows the direct observation (also with `Poll` values erased). -/
+theorem reach_obs : ∀ s ∈ reach, eraseObs (ofSolo s) ≠ cxDirect := by
   decide +kernel
+
+/-- The direct observation holds no `Poll`. -/
+theorem erase_direct : eraseObs cxDirect = cxDirect := by decide
 
 /-- `reach` is closed under all choices. -/
 theorem nx_mem (c : SoloChoice) (s : S) (hs : s ∈ reach) : nx c s ∈ reach := by
@@ -156,10 +159,10 @@ theorem exec_mem : ∀ (cs : List SoloChoice) (s : S), s ∈ reach →
 
 /-- No stepped run gives the direct observation. -/
 theorem stepped_ne (fuel : Nat) (cs : List SoloChoice) :
-    steppedObs cxEnv cxFa cxLimit cxRefs fuel cs ≠ cxDirect := by
+    eraseObs (steppedObs cxEnv cxFa cxLimit cxRefs fuel cs) ≠ cxDirect := by
   intro heq
   by_cases hf : fuel < 6
-  · simp only [steppedObs, rest_small fuel hf, cxDirect] at heq
+  · simp only [steppedObs, rest_small fuel hf, cxDirect, eraseObs] at heq
     cases heq
   · obtain ⟨m, rfl⟩ : ∃ m, fuel = m + 6 := ⟨fuel - 6, by omega⟩
     simp only [steppedObs, rest_big] at heq
@@ -201,14 +204,20 @@ theorem cx_opaque : WF.PollOpaque cxEnv := by
 theorem cx_wellFormed : WellFormed (fun _ => false) (refHandles cxRefs) cxEnv cxFa :=
   ⟨cx_prog, fun id _ arg v => cx_calls id arg v, cx_opaque⟩
 
-/-- CE-0001: `syncStepIdentity` fails for `IO#syncStep` with `G = SyncIO`. -/
+/-- The witness raises and throws no error at all, so it is in the non-fatal domain. -/
+theorem cx_nonFatal : NonFatalOnly cxEnv cxFa := by
+  refine ⟨by decide, fun id arg v => ?_⟩
+  rcases id with _ | _ | _ | _ | _ | id <;> simp [cxEnv, progNonFatal]
+
+/-- CE-0001: `syncStepIdentity` fails for `IO#syncStep` with `G = SyncIO`, also when all
+errors are non-fatal. -/
 theorem syncStepIdentitySyncIO_refuted : ¬ syncStepIdentitySyncIO := by
   intro h
   obtain ⟨fuel, bs', heq⟩ :=
-    (h cxEnv cxFa cxLimit cxRefs (by decide) cx_wellFormed).1 (List.replicate 6 true)
+    (h cxEnv cxFa cxLimit cxRefs (by decide) cx_wellFormed cx_nonFatal).1 (List.replicate 6 true)
       (by decide +kernel)
   rw [show steps (List.replicate 6 true) = List.replicate 6 (.step true) from rfl,
-    direct_run] at heq
+    direct_run, erase_direct] at heq
   exact stepped_ne fuel (steps bs') heq
 
 end CatsEffectInLean.Proofs.Calibration
