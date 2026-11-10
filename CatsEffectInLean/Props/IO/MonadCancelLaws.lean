@@ -1,4 +1,5 @@
 import CatsEffectInLean.Model.IOInstance
+import CatsEffectInLean.Model.WellFormed
 
 /-!
 # `MonadCancel` laws for `IO` (Phase 4 step 2)
@@ -16,6 +17,11 @@ Cats Effect `v3.7.1`, instantiated at `IO`: `F` is the model's `IO`, each `F.x` 
   id; the hypothesis `IOI.Lam.*` says that `env` runs it as that lambda. Each lambda has its
   own id variable (two ids can be equal only if their lambdas agree). `env` is free on all
   other ids, so `fa` and `fin` can contain any user code.
+- Both sides are `WellFormedIO` (`CatsEffectInLean/Model/WellFormed.lean`, decision 27): the
+  programs and the user code are ones that Scala can write (no forged fiber, `poll` or
+  `ContState` ids, user code reads only through handles it holds). This is a type invariant,
+  not an assumption about the interesting case. A side is well-formed when `fa` and the user
+  functions are; the law adds no other hypothesis.
 - `Eqv` uses the default runtime configuration (`Config`: thresholds 512 and 1024, the
   `TestControl` and default `IORuntime` values) and the `IOFiber` mask model
   (`counterMaskModel`).
@@ -42,6 +48,8 @@ def IOEqv (env : UserEnv) (p q : IO) : Prop :=
 def canceledAssociatesLeftOverFlatMap : Prop :=
   ∀ (env : UserEnv) (fa : IO) (k : Nat),
     IOI.Lam.constProg env k (IOI.void fa) →
+    WellFormedIO env (IOI.flatMap IOI.canceled (.user k)) →
+    WellFormedIO env IOI.canceled →
     IOEqv env (IOI.flatMap IOI.canceled (.user k)) IOI.canceled
 
 /-- `L/MonadCancelLaws.scala:75-76`, at `IO`:
@@ -55,6 +63,8 @@ def forceRCanceledShortCircuits : Prop :=
     IOI.Lam.constProg env h (IOI.pure .unit) →
     IOI.Lam.constProg env k fa →
     IOI.Lam.constProg env k' fa →
+    WellFormedIO env (IOI.forceR IOI.canceled (.user h) (.user k)) →
+    WellFormedIO env (IOI.productR IOI.canceled (.user k')) →
     IOEqv env (IOI.forceR IOI.canceled (.user h) (.user k)) (IOI.productR IOI.canceled (.user k'))
 
 /-- `L/MonadCancelLaws.scala:61-62`, at `IO`:
@@ -68,6 +78,8 @@ def onCancelAssociatesOverUncancelableBoundary : Prop :=
   ∀ (env : UserEnv) (fa fin : IO) (b₁ b₂ : Nat),
     IOI.Lam.constProg env b₁ (IOI.onCancel fa fin) →
     IOI.Lam.constProg env b₂ fa →
+    WellFormedIO env (IOI.uncancelable (.user b₁)) →
+    WellFormedIO env (IOI.onCancel (IOI.uncancelable (.user b₂)) fin) →
     IOEqv env (IOI.uncancelable (.user b₁)) (IOI.onCancel (IOI.uncancelable (.user b₂)) fin)
 
 /-- `L/MonadCancelLaws.scala:32-33`, at `IO`: `F.uncancelable(_(fa)) <-> fa`.
@@ -76,6 +88,8 @@ def onCancelAssociatesOverUncancelableBoundary : Prop :=
 def uncancelablePollIsIdentity : Prop :=
   ∀ (env : UserEnv) (fa : IO) (b : Nat),
     IOI.Lam.pollApply env b fa →
+    WellFormedIO env (IOI.uncancelable (.user b)) →
+    WellFormedIO env fa →
     IOEqv env (IOI.uncancelable (.user b)) fa
 
 end CatsEffectInLean.Props.IO.MonadCancelLaws

@@ -132,8 +132,11 @@ theorem runs_of_nil_pick (env : UserEnv) (io : IO) (o₀ : Obs)
     rw [runObs_pick]
     exact hpick (f + 1) r
 
-theorem canceledAssociatesLeftOverFlatMap_proven : canceledAssociatesLeftOverFlatMap := by
-  intro env fa k _
+/-- The law without the `WellFormedIO` hypotheses: it holds for all model programs and all user
+code, also for programs that Scala cannot write. -/
+theorem canceledAssociatesLeftOverFlatMap_all (env : UserEnv) (fa : IO) (k : Nat)
+    (_ : IOI.Lam.constProg env k (IOI.void fa)) :
+    IOEqv env (IOI.flatMap IOI.canceled (.user k)) IOI.canceled := by
   have hl := outcomes_eq_of_runs {} counterMaskModel env (canceledThen k) canceledObs
     (runs_of_nil_pick env _ _ (canceledThen_runs_nil env k) (canceledThen_runs_pick env k))
     ⟨5, rfl⟩
@@ -142,6 +145,9 @@ theorem canceledAssociatesLeftOverFlatMap_proven : canceledAssociatesLeftOverFla
     ⟨4, rfl⟩
   intro o
   rw [hl o, hr o]
+
+theorem canceledAssociatesLeftOverFlatMap_proven : canceledAssociatesLeftOverFlatMap :=
+  fun env fa k hk _ _ => canceledAssociatesLeftOverFlatMap_all env fa k hk
 
 /-! ## `forceRCanceledShortCircuits` -/
 
@@ -175,8 +181,11 @@ theorem forceRCanceled_runs_pick (fuel : Nat) (r : List RChoice) :
 
 end ForceR
 
-theorem forceRCanceledShortCircuits_proven : forceRCanceledShortCircuits := by
-  intro env fa h k k' _ _ _
+/-- The law without the `WellFormedIO` hypotheses (as `canceledAssociatesLeftOverFlatMap_all`). -/
+theorem forceRCanceledShortCircuits_all (env : UserEnv) (fa : IO) (h k k' : Nat)
+    (_ : IOI.Lam.constProg env h (IOI.pure .unit)) (_ : IOI.Lam.constProg env k fa)
+    (_ : IOI.Lam.constProg env k' fa) :
+    IOEqv env (IOI.forceR IOI.canceled (.user h) (.user k)) (IOI.productR IOI.canceled (.user k')) := by
   have hl := outcomes_eq_of_runs {} counterMaskModel env (forceRCanceled h k) canceledObs
     (runs_of_nil_pick env _ _ (forceRCanceled_runs_nil env h k) (forceRCanceled_runs_pick env h k))
     ⟨6, rfl⟩
@@ -187,5 +196,8 @@ theorem forceRCanceledShortCircuits_proven : forceRCanceledShortCircuits := by
   intro o
   rw [hl o]
   exact (hr o).symm
+
+theorem forceRCanceledShortCircuits_proven : forceRCanceledShortCircuits :=
+  fun env fa h k k' hh hk hk' _ _ => forceRCanceledShortCircuits_all env fa h k k' hh hk hk'
 
 end CatsEffectInLean.Proofs.IO.MonadCancelLaws

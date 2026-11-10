@@ -1,4 +1,5 @@
 import CatsEffectInLean.Model.SyncStep
+import CatsEffectInLean.Model.WellFormed
 
 /-!
 # `syncStepIdentity` for `IO` with `G = SyncIO` (CE-0001)
@@ -21,9 +22,11 @@ the law for that method.
 
 ## Statement
 
-* `fa`, `limit`, the user code `env` and the initial `Ref` cells `refs`: all values, no
-  hypotheses. (The witness of the refutation uses only public constructors, so it also
-  refutes each restriction to public programs.)
+* `fa`, `limit`, the user code `env` and the initial `Ref` cells `refs`: all values. The only
+  hypothesis is the type invariant `WellFormed` (`CatsEffectInLean/Model/WellFormed.lean`,
+  decision 27): `fa` and `env` are a program that Scala can write. The `Ref` cells `refs`
+  exist before `fa` starts, so all of `fa` can hold them (`H0 = refHandles refs`), and their
+  values hold no other handles (`initialRefsOK`). Plain `IO`: no library closures.
 * "stepped" = `fa.syncStep(limit).unsafeRunSync()`, then the selected `IO`
   (`SyncStepObs.steppedObs`); "direct" = `fa` (`SyncStepObs.directObs`). Both `IO` runs are the
   root fiber of the single-fiber driver (`IOFiber` mirror, `counterMaskModel`, default
@@ -44,10 +47,20 @@ namespace CatsEffectInLean.Props.Calibration
 open CatsEffectInLean.Model
 open CatsEffectInLean.Model.SyncStepObs
 
+/-- The handles of the `Ref` cells `refs` (ids `0 .. refs.length - 1`). -/
+def refHandles (refs : List Val) : List Handle := (List.range refs.length).map Handle.ref
+
+/-- The values in the initial `Ref` cells hold only handles of these cells (Scala: before the
+program starts there are no fibers, `Deferred`s, polls or callbacks of it). -/
+def initialRefsOK (refs : List Val) : Bool :=
+  refs.all fun x => x.handles.all fun h => (refHandles refs).contains h
+
 /-- `AsyncLaws.syncStepIdentity` (`AsyncLaws.scala:84-88`) for `IO#syncStep` with
 `G = SyncIO`: the stepped program and `fa` have the same observations over all schedules. -/
 def syncStepIdentitySyncIO : Prop :=
   ∀ (env : UserEnv) (fa : IO) (limit : Int) (refs : List Val),
+    initialRefsOK refs = true →
+    WellFormed (fun _ => false) (refHandles refs) env fa →
     (∀ cs : List SoloChoice, isClaim (directObs env fa refs cs).1 = true →
       ∃ (fuel : Nat) (cs' : List SoloChoice),
         steppedObs env fa limit refs fuel cs' = directObs env fa refs cs) ∧

@@ -380,6 +380,35 @@ def isLibId (id : Nat) : Bool := id % 2 == 1
 /-- The closure value in id `id` (both sides), if `id / 2` is a code. -/
 def cloOfId (id : Nat) : Option Val := natToVal (id / 2)
 
+theorem unlistV_listV (l : List Val) : unlistV (listV l) = some l := by
+  induction l with
+  | nil => rfl
+  | cons a l ih => simp [listV, unlistV, ih]
+
+theorem listV_of_unlistV : ∀ {x : Val} {l : List Val}, unlistV x = some l → listV l = x
+  | .unit, l, h => by simp [unlistV] at h; subst h; rfl
+  | .pair a r, l, h => by
+    simp only [unlistV, Option.map_eq_some_iff] at h
+    obtain ⟨l', hl', rfl⟩ := h
+    simp [listV, listV_of_unlistV hl']
+  | .bool _, _, h | .nat _, _, h | .int _, _, h | .left _, _, h | .right _, _, h
+  | .none, _, h | .some _, _, h | .err _, _, h | .ocSucceeded _, _, h | .ocErrored _, _, h
+  | .ocCanceled, _, h | .fiber _, _, h | .ref _, _, h | .deferred _, _, h | .poll _ _, _, h
+  | .cont _, _, h | .ec _, _, h | .trace, _, h | .runtime, _, h => by simp [unlistV] at h
+
+theorem ofCloVal_cloVal (ns tag : Nat) (fs : List Val) :
+    ofCloVal (cloVal ns tag fs) = some (ns, tag, fs) := by
+  simp [ofCloVal, cloVal, unlistV_listV]
+
+theorem cloVal_of_ofCloVal {c : Val} {ns tag : Nat} {fs : List Val}
+    (h : ofCloVal c = some (ns, tag, fs)) : c = cloVal ns tag fs := by
+  unfold ofCloVal at h
+  split at h
+  · simp only [Option.map_eq_some_iff, Prod.mk.injEq] at h
+    obtain ⟨l, hl, rfl, rfl, rfl⟩ := h
+    simp [cloVal, listV_of_unlistV hl]
+  · cases h
+
 example : natToVal (valToNat (cloVal 1 3 [.ref 4, .poll 2 1])) = some (cloVal 1 3 [.ref 4, .poll 2 1]) := by
   decide +kernel
 

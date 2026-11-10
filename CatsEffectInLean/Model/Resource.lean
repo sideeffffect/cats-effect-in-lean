@@ -1,5 +1,6 @@
 import CatsEffectInLean.Model.IOInstance
 import CatsEffectInLean.Model.Codec
+import CatsEffectInLean.Model.WellFormed
 
 /-!
 # `Resource[IO, A]`: the ADT and `allocatedCase` (CE-0002)
@@ -393,5 +394,30 @@ def REnv.callV (r : REnv) (id : Nat) (arg : Val) (v : View) : UserResult :=
 def REnv.toEnv (r : REnv) : UserEnv where
   call id arg refs := r.callV id arg { refs := refs }
   callV id arg v := r.callV id arg v
+
+/-! ## Well-formed programs (`Model/WellFormed.lean`, decision 27) -/
+
+/-- The library closures of this model: odd ids that decode to a `Clo`. -/
+def isLib (id : Nat) : Bool := isLibId id && ((cloOfId id).bind Clo.ofVal).isSome
+
+/-- A `Resource` value that user code built holds only held handles (`mem`). Its `Allocate`
+user functions are user functions of `REnv.user` (id `k` is `uid k` in programs), its `Eval`
+programs pass `WF.progOK`. `make` names closed programs (`REnv.acquire`, `REnv.release`). -/
+def Res.ok (mem : Handle → Bool) : Res → Bool
+  | .allocate (.user k) => WF.sub mem (WF.captured (2 * k))
+  | .allocate (.make _ _) => true
+  | .bind source _ => Res.ok mem source
+  | .pure a => WF.sub mem a.handles
+  | .eval fa => WF.progOK isLib mem fa
+
+/-- `WellFormed` for a program that uses `Resource`: `WellFormed` with the library closures
+`isLib` and no handles before the start, for `r.toEnv`; and the user parts of `REnv` that are
+pure Lean functions build only well-formed values: an `acquire` program is closed, and
+`release k a` and `bind k a` hold only the handles of `a`. -/
+def REnv.WellFormed (r : REnv) (p : IO) : Prop :=
+  Model.WellFormed isLib [] r.toEnv p ∧
+  (∀ k, WF.progOK isLib (fun _ => false) (r.acquire k) = true) ∧
+  (∀ k a q, r.release k a = .ok q → WF.progOK isLib (a.handles.contains ·) q = true) ∧
+  (∀ k a res, r.bind k a = .ok res → Res.ok (a.handles.contains ·) res = true)
 
 end CatsEffectInLean.Model.Resource

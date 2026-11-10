@@ -25,9 +25,11 @@ typelevel/cats-effect#4627.
 
 ## Statement
 
-* `r : REnv`: all user code (`CatsEffectInLean/Model/Resource.lean`). No hypothesis except
-  that user function `b` is the body `_ => g` and user function `u` is the body `_ => alloc`
-  (`IOI.Lam.constProg`, the project convention for Scala lambdas). `g` is any program.
+* `r : REnv`: all user code (`CatsEffectInLean/Model/Resource.lean`). Hypotheses: user
+  function `b` is the body `_ => g` and user function `u` is the body `_ => alloc`
+  (`IOI.Lam.constProg`, the project convention for Scala lambdas), and the type invariant
+  `REnv.WellFormed` for both sides (decision 27, `CatsEffectInLean/Model/WellFormed.lean`):
+  the programs and the user code are ones that Scala can write. `g` is any such program.
 * `alloc` is the program that `Resource.eval(fa).allocatedCase` builds (`allocatedCase` of
   `Res.evalOf fa`). For `Eval` it never throws; the equation only names the result.
 * `<->` is `Eqv` (`CatsEffectInLean/Model/Outcomes.lean`): the same observations (outcome,
@@ -54,6 +56,8 @@ def resourceEvalPreservesUncancelable : Prop :=
     IOI.Lam.constProg r.user b g →
     allocatedCase r (Res.evalOf (IOI.uncancelable (uid b))) = .ok alloc →
     IOI.Lam.constProg r.user u alloc →
+    r.WellFormed alloc →
+    r.WellFormed (IOI.uncancelable (uid u)) →
     Eqv {} counterMaskModel r.toEnv alloc (IOI.uncancelable (uid u))
 
 end CatsEffectInLean.Props.Calibration

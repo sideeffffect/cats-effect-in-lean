@@ -1,6 +1,7 @@
 import CatsEffectInLean.Std.Queue
 import CatsEffectInLean.Model.Timeout
 import CatsEffectInLean.Model.Outcomes
+import CatsEffectInLean.Model.WellFormed
 
 /-!
 # No lost element: `Queue.take.timeout` canceled from outside (CE-0003)
@@ -39,7 +40,11 @@ queue is returned to a caller of `take`, or it is still in the queue. Support:
   scheduler (`outcomes`: all fuel values and all `pick` lists; the cancel is part of the
   program, so no outside cancel is needed).
 * The program uses only handles it received (decision 22): `q` from `Queue.unbounded`,
-  `consumer` from `start`.
+  `consumer` from `start`. The hypothesis `WellFormed` (decision 27,
+  `CatsEffectInLean/Model/WellFormed.lean`) states this: the program closures `PLam` are user
+  code (even ids) that capture `q` and `consumer` only after they received them; the queue
+  and timeout closures are the library (`isLib`). `WellFormed` holds for every `xs`, `d`, `s`;
+  the hypothesis makes this explicit, and the refutation proves it for its witness.
 * Observation: the program emits the outcome of `consumer.join` and each `tryTake` result
   (`UserEffect.emit`, the trace of the test program). The elements that came back are the
   value of a `Succeeded` outcome and the values of the `Some` results (`returned`).
@@ -88,8 +93,10 @@ inductive PLam where
 def natsV (xs : List Nat) : Val := listV (xs.map .nat)
 
 /-- The inverse of `natsV`. -/
-def ofNatsV (v : Val) : Option (List Nat) :=
-  (unlistV v).bind fun l => l.mapM fun | .nat n => some n | _ => none
+def ofNatsV : Val → Option (List Nat)
+  | .unit => some []
+  | .pair (.nat n) r => (ofNatsV r).map (n :: ·)
+  | _ => none
 
 /-- The closure value (`Codec.cloVal`, namespace `ns`). The handles `q` and `c` are captured
 as `Val.ref q` and `Val.fiber c`. -/
@@ -119,8 +126,10 @@ def drain (q : Nat) : Nat → IO
   | 0 => .pure .unit
   | k + 1 => .flatMap (Std.Queue.tryTakeIO q) (PLam.afterTryTake q k).fn
 
-private def prog (p : IO) (effects : List UserEffect := []) : UserResult := { effects, out := .prog p }
-private def illTyped : UserResult := { out := .throw { code := 999999, kind := .fatal } }
+/-- A result that is a program. -/
+def prog (p : IO) (effects : List UserEffect := []) : UserResult := { effects, out := .prog p }
+/-- A closure got an argument of the wrong shape (a model bug; never in a well-typed program). -/
+def illTyped : UserResult := { out := .throw { code := 999999, kind := .fatal } }
 
 /-- Run one program closure. -/
 def call (l : PLam) (arg : Val) (v : View) : UserResult :=
@@ -175,6 +184,16 @@ def dispatch (id : Nat) (arg : Val) (v : View) : UserResult :=
     else illTyped
   | none => illTyped
 
+/-- The library closures of this model (`WellFormed`): odd ids that decode to a queue closure
+or a timeout closure. -/
+def isLib (id : Nat) : Bool :=
+  isLibId id &&
+    match (cloOfId id).bind ofCloVal with
+    | some (k, tag, fs) =>
+      (k == Std.Queue.ns && (Std.Queue.QLam.ofFields tag fs).isSome) ||
+        (k == Timeout.ns && (Timeout.TLam.ofFields tag fs).isSome)
+    | none => false
+
 /-- The user environment of program A. -/
 def env : UserEnv where
   call id arg refs := dispatch id arg { refs }
@@ -197,6 +216,7 @@ elements, timeouts, sleeps and schedules, a run of program A that ends `Succeede
 each offered element exactly once (to the consumer or to the drain). -/
 def takeTimeoutNoLostElement : Prop :=
   ∀ (xs : List Nat) (d s : Nat) (o : Obs),
+    WellFormed isLib [] env (progA xs d s) →
     outcomes {} counterMaskModel env (progA xs d s) o →
     ∀ v, o.summary = .done (.succeeded v) →
     (returned o.out).Perm xs

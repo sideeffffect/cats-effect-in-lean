@@ -34,15 +34,16 @@ open CatsEffectInLean.Model
 open CatsEffectInLean.Model.SyncStepObs
 open CatsEffectInLean.Props.Calibration
 
-/-- The user code of the counterexample. `0`: the body `_ => IO.canceled *> flag.set(true)`
-(it ignores the `poll`); `*>` is `flatMap(_ => that)` (`IO.scala:138-139`, `IO.scala:903-904`).
-`1`: `_ => flag.set(true)`. `2`: the thunk of `flag.set(true)`, the `IO.delay` of `SyncRef.set`
-(a write to `Ref` cell 0). -/
+/-- The user code of the counterexample (user functions have even ids, `Model/Codec.lean`).
+`0`: the body `_ => IO.canceled *> flag.set(true)` (it ignores the `poll`); `*>` is
+`flatMap(_ => that)` (`IO.scala:138-139`, `IO.scala:903-904`). `2`: `_ => flag.set(true)`.
+`4`: the thunk of `flag.set(true)`, the `IO.delay` of `SyncRef.set` (a write to `Ref` cell 0,
+which exists before the program: `H0`). -/
 def cxEnv : UserEnv where
   call
-    | 0, _, _ => { out := .prog (.flatMap .canceled (.user 1)) }
-    | 1, _, _ => { out := .prog (.delay (.user 2)) }
-    | 2, _, _ => { effects := [.writeRef 0 (.bool true)], out := .ret .unit }
+    | 0, _, _ => { out := .prog (.flatMap .canceled (.user 2)) }
+    | 2, _, _ => { out := .prog (.delay (.user 4)) }
+    | 4, _, _ => { effects := [.writeRef 0 (.bool true)], out := .ret .unit }
     | _, _, _ => { out := .ret .unit }
 
 /-- `IO.uncancelable(body)` = `Uncancelable(body)` (`IO.scala:1712-1713`). -/
@@ -62,7 +63,7 @@ theorem direct_run : directObs cxEnv cxFa cxRefs (List.replicate 6 (.step true))
   decide +kernel
 
 /-- The rest that the stepped side runs: `IO.canceled.flatMap(_ => flag.set(true))`. -/
-def cxRest : IO := .flatMap .canceled (.user 1)
+def cxRest : IO := .flatMap .canceled (.user 2)
 
 /-- With `SyncIO` fuel `m + 6`, `syncStep(Int.MaxValue).unsafeRunSync()` gives `Left(cxRest)`
 and does not change the heap. -/
@@ -163,11 +164,36 @@ theorem stepped_ne (fuel : Nat) (cs : List SoloChoice) :
     simp only [steppedObs, rest_big] at heq
     exact reach_obs _ (exec_mem cs s0 (by decide +kernel)) heq
 
+/-! ## The witness is well-formed -/
+
+theorem captured_small : WF.captured 0 = [] ∧ WF.captured 2 = [] ∧ WF.captured 4 = [] := by
+  decide +kernel
+
+/-- The start program passes `progOK` (decidable). -/
+theorem cx_prog : WF.progOK (fun _ => false) ((refHandles cxRefs).contains ·) cxFa = true := by
+  decide +kernel
+
+/-- Each user function of `cxEnv` passes `CallOK`: it ignores the view; its effects and its
+result use only `Ref` cell 0, which is in `H0`. -/
+theorem cx_calls (id : Nat) (arg : Val) (v : View) :
+    WF.CallOK (fun _ => false) (refHandles cxRefs) cxEnv id arg v := by
+  obtain ⟨c0, c2, c4⟩ := captured_small
+  refine ⟨fun w _ => ?_, ?_⟩
+  · rcases id with _ | _ | _ | _ | _ | id <;> rfl
+  · rcases id with _ | _ | _ | _ | _ | id <;>
+      simp [WF.ResultOK, WF.EffectsOK, WF.OutOK, cxEnv, WF.progOK, WF.fnOK, WF.sub, c2, c4,
+        Val.handles]
+    exact WF.reach_of_mem (by simp [refHandles, cxRefs])
+
+theorem cx_wellFormed : WellFormed (fun _ => false) (refHandles cxRefs) cxEnv cxFa :=
+  ⟨cx_prog, fun id _ arg v => cx_calls id arg v⟩
+
 /-- CE-0001: `syncStepIdentity` fails for `IO#syncStep` with `G = SyncIO`. -/
 theorem syncStepIdentitySyncIO_refuted : ¬ syncStepIdentitySyncIO := by
   intro h
   obtain ⟨fuel, cs', heq⟩ :=
-    (h cxEnv cxFa cxLimit cxRefs).1 (List.replicate 6 (.step true)) (by decide +kernel)
+    (h cxEnv cxFa cxLimit cxRefs (by decide) cx_wellFormed).1 (List.replicate 6 (.step true))
+      (by decide +kernel)
   rw [direct_run] at heq
   exact stepped_ne fuel cs' heq
 

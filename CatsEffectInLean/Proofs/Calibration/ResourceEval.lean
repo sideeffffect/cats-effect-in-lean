@@ -125,12 +125,45 @@ theorem rhs_succ : runObs {} counterMaskModel r.toEnv 8 [] (IOI.uncancelable (ui
     some succObs := by
   decide +kernel
 
+/-! ### The witness is well-formed -/
+
+theorem ids_ok : isLib 279459022985 = true ∧ WF.captured 279459022985 = [] ∧
+    WF.captured 0 = [] ∧ WF.captured 2 = [] := by
+  decide +kernel
+
+/-- User code (even ids) of `r.toEnv` passes `CallOK`: it ignores the view, has no effects, and
+returns `IO.canceled`, `alloc` (only library closures without handles), or a throw. -/
+theorem r_calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
+    WF.CallOK isLib [] r.toEnv id arg v := by
+  obtain ⟨hl, hc, hc0, _⟩ := ids_ok
+  have he : ∀ w, r.toEnv.callV id arg w = user.call (id / 2) arg w.refs := by
+    intro w; simp [REnv.toEnv, REnv.callV, hid, r]; rfl
+  refine ⟨fun w _ => ?_, ?_⟩
+  · rw [he, he]
+    rcases id / 2 with _ | _ | k <;> rfl
+  · rw [he]
+    rcases id / 2 with _ | _ | k <;>
+      simp [user, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK, WF.sub, alloc, fa,
+        IOI.uncancelable, uid, hl, hc, hc0]
+
+theorem r_wellFormed (p : IO) (hp : WF.progOK isLib (fun h => ([] : List Handle).contains h) p = true) :
+    r.WellFormed p := by
+  refine ⟨⟨hp, fun id hid arg v => r_calls id hid arg v⟩, fun _ => rfl, ?_, ?_⟩
+  · intro _ _ q h; cases h; rfl
+  · intro _ _ _ h; cases h
+
+theorem alloc_wellFormed : r.WellFormed alloc := r_wellFormed alloc (by decide +kernel)
+
+theorem rhs_wellFormed : r.WellFormed (IOI.uncancelable (uid 1)) :=
+  r_wellFormed _ (by decide +kernel)
+
 end ResourceEvalWitness
 
 open ResourceEvalWitness in
 theorem resourceEvalPreservesUncancelable_refuted : ¬ resourceEvalPreservesUncancelable := by
   intro h
   have hE := h r 0 1 .canceled alloc (fun _ _ => rfl) allocatedCase_eq (fun _ _ => rfl)
+    alloc_wellFormed rhs_wellFormed
   have hR : outcomes {} counterMaskModel r.toEnv (IOI.uncancelable (uid 1)) succObs :=
     ⟨8, [], fun _ hc => absurd hc List.not_mem_nil, rhs_succ⟩
   obtain ⟨fuel, cs, hcs, heq⟩ := (hE succObs).2 hR
