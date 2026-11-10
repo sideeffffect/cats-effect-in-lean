@@ -10,7 +10,7 @@ How this project works: synthesis, agent loop, difftest design. Start here.
 | [Agent workflow and review protocol](methodology/agent-workflow.md) | Inventory → mirror → difftest → prove/refute → review; rubric; bug records; no upstream filing | 2026-11-10 |
 | [Project plan](methodology/project-plan.md) | Step-by-step plan: phases 0–9, gates, risks, user decisions; started 2026-11-10 | 2026-11-10 |
 | [Phase 5 gate report](methodology/phase5-gate-report.md) | Gate PASS (review batch 3), user-approved 2026-11-10: 9/9 FAITHFUL, 3 calibration bugs refuted + reproduced, CE-0004, metrics, caveats | 2026-11-10 |
-| [Differential testing](methodology/differential-testing.md) | Planned Lean-vs-CE difftest harness, nondeterminism handling, triage bins | 2026-11-10 |
+| [Differential testing](methodology/differential-testing.md) | Lean-vs-CE difftest harness, generator, driver, results; v1 ops ≥ 65,960 agreeing cases each; preempt coverage via small runtime thresholds; triage bins | 2026-11-10 |
 | [Difftest program format v0](methodology/difftest-program-format.md) | JSON AST v0 (values, ops → exact IO terms, user-fn table, trace events); Scala runner modes replay/testcontrol; commands, limits | 2026-11-10 |
 | [Inventory](methodology/inventory.md) | inventory/inventory.csv: columns, scope, exclusion rules, how to regenerate, counts (3,255 rows) | 2026-11-10 |
 | [Registry and audit](methodology/registry-and-audit.md) | Registry Entry fields; audit checks exact theorem type, axioms, module prefixes, bug record, inventory cross-check; self-test fixtures; CI | 2026-11-10 |

@@ -1,7 +1,7 @@
 # Differential testing of the Lean model against Cats Effect
 
-> Sources: synthesized from wiki articles on python-formalization, julia-in-lean, formalization precedents, CE source layout, Lean tooling (2026-11-10); TestControl spike (2026-11-10); generator and driver build (2026-11-10); first Lean-vs-Scala replay runs (2026-11-10); generator coverage work (2026-11-10); `RacePair`/`Sleep` runs (2026-11-10); format v1 runs (`syncStep`, `Resource`, `Queue`, `timeout`; 2026-11-10)
-> Raw: [Difftest v1 notes](../../raw/project-decisions/2026-11-10-difftest-v1-notes.md); [RacePair and Sleep notes](../../raw/cats-effect/2026-11-10-racepair-sleep-notes.md); [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Generator coverage notes](../../raw/project-decisions/2026-11-10-generator-coverage-notes.md); [Generator and driver notes](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [python-formalization difftest harness](../../raw/python-formalization/2026-10-29-lean-core-and-difftest-harness.md); [Harness code copy](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [Cedar DRT + Lean FFI](../../raw/lean-tooling/cedar-spec-drt-and-lean-ffi-readmes.md); [TestControl docs](../../raw/lean-tooling/cats-effect-testcontrol-docs.md); [TestControl spike notes](../../raw/cats-effect/2026-11-10-testcontrol-spike-notes.md); [Netsem](../../raw/formalization-precedents/2018-10-netsem-engineering-with-logic-tcp-test-oracle.md); [SibylFS](../../raw/formalization-precedents/2015-10-sibylfs-formal-spec-oracle-based-testing-posix.md); [Orchestrator merge notes](../../raw/project-decisions/2026-11-10-orchestrator-merge-notes.md); [idpoll notes](../../raw/project-decisions/2026-11-10-idpoll-fix-notes.md)
+> Sources: synthesized from wiki articles on python-formalization, julia-in-lean, formalization precedents, CE source layout, Lean tooling (2026-11-10); TestControl spike (2026-11-10); generator and driver build (2026-11-10); first Lean-vs-Scala replay runs (2026-11-10); generator coverage work (2026-11-10); `RacePair`/`Sleep` runs (2026-11-10); format v1 runs (`syncStep`, `Resource`, `Queue`, `timeout`; 2026-11-10); difftest depth, `timeoutTo` mirror and `runtime` thresholds (track D, 2026-11-10)
+> Raw: [Difftest depth notes (track D)](../../raw/project-decisions/2026-11-10-difftest-depth-track-d-notes.md); [Difftest v1 notes](../../raw/project-decisions/2026-11-10-difftest-v1-notes.md); [RacePair and Sleep notes](../../raw/cats-effect/2026-11-10-racepair-sleep-notes.md); [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Generator coverage notes](../../raw/project-decisions/2026-11-10-generator-coverage-notes.md); [Generator and driver notes](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [python-formalization difftest harness](../../raw/python-formalization/2026-10-29-lean-core-and-difftest-harness.md); [Harness code copy](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [Cedar DRT + Lean FFI](../../raw/lean-tooling/cedar-spec-drt-and-lean-ffi-readmes.md); [TestControl docs](../../raw/lean-tooling/cats-effect-testcontrol-docs.md); [TestControl spike notes](../../raw/cats-effect/2026-11-10-testcontrol-spike-notes.md); [Netsem](../../raw/formalization-precedents/2018-10-netsem-engineering-with-logic-tcp-test-oracle.md); [SibylFS](../../raw/formalization-precedents/2015-10-sibylfs-formal-spec-oracle-based-testing-posix.md); [Orchestrator merge notes](../../raw/project-decisions/2026-11-10-orchestrator-merge-notes.md); [idpoll notes](../../raw/project-decisions/2026-11-10-idpoll-fix-notes.md)
 
 ## Overview
 
@@ -38,6 +38,7 @@ Both agent precedents and Cedar require the model to agree with the real impleme
 - Edge-case templates: escaped poll (`uncancelable(p => start(child that uses p))`, also poll inside the child's finalizer), finalizer stacks (1-3 onCancel/guaranteeCase layers around a suspend or cancel point; finalizers raise, suspend, or use an outer poll), cancel child, racePair with the loser in scope, Deferred handoff, Ref updates in parent and child. Async: 0-3 callbacks, sync or later, ok or err, 60% with a finalizer.
 - Schedule per case: a choice list (80%), with 1-3 external `{"cancel":h}` choices in 50% of cases (root, a child, or an unknown handle), mostly at steps 1-3. 3% get `maxSteps` 1-5.
 - `to_testcontrol(case, seed)` gives the same program in testcontrol mode (no external cancel there).
+- Small runtime thresholds (track D): 25 % of cases get a `runtime` field (`CONFIG['p_runtime']`, own RNG, so the rest of the case does not change). Section "Preempt coverage".
 - Format v1 (decision 30, [format](difftest-program-format.md) section "Format v1"): 9 % of roots are `syncStep(prog, limit)` (limit 0-10 or `Int.MaxValue`); `timeout`/`timeoutTo` around any program (the source often first sleeps, cedes or never ends, so the timeout fires); queue types in `bind`, queue ops on queues in scope, and `tpl_queue` (consumers `take` or `take.timeout` in started fibers; the parent offers, cancels, joins, drains with `tryTake`: the CE-0003 shape); `allocatedCase` of resource trees (`g_res`), and `tpl_resource` (`make`, then a rest that fails, is canceled or waits, so the release runs). Programs inside resource nodes see no fiber or `Deferred` variables (the Lean resource restriction). A marker `MARK_REL` shows a release that ran.
 - Long-lived scenarios (decision 17). An external cancel acts only between tasks, and most old programs ended in their first task. So 60% of root programs are a `tpl_scenario`: the parent starts a child, cedes n times, cancels it (`cancel f`, or an external choice at a hinted step), and often joins it. Child kinds: `masked` (uncancelable region with cedes), `fin` (cancel in the core or inside a `guaranteeCase` finalizer with cedes; sometimes a second canceler fiber), `cb` (waits in an async with a later callback and a finalizer), `nested` (started a grandchild), `escpoll` (escaped poll used in its finalizer), `complete` (parent and child both complete a Deferred). n is in a window such that, under FIFO, the cancel lands at the planned point. 70% of these cases get mostly-FIFO picks. The template is also a normal production (internal cancel only). Mean program size went from 14 to 26 nodes.
 - Markers: `delay fn1 arg nat M` (M ≥ 7.7·10^9 encodes kind, region id, enter/exit) around uncancelable bodies and finalizers, in escaped-poll finalizers, and before a join result; `delay fn1 arg f` before `cancel f`. They only add `call` events. They let `coverage.py` see what ran.
@@ -88,8 +89,43 @@ Replay mode, all nine fields compared. Details: [First difftest agreement notes]
 - Mutation test (one planted bug in `Step.lean`, 8,153 runnable cases): 9 of 13 mutants killed (12 to 250 mismatches each). 3 survivors are equivalent in single-thread replay. 1 was a coverage gap (2+ fibers waiting on one `Deferred` at `complete`); `difftest/cases/deferred.jsonl` now kills it.
 - Mutation test of `RacePair`/`Sleep` (seed 1, 10,000 cases): 9 of 11 mutants killed (7 to 263 mismatches). 2 survive generated cases (wake order of timers with one due time); `racesleep.jsonl` (`sleep-order`) kills them.
 - Format v1 ([notes](../../raw/project-decisions/2026-11-10-difftest-v1-notes.md)): the first runs of the `syncStep`, `Resource`, `Queue` and `timeout` mirrors found one model bug, `idpoll`: the `Timeout` and `Resource` mirrors (and `Std/Queue.lean`, not visible in runs) turn `poll(fa)` with the `IdPoll` of `syncStep` into `UnmaskRunLoop(fa, 0, 0)`, so the root fiber stays masked. It is not fixed here (the difftest does not edit `CatsEffectInLean/`); 3 shrunk cases are in the corpus. Static coverage per case (seeds 1-6 × 10,000): `syncStep` 9.2 %, `timeout` 12.5 %, `timeoutTo` 1.7 %, `queueNew` 9.0 %, `queueOffer` 5.8 %, `queueTake` 8.3 %, `queueTryTake` 6.1 %, `allocatedCase` 17.3 %, `rPure` 5.6 %, `rEval` 10.5 %, `rMake` 12.1 %, `rFlatMap` 9.3 %. Run events (seed 1 × 3,000): `TimeoutException` seen 2.1 %, a `Resource` release ran 1.5 %. Mutation check of the v1 glue (seed 1 × 10,000): `timeout` with `ms + 1` killed (307 mismatches); `syncStep` with `limit + 1` killed weakly (5 mismatches).
-- CI job `difftest` runs `check` on the fixed files (`basic`, `sched`, `deferred`, `racesleep`, `syncstep`, `resource`, `queue`), the corpus, and 3 × 2,000 generated replay cases. Any mismatch fails the job.
-- The 50,000-case gate is met for the replay mode, all ops (150,000 cases after `RacePair`/`Sleep`). Format v1: met with 58,946 agreeing cases over 6 seeds, except for `syncStep` programs that contain `timeout` or `allocatedCase` (known model bug `idpoll`) and `timeoutTo` (not mirrored). Still open: testcontrol refinement, and the coverage gaps of decision 17.
+- CI job `difftest` runs `check` on the fixed files (`basic`, `sched`, `deferred`, `racesleep`, `syncstep`, `resource`, `queue`, `preempt`), the corpus, and 3 × 2,000 generated replay cases with `--min-v1-agree 150` (lowest op now 323). Any mismatch fails the job.
+- The 50,000-case gate is met for the replay mode, all ops (150,000 cases after `RacePair`/`Sleep`). Format v1 per op (track D, below): each v1 op is in more than 50,000 agreeing cases over 12 seeds. Still open: testcontrol refinement, and refinement against the multi-threaded runtime.
+
+### Format-v1 depth (track D, 2026-11-10)
+
+Phase 5 gate caveat 4. `drive.py run` now prints the agreeing cases per format-v1 op (`--json`: `v1_op_agree`); `--min-v1-agree N` fails the run if an op has fewer. Details: [Difftest depth notes (track D)](../../raw/project-decisions/2026-11-10-difftest-depth-track-d-notes.md).
+
+| op | before: seeds 1-6 × 10,000 | after: seeds 101-112 × 100,000 |
+|----|------:|------:|
+| syncStep | 5,392 | 108,490 |
+| timeout | 7,311 | 153,662 |
+| timeoutTo | 0 (unsupported) | 68,647 |
+| queueNew | 5,241 | 108,973 |
+| queueOffer | 3,348 | 70,928 |
+| queueTake | 4,835 | 100,409 |
+| queueTryTake | 3,586 | 74,189 |
+| allocatedCase | 10,082 | 208,695 |
+| rPure | 3,263 | 65,960 |
+| rEval | 6,108 | 127,666 |
+| rMake | 7,067 | 147,068 |
+| rFlatMap | 5,439 | 112,859 |
+
+- After: 1,200,000 of 1,200,000 cases agree (25 % with small `runtime` thresholds). Each op has more than 5,000 agreeing cases in each seed.
+- `timeoutTo` with a user fallback is now mirrored (`Timeout.timeoutToIO`); generator weight 0.35 → 1.2 (it was low only because the op was unsupported).
+- Two glue bugs, found by the first 1.2 million run (5 mismatches), fixed; corpus entries `fixed-gcfin-snapshot-*`, `fixed-usererr-999998-*`:
+  - `gcFinThen` built `run(fin)` of `guaranteeCase` one closure late. `*>` takes its argument by value, so Scala builds it in the closure before. An auto-yield in between showed it (only with small thresholds).
+  - `UserError(999998)` had the Lean code of the model `TimeoutException` (`10^6 = 999998 + 2`), so `failures` printed `TimeoutException`. A program can catch a timeout (`nat 999998`) and raise it again.
+- Lesson: a comment "nothing else runs in between" was a schedule assumption. Small runtime thresholds test such assumptions cheaply.
+
+## Preempt coverage (track D, 2026-11-10)
+
+Phase 5 gate caveat 3: `preempt` choices of `Model/SchedP.lean` had no difftest.
+
+- An auto-yield (`IOFiber.scala:224-240`) and `SchedP.preemptRun` build the same fiber record (`resumeTag = AutoCedeR`, `resumeIO = _cur0`, enqueue; `Step.lean:1141-1144`). `IORuntimeConfig().copy(cancelationCheckThreshold = c, autoYieldThreshold = a)` is public, so a small `a` puts this transition after every few run-loop iterations, on the real runtime and on the model, in exact replay mode.
+- Case field `runtime` ([format](difftest-program-format.md), "Test case and run modes"); fixed cases `difftest/cases/preempt.jsonl` (14 cases: two children, a cancel that lands between two `delay`s, a masked child, `timeoutTo`).
+- Covered: preemption at many positions (periods 2-32 iterations), combined with picks and external cancels. About 300,000 agreeing generated cases in the 1.2 million run.
+- Not covered: a preemption with a pending cancel from another thread (`Loop.flush`); true parallel runs. Refinement against the multi-threaded runtime needs a compiled bounded `exploreP` with a `complete` flag; estimate 2-3 agent days (raw note).
 
 ## Triage bins for a mismatch
 
