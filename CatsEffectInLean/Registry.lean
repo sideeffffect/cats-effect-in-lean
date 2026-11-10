@@ -219,7 +219,7 @@ def registry : List Entry := [
       checkEqvP in the kernel (decide +kernel hit the deterministic timeout after 8 min; the \
       compiled exploreP had 994 states after 800 expansions, not closed). Track P: the full closed \
       set has 4,441 states (11 halted); checkEqvP dedups by list membership, too slow in the \
-      kernel. Gap: a certificate checker or a quotient by the run-loop counters." }
+      kernel. Gap: a certificate checker or a quotient by the run-loop counters." },
   -- Phase 6, track G (guarantee, bracket*)
   { id := "core.IO.bracketFull.kernelDefaultTwin"
     rows := ["core.IO.bracketFull", "core.IO.IOAsync.bracketFull", "kernel.MonadCancel.bracketFull"]
