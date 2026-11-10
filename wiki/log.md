@@ -125,3 +125,6 @@
 
 ## [2026-11-10] ingest | User answers Q1–Q3
 - Updated: Project plan, Inventory (out-of-scope transformers, regeneration hazard), Proof hygiene (sorryAx), Outcome sets and Eqv (law context)
+
+## [2026-11-10] ingest | User approves the Phase 5 gate
+- Updated: Phase 5 gate report (approved), Project plan (status: Phase 6 next)

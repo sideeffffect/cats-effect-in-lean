@@ -1,11 +1,11 @@
 # Phase 5 gate report (2026-11-10)
 
 > Sources: own gate summary from the registry, inventory, difftest runs, reproducers and review batches 1–3 (2026-11-10)
-> Raw: [Phase decisions](../../raw/project-decisions/2026-11-10-phase0-decisions.md); [Review batch 3 notes](../../raw/project-decisions/2026-11-10-review-batch-3-notes.md); [CI memory notes](../../raw/project-decisions/2026-11-10-ci-memory-split-notes.md)
+> Raw: [Phase 5 gate approval](../../raw/project-decisions/2026-11-10-phase5-gate-approval.md); [Phase decisions](../../raw/project-decisions/2026-11-10-phase0-decisions.md); [Review batch 3 notes](../../raw/project-decisions/2026-11-10-review-batch-3-notes.md); [CI memory notes](../../raw/project-decisions/2026-11-10-ci-memory-split-notes.md)
 
 ## Overview
 
-Phases 0–5 ran autonomously on 2026-11-10. Review batch 3 says the Phase 5 gate **passes**. This page is the input for the user review. No Phase 6 work starts before the user says so.
+Phases 0–5 ran autonomously on 2026-11-10. Review batch 3 says the Phase 5 gate **passes**. This page was the input for the user review. **The user approved the gate on 2026-11-10** ([approval](../../raw/project-decisions/2026-11-10-phase5-gate-approval.md)). Phase 6 may start.
 
 ## Headline numbers
 
