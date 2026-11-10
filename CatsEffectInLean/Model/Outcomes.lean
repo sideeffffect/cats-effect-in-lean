@@ -1,4 +1,4 @@
-import CatsEffectInLean.Model.Sched
+import CatsEffectInLean.Model.SchedP
 
 /-!
 # Outcome sets and the law equivalence `Eqv` (Phase 2 step 10, Phase 4 step 2)
@@ -55,10 +55,18 @@ code cannot do this. `Eqv` itself does not exclude these programs; the registere
 add the hypothesis `WellFormed` (`CatsEffectInLean/Model/WellFormed.lean`, decision 27), which
 excludes them.
 
-Known gap (decision 29, not done): `Eqv` still sees run-loop iteration counts through the
-auto-yield position when the program has more than one fiber. With well-formed programs,
-`uncancelable(poll => poll(fa))` and `fa` differ for `fa = start(emit 9) >> emit 1 >> 508
-flatMaps >> emit 2` (left side also has the trace `[1, 9, 2]`).
+Known gap of `Eqv`: it sees run-loop iteration counts through the auto-yield position when the
+program has more than one fiber. With well-formed programs, `uncancelable(poll => poll(fa))`
+and `fa` differ for `fa = start(emit 9) >> emit 1 >> 508 flatMaps >> emit 2` (left side also
+has the trace `[1, 9, 2]`).
+
+## `EqvP`: the law equivalence with preemption (decisions 29, 36)
+
+`outcomesP` and `EqvP` use the preemptive scheduler (`CatsEffectInLean/Model/SchedP.lean`):
+all fuel values and all lists of `PChoice` (`pick n` and `preempt`). A preemption can come
+between any two run-loop iterations, as on the multi-threaded runtime, so the auto-yield
+position does not matter any more. `EqvP` is the `<->` of the registered properties. The
+observation is the same `Obs`. There is no outside cancel and no task limit.
 -/
 
 namespace CatsEffectInLean.Model
@@ -135,6 +143,30 @@ theorem Eqv.symm {p q : IO} (h : Eqv cfg mm env p q) : Eqv cfg mm env q p :=
 
 theorem Eqv.trans {p q r : IO} (h₁ : Eqv cfg mm env p q) (h₂ : Eqv cfg mm env q r) :
     Eqv cfg mm env p r :=
+  fun o => (h₁ o).trans (h₂ o)
+
+/-- Run root program `io` for `fuel` micro-steps of the preemptive scheduler with choices `cs`
+and give the observation. -/
+def runObsP (fuel : Nat) (cs : List PChoice) (io : IO) : Option Obs :=
+  (runSchedStateP cfg mm env fuel cs (Sched.init mm io)).obs
+
+/-- The outcome set of `io` over all schedules with preemption: `o` is in it if some fuel and
+some list of `PChoice` give observation `o`. -/
+def outcomesP (io : IO) (o : Obs) : Prop :=
+  ∃ (fuel : Nat) (cs : List PChoice), runObsP cfg mm env fuel cs io = some o
+
+/-- The law equivalence `<->` for `IO` with preemption at any run-loop iteration
+(decisions 29, 36): the two programs have the same `outcomesP` set. -/
+def EqvP (p q : IO) : Prop :=
+  ∀ o, outcomesP cfg mm env p o ↔ outcomesP cfg mm env q o
+
+theorem EqvP.refl (p : IO) : EqvP cfg mm env p p := fun _ => Iff.rfl
+
+theorem EqvP.symm {p q : IO} (h : EqvP cfg mm env p q) : EqvP cfg mm env q p :=
+  fun o => (h o).symm
+
+theorem EqvP.trans {p q r : IO} (h₁ : EqvP cfg mm env p q) (h₂ : EqvP cfg mm env q r) :
+    EqvP cfg mm env p r :=
   fun o => (h₁ o).trans (h₂ o)
 
 /-- A pick-only schedule is also an `outcomesExt` schedule. -/

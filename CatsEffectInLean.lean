@@ -21,8 +21,10 @@ import CatsEffectInLean.Kernel.GenSpawn
 import CatsEffectInLean.Props.Kernel.MonadCancelLaws
 import CatsEffectInLean.Props.Kernel.GenSpawnLaws
 import CatsEffectInLean.Proofs.Kernel.MonadCancelDefaults
+import CatsEffectInLean.Model.SchedP
 import CatsEffectInLean.Model.Outcomes
 import CatsEffectInLean.Model.Enum
+import CatsEffectInLean.Model.EnumP
 import CatsEffectInLean.Model.IOInstance
 import CatsEffectInLean.Model.EnumExamples
 import CatsEffectInLean.Props.IO.MonadCancelLaws
