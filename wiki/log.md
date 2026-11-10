@@ -157,3 +157,7 @@
 - Created: memoize model and CE-0030
 - Updated: Bug history (CE-0030, memoize issue history), Difftest program format (ops `memoize`, `memoGet`; `Deferred` and memo handle renumbering)
 - Raw: raw/cats-effect/2026-11-10-memoize-track-m-notes.md
+
+## [2026-11-10] ingest | Review batch 4 (13 Phase 6 entries; 2 HOLLOW)
+- Updated: Agent workflow (review log: CE-0030 and CE-0005 FAITHFUL; bracket.releaseOnce and guarantee.finalizerOnce vacuous; satisfiability-witness check)
+- Raw: raw/project-decisions/2026-11-10-review-batch-4-notes.md
