@@ -3,10 +3,12 @@ import Difftest.Translate
 /-!
 # The user environment of a difftest program
 
-`denv p id arg refs` runs closure `id` (`Clo.decode?`) of program `p`. It mirrors the Scala
-lambda named in `Lam`. `userEnv p` is the `Model.UserEnv`: the same results without the trace
-and `reportFailure` lists, because `UserEffect` has no case for them yet
-(`wiki/methodology/difftest-program-format.md`, "Lean side").
+`denv p id arg vw` runs closure `id` (`Clo.decode?`) of program `p` with the view `vw` (the
+`Ref` cells, fiber outcomes and `Deferred` cells that user code sees). It mirrors the Scala
+lambda named in `Lam`. `userEnv p` is the `Model.UserEnv`: trace events and `reportFailure`
+calls become `UserEffect.emit` effects (`TraceEv.toVal`), before the other effects
+(`DResult.toUser`). The `async` registration puts its events in `effects` itself, in Scala
+order.
 -/
 
 namespace Difftest
@@ -25,8 +27,14 @@ def ret (v : Val) (trace : List TraceEv := []) : DResult := { base := { out := .
 /-- Return a program. -/
 def prog (io : IO) : DResult := { base := { out := .prog io } }
 
-/-- Run closure `c` (made by node `n` of the program) on `arg` with `Ref` snapshot `refs`. -/
-def runClo (c : Clo) (n : Prog) (arg : Val) (refs : List Val) : DResult :=
+/-- The model result: trace events and failures become `emit` effects, first. -/
+def DResult.toUser (r : DResult) : UserResult :=
+  { r.base with effects := r.trace.map (.emit ∘ TraceEv.toVal)
+      ++ r.failures.map (.emit ∘ TraceEv.toVal ∘ .failure) ++ r.base.effects }
+
+/-- Run closure `c` (made by node `n` of the program) on `arg` with view `vw`. -/
+def runClo (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
+  let refs := vw.refs
   let node := c.node
   let env := c.vals
   match c.lam, n with
@@ -34,13 +42,13 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (refs : List Val) : DResult :=
     match atomVal env a with
     | .ok v => callUser fn v
     | .error e => ofTr (.error e)
-  | .bindK, .bind e k => ofTr (tr k (node + 1 + e.size) (arg :: env))
-  | .seqK, .seq e k => ofTr (tr k (node + 1 + e.size) env)
+  | .bindK, .bind e k => ofTr (tr k (node + 1 + e.size) (arg :: env) vw)
+  | .seqK, .seq e k => ofTr (tr k (node + 1 + e.size) env vw)
   | .mapFn, .map _ fn => callUser fn arg
   | .hewK, .handleErrorWith e k =>
     match arg with
     | .err t => match userCode? t with
-      | some c => ofTr (tr k (node + 1 + e.size) (.nat c :: env))
+      | some c => ofTr (tr k (node + 1 + e.size) (.nat c :: env) vw)
       | none => prog (.error t)
     | _ => DResult.harness
   | .attemptMap, .attempt _ =>
@@ -50,10 +58,14 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (refs : List Val) : DResult :=
       | some c => ret (.left (.nat c))
       | none => { base := { out := .throw t } }
     | _ => DResult.harness
-  | .uncBody, .uncancelable body => ofTr (tr body (node + 1) (arg :: env))
+  | .uncBody, .uncancelable body => ofTr (tr body (node + 1) (arg :: env) vw)
   | .ocFinEmit, .onCancel _ _ tag => ret .unit [.finOnCancel tag]
   | .ocFinThen, .onCancel e fin _ =>
-    ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr fin (node + 1 + e.size) env)
+    -- `run(fin)` was built with the `onCancel` term: use the captured snapshot
+    match env with
+    | snap :: env0 =>
+      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr fin (node + 1 + e.size) env0 (snapView snap))
+    | [] => DResult.harness
   | .voidFn, _ => ret .unit
   | .asUnit, _ => ret .unit
   | .gcBody, .guaranteeCase e _ _ =>
@@ -62,13 +74,14 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (refs : List Val) : DResult :=
     -- `finalized.onError(onError).flatTap(a => finalizer(Outcome.succeeded(IO.pure(a))))`
     -- `onError(pf) = handleErrorWith(t => pf.applyOrElse(t, …) *> IO.raiseError(t))`
     -- (`IO.scala:605-606`); `flatTap(f) = flatMap(a => f(a).as(a))` (`IO.scala:474`).
-    match arg with
-    | .poll m f =>
+    -- `run(e)` was built with the `guaranteeCase` term: use the captured snapshot
+    match arg, env with
+    | .poll m f, snap :: env =>
       ofTr ((fun ie =>
         let finalized := IO.onCancel (.unmaskRunLoop ie m f) (gcFinalizer node env .ocCanceled)
         IO.flatMap (.handleErrorWith finalized (clo node .gcOnError env))
-          (clo node .gcTap env)) <$> tr e (node + 1) env)
-    | _ => DResult.harness
+          (clo node .gcTap env)) <$> tr e (node + 1) env (snapView snap))
+    | _, _ => DResult.harness
   | .gcOnError, .guaranteeCase _ _ _ =>
     -- `pf = { case e => finalizer(Outcome.errored(e)).reportError }` (`IO.scala:526-528`),
     -- then `*> IO.raiseError(t)`.
@@ -105,7 +118,10 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (refs : List Val) : DResult :=
     | o :: _ => ret .unit [.finGuaranteeCase tag o]
     | [] => DResult.harness
   | .gcFinThen, .guaranteeCase e fin _ =>
-    ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr fin (node + 1 + e.size) env)
+    -- Scala builds `run(fin)` in `o => IO.delay(emit) *> run(fin).void`, one run-loop iteration
+    -- before this closure runs (`FlatMap` over `Delay`, `IOFiber.scala:420-437`); nothing else
+    -- runs in between, so the current view is the same.
+    ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr fin (node + 1 + e.size) env vw)
   | .fiberHandle, _ =>
     match arg with
     | .fiber i => ret (.fiber i) [.handle i]
@@ -161,31 +177,38 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (refs : List Val) : DResult :=
     -- `k(cb) = IO.delay { … }` (the registration).
     prog (.flatMap (.delay (clo node .asyncReg env)) (clo node .asyncSel (arg :: env)))
   | .asyncReg, n@(.async cbs _) | .asyncReg, n@(.asyncFin cbs _ _) =>
+    -- `IO.delay { id = newAsync; emit asyncReg; for each callback: sync ↦ emit cb; cb(r),
+    -- later ↦ ec.execute(task); fin.map(f => IO.delay(emit fin) *> run(f, env).void) }`.
+    -- `cbLater` is internal: it gives the label of the task. `Some(io)` cannot be a `Val`:
+    -- `some snap` marks it, with the snapshot for `run(f, env)` (built here in Scala).
     match env with
     | .cont s :: _ =>
       let hasFin := match n with | .asyncFin .. => true | _ => false
-      let (effects, trace) := cbs.zipIdx.foldl (init := (([] : List UserEffect), [TraceEv.asyncReg s]))
-        fun (effs, tr) (c, i) => match c.when with
-          | .sync => (effs ++ [.invokeCb s c.res.toVal], tr ++ [.cb s i])
-          | .later => (effs ++ [.deferCb s c.res.toVal], tr)
-      -- `Some(io)` cannot be a `Val`; `some unit` marks it, `asyncSel` rebuilds `io`.
-      { base := { effects, out := .ret (if hasFin then .some .unit else .none) }, trace }
+      let ev (e : TraceEv) : UserEffect := .emit e.toVal
+      let effects := cbs.zipIdx.foldl (init := [ev (.asyncReg s)])
+        fun effs (c, i) => match c.when with
+          | .sync => effs ++ [ev (.cb s i), .invokeCb s c.res.toVal]
+          | .later => effs ++ [ev (.cbLater s i), .deferCb s c.res.toVal]
+      { base := { effects, out := .ret (if hasFin then .some (snapVal vw) else .none) } }
     | _ => DResult.harness
   | .asyncSel, n =>
     match env with
     | .poll m f :: .cont s :: _ :: env0 =>
       match arg, n with
-      | .some _, .asyncFin _ _ _ =>
+      | .some snap, .asyncFin _ _ _ =>
         -- `G.onCancel(poll(get), lift(fin))` = `OnCancel(UnmaskRunLoop(Get(s), m, f), fin)`;
         -- `fin = IO.delay(emit fin) *> I(f).void`.
         prog (.onCancel (.unmaskRunLoop (.contGet s) m f)
-          (.flatMap (.delay (clo node .asyncFinEmit env0)) (clo node .asyncFinThen env0)))
+          (.flatMap (.delay (clo node .asyncFinEmit env0)) (clo node .asyncFinThen (snap :: env0))))
       | .none, _ => prog (.contGet s)
       | _, _ => DResult.harness
     | _ => DResult.harness
   | .asyncFinEmit, .asyncFin _ _ tag => ret .unit [.finAsync tag]
   | .asyncFinThen, .asyncFin _ fin _ =>
-    ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr fin (node + 1) env)
+    match env with
+    | snap :: env0 =>
+      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr fin (node + 1) env0 (snapView snap))
+    | [] => DResult.harness
   | .neverBody, _ => prog (.uncancelable (clo node .neverUnc [arg]))
   | .neverUnc, _ =>
     -- `k = _ => pure(Some(unit))`: `IO.pure(Some(IO.unit))`; `some unit` marks `Some(IO.unit)`.
@@ -195,22 +218,46 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (refs : List Val) : DResult :=
     | [.poll m f, .cont s], .some _ => prog (.onCancel (.unmaskRunLoop (.contGet s) m f) (.pure .unit))
     | [_, .cont s], .none => prog (.contGet s)
     | _, _ => DResult.harness
+  | .refNewThunk, .refNew a =>
+    -- `Ref.unsafe(v)` = `new SyncRef(v)` (`Ref.scala:314`): a new cell; its id is the number
+    -- of cells before it (`UserEffect.allocRef`)
+    match atomVal env a with
+    | .ok v => { base := { effects := [.allocRef v], out := .ret (.ref refs.length) } }
+    | .error e => ofTr (.error e)
+  -- `h.newRef(r)` counts `Ref`s in creation order: the same number as the cell id, because the
+  -- thunk and this function run in one run-loop iteration (`Map` over `Delay`, `IOFiber.scala:349-368`)
+  | .refHandle, _ => ret arg
+  | .deferredNewThunk, _ =>
+    { base := { effects := [.allocDeferred], out := .ret (.deferred vw.deferreds.length) } }
+  | .deferredHandle, _ => ret arg
+  | .dcThen, .deferredComplete _ _ => prog (.delay (clo node .dcEmit (arg :: env)))
+  | .dcEmit, .deferredComplete d v =>
+    match env with
+    | .bool ok :: env0 =>
+      match atomVal env0 d, atomVal env0 v with
+      | .ok (.deferred i), .ok x => ret (.bool ok) [.complete i x ok]
+      | _, _ => ofTr (.error .typeError)
+    | _ => DResult.harness
   | _, _ => DResult.harness
 
 /-- The closures of program `p`, with trace and failure lists. -/
-def denv (p : Prog) (id : Nat) (arg : Val) (refs : List Val) : DResult :=
+def denv (p : Prog) (id : Nat) (arg : Val) (vw : View) : DResult :=
   match Clo.decode? id with
   | none => DResult.harness
   | some c => match p.at? c.node with
     | none => DResult.harness
-    | some n => runClo c n arg refs
+    | some n => runClo c n arg vw
 
-/-- The `Model.UserEnv` of program `p`. It drops the trace and the failures (see module doc). -/
+/-- The `Model.UserEnv` of program `p` (see module doc). -/
 def userEnv (p : Prog) : UserEnv where
-  call id arg refs := (denv p id arg refs).base
+  call id arg refs := (denv p id arg { refs }).toUser
+  callV id arg vw := (denv p id arg vw).toUser
+
+/-- The view of the root term: only the root fiber, not completed. -/
+def rootView : View := { outcomes := [none] }
 
 /-- The root term `I(p)` (`Interp.apply`: `run(p, Map.empty)`). -/
-def rootTerm (p : Prog) : Except TrErr IO := tr p 0 []
+def rootTerm (p : Prog) : Except TrErr IO := tr p 0 [] rootView
 
 /-- Ops in `p` that the model cannot express yet (no repeats, in first-use order). -/
 def unsupportedOps (p : Prog) : List String :=

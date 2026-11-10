@@ -127,6 +127,8 @@ structure Heap where
   /-- A broken invariant found where the step cannot return an `Abort` (inside `done` and
   the `IOCont` callback). The first one wins. The scheduler stops when it is set. -/
   broken : Option Abort := none
+  /-- `IODeferred` cells (index = `Deferred` id; `UserEffect.allocDeferred`). -/
+  deferreds : List DeferredCell := []
   deriving DecidableEq, Repr
 
 /-- What the run loop does next, as computed by one branch, `succeeded` or `failed`. -/
@@ -194,7 +196,14 @@ def markBroken (x : Exec M) (a : Abort) : Exec M :=
   | none => { x with heap := { x.heap with broken := some a } }
 /-- What user code can read (`View`). -/
 def view (x : Exec M) : View :=
-  { refs := x.heap.refs, outcomes := (x.fibers.set x.fib.id x.fib).map (·.outcome) }
+  { refs := x.heap.refs, outcomes := (x.fibers.set x.fib.id x.fib).map (·.outcome),
+    deferreds := x.heap.deferreds.map (·.value) }
+/-- Write `IODeferred` cell `d`. -/
+def setDeferred (x : Exec M) (d : Nat) (c : DeferredCell) : Exec M :=
+  { x with heap := { x.heap with deferreds := x.heap.deferreds.set d c } }
+/-- A fresh `CallbackStack` handle. -/
+def freshHandle (x : Exec M) : Nat × Exec M :=
+  (x.heap.handles, { x with heap := { x.heap with handles := x.heap.handles + 1 } })
 end Exec
 
 /-! ## User code, runtime closures and the `IOCont` callback -/
@@ -351,6 +360,76 @@ def rtCall (k : RtFn) (arg : Val) (x : Exec M) : Except Abort (UserOut × Exec M
     | none => .error .badHandle
     -- FIB:189 `callbacks.clearHandle(handle)`
     | some f => .ok (.ret .unit, x.setFib t { f with callbacks := f.callbacks.filter (·.1 != h) })
+  -- IODeferred (`core/shared/src/main/scala/cats/effect/IODeferred.scala`, `ID` below)
+  | .deferredDefer d =>
+    match x.heap.deferreds[d]? with
+    | none => .error .badHandle
+    -- ID:52-56 `if (back eq initial) await else back`
+    | some c => .ok (.ret (match c.value with | some a => .some a | none => .none), x)
+  | .deferredFlatten d =>
+    match arg with
+    -- `await` = `IO.asyncCheckAttempt { ... }` = `IOCont(body)` (IO.scala:1353-1368)
+    | .none => .ok (.prog (.ioCont (.rt (.deferredAwait d))), x)
+    | .some a => .ok (.prog (.pure a), x)
+    | _ => .error .illTyped
+  | .deferredAwait d =>
+    match arg with
+    -- IO.scala:1357 `G.uncancelable { poll => ... }`
+    | .cont s => .ok (.prog (.uncancelable (.rt (.deferredUnc d s))), x)
+    | _ => .error .illTyped
+  | .deferredUnc d s =>
+    match arg with
+    -- IO.scala:1358 `lift(k(resume)) flatMap { ... }`; `k(cb) = IO { ... }` (ID:25)
+    | .poll m p => .ok (.prog (.flatMap (.delay (.rt (.deferredReg d s))) (.rt (.deferredSel d s m p))), x)
+    | _ => .error .illTyped
+  | .deferredReg d s =>
+    match x.heap.deferreds[d]? with
+    | none => .error .badHandle
+    | some c =>
+      -- ID:26 `val handle = callbacks.push(cb)`
+      let (h, x) := x.freshHandle
+      let c := { c with callbacks := (h, s) :: c.callbacks }
+      -- ID:39-40 `val back = cell.get()`
+      match c.value with
+      -- ID:41 `Left(Some(IO(clear())))`
+      | none => .ok (.ret (.left (.some (.nat h))), x.setDeferred d c)
+      | some a =>
+        -- ID:43-44 `clear()`: `clearHandle` nulls the callback and returns `false` (JVM
+        -- `CallbackStack.clearHandle`), so `clearCounter` goes up. `pack` only frees cleared
+        -- nodes; the model removes the node at once. Then `Right(value)`.
+        let c := { c with callbacks := c.callbacks.filter (·.1 != h), clearCounter := c.clearCounter + 1 }
+        .ok (.ret (.right a), x.setDeferred d c)
+  | .deferredSel d s m p =>
+    match arg with
+    -- IO.scala:1359
+    | .right a => .ok (.prog (.pure a), x)
+    -- IO.scala:1360 `G.onCancel(poll(get), lift(fin))`
+    | .left (.some (.nat h)) =>
+      .ok (.prog (.onCancel (.unmaskRunLoop (.contGet s) m p) (.delay (.rt (.deferredClear d h)))), x)
+    -- IO.scala:1361
+    | .left .none => .ok (.prog (.contGet s), x)
+    | _ => .error .illTyped
+  | .deferredClear d h =>
+    match x.heap.deferreds[d]? with
+    | none => .error .badHandle
+    -- ID:28-37 `clear()` (see `deferredReg`)
+    | some c =>
+      .ok (.ret .unit, x.setDeferred d { c with callbacks := c.callbacks.filter (·.1 != h),
+                                                clearCounter := c.clearCounter + 1 })
+  | .deferredComplete d v =>
+    match x.heap.deferreds[d]? with
+    | none => .error .badHandle
+    | some c =>
+      match c.value with
+      -- ID:63 `cell.compareAndSet(initial, IO.pure(a))` fails: ID:67 `false`
+      | some _ => .ok (.ret (.bool false), x)
+      | none =>
+        -- ID:63-65: the cell holds `IO.pure(a)`; `callbacks(Right(a))` calls the callbacks from
+        -- the head (newest first; the constructor callback is `null`, ID:59) and clears the
+        -- stack (`CallbackStack.apply`); each callback is the `resume` of a waiting `await`
+        let x := x.setDeferred d { c with value := some v, callbacks := [] }
+        let x := c.callbacks.foldl (fun x p => contCallback mm p.2 (.right v) x) x
+        .ok (.ret (.bool true), x)
   | .racePairRegister _ _ | .sleepRegister _ => .error .unsupportedFn
 
 /-- Apply the effects of one user call, in order. -/
@@ -360,6 +439,8 @@ def applyEffects : List UserEffect → Exec M → Exec M
     applyEffects es { x with heap := { x.heap with refs := x.heap.refs.set r v } }
   | .allocRef v :: es, x =>
     applyEffects es { x with heap := { x.heap with refs := x.heap.refs ++ [v] } }
+  | .allocDeferred :: es, x =>
+    applyEffects es { x with heap := { x.heap with deferreds := x.heap.deferreds ++ [{}] } }
   | .emit v :: es, x =>
     applyEffects es { x with heap := { x.heap with out := v :: x.heap.out } }
   | .invokeCb s r :: es, x => applyEffects es (contCallback mm s r x)

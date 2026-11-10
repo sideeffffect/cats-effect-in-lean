@@ -1,17 +1,20 @@
-import Difftest.Env
+import Difftest.Replay
 
 /-!
-# `lake exe cediff`: Lean side of the difftest (skeleton)
+# `lake exe cediff`: Lean side of the difftest
 
 Usage: `lake exe cediff [FILE.jsonl …]` (no file: read stdin).
 
 For each input line (a test case, format v0) it decodes the case, translates the program into
 the root `Model.IO` term, and prints one JSON line:
 
-* `{"v":0,"id":…,"mode":…,"outcome":"unsupported","size":n,"unsupported":[…]}`:
-  the case is accepted. `size` is `ioSize` of the root term. `unsupported` lists the ops that
-  the model cannot express yet. `outcome` is `unsupported` for all cases until the step
-  function exists.
+* Replay mode, all ops supported: the model runs the case (`Difftest.Replay`) and the line has
+  the fields of the Scala replay output (`outcome`, `trace`, `steps`, `time`, `schedule`,
+  `fifoFrom`, `fibers`, `pending`, `failures`), plus `compare`: the fields that the driver
+  compares.
+* `{"v":0,"id":…,"mode":…,"outcome":"unsupported","size":n,"unsupported":[…]}`: the case is
+  accepted, but the model cannot run it: an op that the step function does not mirror
+  (`unsupportedReason`), or testcontrol mode (`mode:testcontrol`, decision 15).
 * `{"v":0,"id":…,"error":"decode: …"}` or `"error":"translate: …"`: the case is rejected.
 
 Exit code 0 if all cases are accepted, 1 otherwise. A summary goes to stderr.
@@ -31,7 +34,7 @@ def lineId (j : Json) : Json :=
 /-- A JSON object field. -/
 def kv (k : String) (v : Json) : String × Json := (k, v)
 
-/-- Result of one line: the output JSON, accepted?, and fully translatable? -/
+/-- Result of one line: the output JSON, accepted?, and run on the model? -/
 def processLine (line : String) : Json × Bool × Bool :=
   match Json.parse line with
   | .error e =>
@@ -52,8 +55,15 @@ def processLine (line : String) : Json × Bool × Bool :=
         (Json.mkObj (base ++ [kv "outcome" (.str "unsupported"), kv "size" .null, unsJ,
           kv "reason" (.str s!"{op}: {unsupportedReason op}")]), true, false)
       | .ok io =>
-        (Json.mkObj (base ++ [kv "outcome" (.str "unsupported"), kv "size" (ioSize io), unsJ]),
-         true, uns.isEmpty)
+        match tc.mode, uns with
+        | .replay choices, [] =>
+          (Json.mkObj (base ++ replayFields tc.prog choices tc.maxSteps io), true, true)
+        | .testcontrol _, [] =>
+          (Json.mkObj (base ++ [kv "outcome" (.str "unsupported"), kv "size" (ioSize io),
+            kv "unsupported" (Json.arr #[.str "mode:testcontrol"])]), true, false)
+        | _, _ =>
+          (Json.mkObj (base ++ [kv "outcome" (.str "unsupported"), kv "size" (ioSize io), unsJ]),
+           true, false)
 
 /-- Read all lines of a stream. -/
 partial def readLines (h : IO.FS.Stream) (acc : Array String := #[]) : IO (Array String) := do
@@ -75,5 +85,5 @@ def main (args : List String) : IO UInt32 := do
     out.putStrLn j.compress
     if ok then accepted := accepted + 1
     if isFull then full := full + 1
-  IO.eprintln s!"cediff: {lines.size} cases, {accepted} accepted, {full} without unsupported ops"
+  IO.eprintln s!"cediff: {lines.size} cases, {accepted} accepted, {full} run on the model"
   pure (if accepted = lines.size then 0 else 1)

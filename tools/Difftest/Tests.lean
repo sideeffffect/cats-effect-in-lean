@@ -75,7 +75,7 @@ def sampleClos : List Clo :=
 /-- Run closure `f` of program `p`. -/
 def callFn (p : Prog) (f : Fn) (arg : Val) (refs : List Val := []) : DResult :=
   match f with
-  | .user id => denv p id arg refs
+  | .user id => denv p id arg { refs }
   | .rt _ => DResult.harness
 
 def outOf (r : DResult) : UserOut := r.base.out
@@ -100,8 +100,10 @@ def pHew : Prog := .handleErrorWith (.raise 7) (.pure (.var 0))
 
 -- `guaranteeCase e x fin` (`IO.scala:523-530`).
 def pGc : Prog := .guaranteeCase (.pure (.lit (.nat 1))) (.pure (.var 0)) 4
-#guard rootTerm pGc == .ok (.uncancelable (clo 0 .gcBody []))
-#guard outOf (callFn pGc (clo 0 .gcBody []) (.poll 1 0)) == .prog
+-- `run(e)` is built with the outer term: `gcBody` captures the snapshot of the root view.
+def snap0 : Val := snapVal rootView
+#guard rootTerm pGc == .ok (.uncancelable (clo 0 .gcBody [snap0]))
+#guard outOf (callFn pGc (clo 0 .gcBody [snap0]) (.poll 1 0)) == .prog
   (.flatMap
     (.handleErrorWith
       (.onCancel (.unmaskRunLoop (.pure (.nat 1)) 1 0)
@@ -123,8 +125,8 @@ def pGc : Prog := .guaranteeCase (.pure (.lit (.nat 1))) (.pure (.var 0)) 4
 -- `onCancel e fin`: `OnCancel(I(e), Delay(emit).flatMap(_ => I(fin).void))`.
 def pOc : Prog := .onCancel .never .cede 2
 #guard rootTerm pOc == .ok (.onCancel (neverTerm 1)
-  (.flatMap (.delay (clo 0 .ocFinEmit [])) (clo 0 .ocFinThen [])))
-#guard outOf (callFn pOc (clo 0 .ocFinThen []) .unit) ==
+  (.flatMap (.delay (clo 0 .ocFinEmit [])) (clo 0 .ocFinThen [snap0])))
+#guard outOf (callFn pOc (clo 0 .ocFinThen [snap0]) .unit) ==
   .prog (.map (.map .cede (clo 2 .asUnit [])) (clo 0 .voidFn []))
 
 -- `IO.never`: `IOCont(body)`; body → `uncancelable`; → `pure(Some(unit)).flatMap(sel)`;
@@ -141,13 +143,16 @@ def pAsync : Prog :=
   .asyncFin [{ when := .sync, res := .ok (.nat 1) }, { when := .later, res := .err 5 }] .cede 9
 #guard rootTerm pAsync == .ok (.flatMap .readEC (clo 0 .asyncEc []))
 #guard outOf (callFn pAsync (clo 0 .asyncEc []) (.ec 0)) == .prog (.ioCont (clo 0 .asyncBody [.ec 0]))
+-- The registration emits its events between the callback calls, in Scala order, and returns
+-- `some snap` (the snapshot for `run(fin)`).
 #guard (callFn pAsync (clo 0 .asyncReg [.cont 2, .ec 0]) .unit).base ==
-  { effects := [.invokeCb 2 (.right (.nat 1)), .deferCb 2 (.left (.err (userErr 5)))],
-    out := .ret (.some .unit) }
-#guard (callFn pAsync (clo 0 .asyncReg [.cont 2, .ec 0]) .unit).trace == [.asyncReg 2, .cb 2 0]
-#guard outOf (callFn pAsync (clo 0 .asyncSel [.poll 1 0, .cont 2, .ec 0]) (.some .unit)) ==
+  { effects := [.emit (TraceEv.asyncReg 2).toVal, .emit (TraceEv.cb 2 0).toVal,
+                .invokeCb 2 (.right (.nat 1)), .emit (TraceEv.cbLater 2 1).toVal,
+                .deferCb 2 (.left (.err (userErr 5)))],
+    out := .ret (.some (snapVal {})) }
+#guard outOf (callFn pAsync (clo 0 .asyncSel [.poll 1 0, .cont 2, .ec 0]) (.some snap0)) ==
   .prog (.onCancel (.unmaskRunLoop (.contGet 2) 1 0)
-    (.flatMap (.delay (clo 0 .asyncFinEmit [])) (clo 0 .asyncFinThen [])))
+    (.flatMap (.delay (clo 0 .asyncFinEmit [])) (clo 0 .asyncFinThen [snap0])))
 
 -- `refModify r incOld` on `Ref` 0 = 4: writes 5, returns 4, emits `call`.
 def pMod : Prog := .refModify (.var 0) 5
@@ -159,8 +164,33 @@ def pRace : Prog := .racePair .cede .never
 #guard outOf (callFn pRace (clo 0 .rpK []) (.left (.pair (.ocSucceeded .unit) (.fiber 2)))) ==
   .prog (.map (.map (.pure .unit) (clo 0 .succFn [])) (clo 0 .rpLeft [.fiber 2]))
 
+-- `join`/`cancel` read the fiber outcome of the view when the term is built (`IO.joinOf`,
+-- `IO.cancelOf`); `deferred.get` reads the cell (`IO.deferredGetOf`).
+def vDone : View := { outcomes := [none, some (.succeeded (.nat 3))], deferreds := [some (.nat 7), none] }
+#guard tr (.join (.lit (.fiber 1))) 0 [] rootView == .ok (.flatMap (.ioCont (.rt (.join 1))) (clo 0 .ocValK []))
+#guard tr (.join (.lit (.fiber 1))) 0 [] vDone == .ok (.flatMap (.pure (.ocSucceeded (.nat 3))) (clo 0 .ocValK []))
+#guard tr (.cancel (.lit (.fiber 1))) 0 [] rootView == .ok (.map (.uncancelable (.rt (.cancel 1))) (clo 0 .asUnit []))
+#guard tr (.cancel (.lit (.fiber 1))) 0 [] vDone == .ok (.map (.pure .unit) (clo 0 .asUnit []))
+#guard tr (.deferredGet (.lit (.deferred 0))) 0 [] vDone == .ok (.pure (.nat 7))
+#guard tr (.deferredGet (.lit (.deferred 1))) 0 [] vDone ==
+  .ok (.flatMap (.delay (.rt (.deferredDefer 1))) (.rt (.deferredFlatten 1)))
+-- The snapshot keeps what the view shows when the outer term is built.
+#guard snapView (snapVal vDone) == { vDone with refs := [] }
+-- `refNew v`: `Map(Delay(Ref.unsafe(v)), handle)`; the thunk allocates cell `refs.length`.
+#guard rootTerm (.refNew (.lit (.nat 4))) ==
+  .ok (.map (.delay (clo 0 .refNewThunk [])) (clo 0 .refHandle []))
+#guard (callFn (.refNew (.lit (.nat 4))) (clo 0 .refNewThunk []) .unit [.nat 0]).base ==
+  { effects := [.allocRef (.nat 4)], out := .ret (.ref 1) }
+#guard rootTerm (.bind .deferredNew (.pure (.var 0))) ==
+  .ok (.flatMap (.map (.delay (clo 1 .deferredNewThunk [])) (clo 1 .deferredHandle [])) (clo 0 .bindK []))
+-- Trace events survive `emit`.
+#guard [TraceEv.call 2 (.pair .unit (.fiber 1)), .finOnCancel 1, .finAsync 2,
+        .finGuaranteeCase 3 .ocCanceled, .set 0 (.nat 1), .complete 1 (.nat 2) false,
+        .asyncReg 4, .cb 4 1, .handle 3, .cbLater 4 2, .failure (userErr 6)].all
+  fun e => TraceEv.ofVal? e.toVal == some e
+
 -- Unsupported ops are reported, not guessed.
-#guard rootTerm (.bind .deferredNew (.pure (.var 0))) == .error (.unsupported "deferredNew")
+#guard unsupportedOps (.seq (.sleep 1) (.racePair .cede .cede)) == ["sleep", "racePair"]
 #guard rootTerm (.join (.lit .unit)) == .error .typeError
 
 end Difftest.Tests

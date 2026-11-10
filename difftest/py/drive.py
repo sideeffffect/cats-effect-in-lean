@@ -137,9 +137,13 @@ def compare(case, s, l):
     if l.get('outcome') == 'unsupported':
         return 'unsupported', ','.join(l.get('unsupported', []))
     if case['mode'] == 'replay':
-        for field in ('outcome', 'trace', 'schedule'):
-            if field == 'schedule' and field not in l:
-                continue
+        # Lean lists the fields that it can compare (`compare`); outcome and trace always.
+        # Without the list (old Lean side, mock): outcome, trace, and schedule if present.
+        if 'compare' in l:
+            fields = ['outcome', 'trace'] + [f for f in l['compare'] if f not in ('outcome', 'trace')]
+        else:
+            fields = ['outcome', 'trace'] + (['schedule'] if 'schedule' in l else [])
+        for field in fields:
             if dumps(s.get(field)) != dumps(l.get(field)):
                 return 'mismatch', field
         return 'agree', ''

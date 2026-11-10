@@ -33,7 +33,7 @@ lean_exe audit_fixture where
 -- See wiki/methodology/difftest-program-format.md ("Lean side").
 lean_lib Difftest where
   srcDir := "tools"
-  roots := #[`Difftest.Prog, `Difftest.Closure, `Difftest.Translate, `Difftest.Env,
+  roots := #[`Difftest.Prog, `Difftest.Closure, `Difftest.Translate, `Difftest.Env, `Difftest.Replay,
     `Difftest.Tests]
 
 lean_exe cediff where

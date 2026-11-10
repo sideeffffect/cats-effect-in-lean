@@ -151,6 +151,29 @@ inductive RtFn where
   | getK (state : Nat)
   /-- `_ => ()`: the function of `void` (`IO.scala:961-962`). -/
   | voidK
+  /-- The thunk of `initial` in `IODeferred` (`core/shared/src/main/scala/cats/effect/IODeferred.scala:51-56`):
+  `IO.defer { val back = cell.get(); if (back eq initial) await else back }`. A `Val` cannot hold
+  an `IO`, so it returns `Val.none` for `await` and `Val.some a` for `back = IO.pure(a)`;
+  `deferredFlatten` builds the `IO` again. -/
+  | deferredDefer (d : Nat)
+  /-- The `ev` function of `flatten` (`IO.scala:472`) in `IO.defer` (`IO.scala:1296-1297`),
+  applied to the result of `deferredDefer`: `none` ↦ `await`, `some a` ↦ `IO.pure(a)`. -/
+  | deferredFlatten (d : Nat)
+  /-- The `Cont` body of `await = IO.asyncCheckAttempt { cb => ... }` (`IODeferred.scala:24-48`;
+  `IO.scala:1353-1368`). It gets `Val.cont state`. -/
+  | deferredAwait (d : Nat)
+  /-- `poll => lift(k(resume)) flatMap { ... }` inside `await` (`IO.scala:1357-1363`). -/
+  | deferredUnc (d : Nat) (state : Nat)
+  /-- `k(cb)` of `await` (`IODeferred.scala:25-47`): `callbacks.push(cb)`, then
+  `Left(Some(IO(clear())))` as `Val.left (Val.some (Val.nat handle))` or `clear(); Right(value)`. -/
+  | deferredReg (d : Nat) (state : Nat)
+  /-- The `flatMap` function of `await` (`IO.scala:1358-1362`), as `joinSel`. -/
+  | deferredSel (d : Nat) (state : Nat) (maskId : Nat) (self : Nat)
+  /-- `IO(clear())` (`IODeferred.scala:28-37`): the finalizer thunk of a waiting `get`. -/
+  | deferredClear (d : Nat) (handle : Nat)
+  /-- The thunk of `complete(a)` (`IODeferred.scala:62-69`): `IO { if (cell.compareAndSet(initial,
+  IO.pure(a))) { callbacks(Right(a)); true } else false }`. -/
+  | deferredComplete (d : Nat) (v : Val)
   /-- The `IO.async` registration that `RacePair` runs (`IOFiber.scala:912-950`). -/
   | racePairRegister (ioa : IO) (iob : IO)
   /-- The `IO.async` registration that `Sleep` runs when `delay > 0`
@@ -219,6 +242,10 @@ inductive UserEffect where
   `core/shared/src/main/scala/cats/effect/IO.scala:1822-1824`). Its id is the length of the
   `Ref` list before this effect, so user code can compute it from its snapshot. -/
   | allocRef (v : Val)
+  /-- Allocate a new `IODeferred` cell (`new IODeferred[A]` in a `Delay` thunk, `IO.deferred`,
+  `core/shared/src/main/scala/cats/effect/IO.scala:1824`). Its id is the length of the
+  `Deferred` list before this effect (`View.deferreds`). -/
+  | allocDeferred
   deriving DecidableEq, Repr
 
 /-- The result of a user function call. There is no "always succeeds" case: `throw` is
@@ -250,6 +277,10 @@ structure View where
   when it builds `fib.join` or `fib.cancel`: these read the fields `_join`/`_cancel`, and
   `done` swaps them for `IO.pure(oc)`/`IO.unit` (`IOFiber.scala:1094-1095`, `IOFiber.scala:197-207`). -/
   outcomes : List (Option Outcome) := []
+  /-- The value of each `IODeferred` cell (index = `Deferred` id; `none` = `cell` is
+  `initial`). User code reads it when it builds `deferred.get`: `get` is `cell.get()`
+  (`core/shared/src/main/scala/cats/effect/IODeferred.scala:71`). -/
+  deferreds : List (Option Val) := []
   deriving DecidableEq, Repr
 
 /-- The environment of user code: a structure of functions passed as a parameter
@@ -282,6 +313,20 @@ def IO.joinOf (t : Nat) : Option Outcome → IO
 def IO.cancelOf (t : Nat) : Option Outcome → IO
   | some _ => .pure .unit
   | none => .uncancelable (.rt (.cancel t))
+
+/-- `deferred.get` of `IODeferred` cell `d` (`IODeferred.scala:71`): `cell.get()`. The cell holds
+`initial` (`IODeferred.scala:23-57`), which is `IO.defer { ... }` = `Delay(thunk).flatMap(ev)`
+(`IO.scala:1296-1297`, `IO.scala:472`), or `IO.pure(a)` after `complete` (`IODeferred.scala:63`).
+`v` is what the reader sees (`View.deferreds`). -/
+def IO.deferredGetOf (d : Nat) : Option Val → IO
+  | some a => .pure a
+  | none => .flatMap (.delay (.rt (.deferredDefer d))) (.rt (.deferredFlatten d))
+
+/-- The value of `Deferred` cell `d` in a view (`none` if it does not exist or is `initial`). -/
+def View.deferred (v : View) (d : Nat) : Option Val :=
+  match v.deferreds[d]? with
+  | some o => o
+  | none => none
 
 /-- The outcome of fiber `t` in a view (`none` if the fiber does not exist or is not done). -/
 def View.outcome (v : View) (t : Nat) : Option Outcome :=

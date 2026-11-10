@@ -21,10 +21,17 @@ no side effect and reads no mutable state, so both give the same term. The one d
 a `TypeError` during construction. Where Scala builds eagerly (`onCancel.fin`,
 `guaranteeCase.e`), `tr` also builds the sub-term eagerly to raise the error at the same point.
 
+## State read at construction
+
+`tr` takes the `View` of the moment when Scala builds the term: `fib.join`/`fib.cancel` read the
+fiber outcome (`IO.joinOf`/`IO.cancelOf`), `deferred.get` reads the cell (`IO.deferredGetOf`).
+Where Scala builds a sub-term eagerly and the model builds it later in a closure, the closure
+captures a snapshot (`snapVal`).
+
 ## Ops the model cannot express yet
 
-`tr` returns `TrErr.unsupported op` for `join`, `cancel`, `refNew`, `deferredNew`,
-`deferredGet`, `deferredComplete`. See `unsupportedReason` and the wiki ("Lean side").
+`racePair` and `sleep` (no `RacePair`/`Sleep` mirror in the step function). See
+`unsupportedReason` and the wiki ("Lean side").
 -/
 
 namespace Difftest
@@ -48,7 +55,80 @@ inductive TraceEv where
   | asyncReg (async : Nat)
   | cb (async : Nat) (i : Nat)
   | handle (fiber : Nat)
+  /-- Internal (not printed): callback `i` of the `async` with `ContState` `async` is a `later`
+  callback. Its task (`Task.cb`) gets the label `cb<id>.<i>`. -/
+  | cbLater (async : Nat) (i : Nat)
+  /-- `ec.reportFailure(t)` from user code (`reportError`, `IO.scala:967-971`). Printed in the
+  `failures` list, not in the trace. -/
+  | failure (e : Err)
   deriving DecidableEq, Repr
+
+/-- A trace event as a model value, for `UserEffect.emit`. Tag first. -/
+def TraceEv.toVal : TraceEv → Val
+  | .call fn arg => .pair (.nat 0) (.pair (.nat fn) arg)
+  | .finOnCancel tag => .pair (.nat 1) (.nat tag)
+  | .finAsync tag => .pair (.nat 2) (.nat tag)
+  | .finGuaranteeCase tag oc => .pair (.nat 3) (.pair (.nat tag) oc)
+  | .set ref v => .pair (.nat 4) (.pair (.nat ref) v)
+  | .complete d v ok => .pair (.nat 5) (.pair (.nat d) (.pair v (.bool ok)))
+  | .asyncReg a => .pair (.nat 6) (.nat a)
+  | .cb a i => .pair (.nat 7) (.pair (.nat a) (.nat i))
+  | .handle f => .pair (.nat 8) (.nat f)
+  | .cbLater a i => .pair (.nat 9) (.pair (.nat a) (.nat i))
+  | .failure e => .pair (.nat 10) (.err e)
+
+/-- The inverse of `TraceEv.toVal`. -/
+def TraceEv.ofVal? : Val → Option TraceEv
+  | .pair (.nat 0) (.pair (.nat fn) arg) => some (.call fn arg)
+  | .pair (.nat 1) (.nat tag) => some (.finOnCancel tag)
+  | .pair (.nat 2) (.nat tag) => some (.finAsync tag)
+  | .pair (.nat 3) (.pair (.nat tag) oc) => some (.finGuaranteeCase tag oc)
+  | .pair (.nat 4) (.pair (.nat ref) v) => some (.set ref v)
+  | .pair (.nat 5) (.pair (.nat d) (.pair v (.bool ok))) => some (.complete d v ok)
+  | .pair (.nat 6) (.nat a) => some (.asyncReg a)
+  | .pair (.nat 7) (.pair (.nat a) (.nat i)) => some (.cb a i)
+  | .pair (.nat 8) (.nat f) => some (.handle f)
+  | .pair (.nat 9) (.pair (.nat a) (.nat i)) => some (.cbLater a i)
+  | .pair (.nat 10) (.err e) => some (.failure e)
+  | _ => none
+
+/-! ## Construction-time snapshot
+
+Scala builds some sub-terms when the outer term is built (`onCancel` finalizer, the `this` of
+`guaranteeCase`, the `async` finalizer at registration). Building reads mutable state in two
+places: `fib.join`/`fib.cancel` read `_join`/`_cancel` (`IOFiber.scala:197-207`) and
+`deferred.get` reads `cell` (`IODeferred.scala:71`). The model builds these sub-terms later,
+inside a closure. So the closure captures a snapshot of that state (fiber outcomes and
+`Deferred` cells) as a `Val`, taken when Scala builds the term. -/
+
+/-- An outcome value back as an `Outcome`. -/
+def outcomeOfVal? : Val → Option Outcome
+  | .ocSucceeded v => some (.succeeded v)
+  | .ocErrored e => some (.errored e)
+  | .ocCanceled => some .canceled
+  | _ => none
+
+/-- A list of optional values as one `Val` (right-nested pairs, `unit` at the end). -/
+def optListVal : List (Option Val) → Val
+  | [] => .unit
+  | x :: xs => .pair (match x with | some v => .some v | none => .none) (optListVal xs)
+
+/-- The inverse of `optListVal`. -/
+def optListOfVal : Val → List (Option Val)
+  | .pair (.some v) rest => some v :: optListOfVal rest
+  | .pair _ rest => none :: optListOfVal rest
+  | _ => []
+
+/-- The snapshot of a view: fiber outcomes and `Deferred` cells. `Ref` cells are not read
+when a term is built (`Ref.get` is `F.delay(ar.get)`, `SyncRef.scala:30`). -/
+def snapVal (v : View) : Val :=
+  .pair (optListVal (v.outcomes.map (·.map Outcome.toVal))) (optListVal v.deferreds)
+
+/-- The view of a snapshot (no `Ref` cells). -/
+def snapView : Val → View
+  | .pair os ds =>
+    { outcomes := (optListOfVal os).map (·.bind outcomeOfVal?), deferreds := optListOfVal ds }
+  | _ => {}
 
 /-- The result of one closure call: the model result, plus what the model cannot hold yet:
 trace events and `reportFailure` calls (in order). -/
@@ -95,14 +175,8 @@ inductive TrErr where
 
 /-- What the model lacks for each unsupported op. -/
 def unsupportedReason : String → String
-  | "join" | "cancel" =>
-    "fib.join/fib.cancel read the IOFiber fields _join/_cancel when the term is built " ++
-    "(IOFiber.scala:142-205); the model has View.outcomes and IO.joinOf/IO.cancelOf, " ++
-    "but this translation does not use them yet (no fiber-handle mapping)"
-  | "refNew" => "Ref.unsafe allocates a Ref cell; UserEffect.allocRef exists, " ++
-    "but this translation does not use it yet"
-  | "deferredNew" | "deferredGet" | "deferredComplete" =>
-    "IODeferred cells are not visible to user code and have no mirror yet (Phase 2 step 9)"
+  | "racePair" => "the step function does not mirror RacePair (IOFiber.scala:908-950) yet"
+  | "sleep" => "the step function does not mirror Sleep and timers (IOFiber.scala:952-981) yet"
   | _ => "unknown"
 
 /-- `⟦a⟧`. -/
@@ -137,84 +211,100 @@ def reportErrorTerm (node : Nat) (io : IO) : IO :=
 `IO.async(_ => IO.pure(Some(IO.unit)))`, which is `IOCont(body)` (`IO.scala:1418-1431`). -/
 def neverTerm (node : Nat) : IO := .ioCont (clo node .neverBody [])
 
-/-- `I(p)` with `p` at pre-order number `node`, in environment `env`. -/
-def tr : Prog → (node : Nat) → (env : List Val) → Except TrErr IO
-  | .pure a, _, env => do pure (.pure (← atomVal env a))
-  | .raise c, _, _ => pure (.error (userErr c))
-  | .delay _ _, node, env => pure (.delay (clo node .delayThunk env))
-  | .bind e _, node, env => do pure (.flatMap (← tr e (node + 1) env) (clo node .bindK env))
-  | .seq e _, node, env => do pure (.flatMap (← tr e (node + 1) env) (clo node .seqK env))
-  | .map e _, node, env => do pure (.map (← tr e (node + 1) env) (clo node .mapFn env))
-  | .handleErrorWith e _, node, env => do
-    pure (.handleErrorWith (← tr e (node + 1) env) (clo node .hewK env))
-  | .attempt e, node, env => do
-    pure (.map (.attempt (← tr e (node + 1) env)) (clo node .attemptMap env))
-  | .uncancelable _, node, env => pure (.uncancelable (clo node .uncBody env))
-  | .poll q e, node, env =>
+/-- `I(p)` with `p` at pre-order number `node`, in environment `env`. `vw` is the state that
+Scala reads when it builds the term (see "State read at construction"). -/
+def tr : Prog → (node : Nat) → (env : List Val) → (vw : View) → Except TrErr IO
+  | .pure a, _, env, _ => do pure (.pure (← atomVal env a))
+  | .raise c, _, _, _ => pure (.error (userErr c))
+  | .delay _ _, node, env, _ => pure (.delay (clo node .delayThunk env))
+  | .bind e _, node, env, vw => do pure (.flatMap (← tr e (node + 1) env vw) (clo node .bindK env))
+  | .seq e _, node, env, vw => do pure (.flatMap (← tr e (node + 1) env vw) (clo node .seqK env))
+  | .map e _, node, env, vw => do pure (.map (← tr e (node + 1) env vw) (clo node .mapFn env))
+  | .handleErrorWith e _, node, env, vw => do
+    pure (.handleErrorWith (← tr e (node + 1) env vw) (clo node .hewK env))
+  | .attempt e, node, env, vw => do
+    pure (.map (.attempt (← tr e (node + 1) env vw)) (clo node .attemptMap env))
+  | .uncancelable _, node, env, _ => pure (.uncancelable (clo node .uncBody env))
+  | .poll q e, node, env, vw =>
     -- `env(q) match { case Bound.P(poll) => poll(run(e, env)); case _ => raiseError }`;
     -- `poll(ioa) = UnmaskRunLoop(ioa, id, self)` (`IOFiber.scala:564-567`).
     match env[q]? with
-    | some (.poll m f) => do pure (.unmaskRunLoop (← tr e (node + 1) env) m f)
+    | some (.poll m f) => do pure (.unmaskRunLoop (← tr e (node + 1) env vw) m f)
     | _ => pure (.error typeErr)
-  | .onCancel e fin _, node, env => do
+  | .onCancel e fin _, node, env, vw => do
     -- `run(e).onCancel(IO.delay(emit) *> run(fin).void)`; `*>` = `flatMap(_ => that)`
     -- (`IO.scala:138-139`, `IO.scala:903-904`); `onCancel` = `OnCancel` (`IO.scala:590-591`).
-    let ie ← tr e (node + 1) env
-    let _ ← tr fin (node + 1 + e.size) env
-    pure (.onCancel ie (.flatMap (.delay (clo node .ocFinEmit env)) (clo node .ocFinThen env)))
-  | .guaranteeCase e _ _, node, env => do
-    -- `IO.guaranteeCase` = `IO.uncancelable { poll => … }` (`IO.scala:523-530`).
-    let _ ← tr e (node + 1) env
-    pure (.uncancelable (clo node .gcBody env))
-  | .canceled, node, _ => pure (.map .canceled (clo node .asUnit []))
-  | .cede, node, _ => pure (.map .cede (clo node .asUnit []))
-  | .never, node, _ => pure (neverTerm node)
-  | .start e, node, env => do pure (.map (.start (← tr e (node + 1) env)) (clo node .fiberHandle []))
-  | .join f, _, env => do
-    let .fiber _ ← atomVal env f | throw .typeError
-    throw (.unsupported "join")
-  | .cancel f, _, env => do
-    let .fiber _ ← atomVal env f | throw .typeError
-    throw (.unsupported "cancel")
-  | .racePair a b, node, env => do
-    let ia ← tr a (node + 1) env
-    let ib ← tr b (node + 1 + a.size) env
+    -- `run(fin)` is built now: `ocFinThen` captures the snapshot.
+    let ie ← tr e (node + 1) env vw
+    let _ ← tr fin (node + 1 + e.size) env vw
+    pure (.onCancel ie (.flatMap (.delay (clo node .ocFinEmit env))
+      (clo node .ocFinThen (snapVal vw :: env))))
+  | .guaranteeCase e _ _, node, env, vw => do
+    -- `IO.guaranteeCase` = `IO.uncancelable { poll => … }` (`IO.scala:523-530`). `run(e)` is
+    -- built now: `gcBody` captures the snapshot.
+    let _ ← tr e (node + 1) env vw
+    pure (.uncancelable (clo node .gcBody (snapVal vw :: env)))
+  | .canceled, node, _, _ => pure (.map .canceled (clo node .asUnit []))
+  | .cede, node, _, _ => pure (.map .cede (clo node .asUnit []))
+  | .never, node, _, _ => pure (neverTerm node)
+  | .start e, node, env, vw => do
+    pure (.map (.start (← tr e (node + 1) env vw)) (clo node .fiberHandle []))
+  | .join f, node, env, vw => do
+    -- `fiberOf(⟦f⟧).join.flatMap(ocVal)`; `join` reads `_join` now (`IOFiber.scala:203-207`).
+    let .fiber t ← atomVal env f | throw .typeError
+    pure (.flatMap (IO.joinOf t (vw.outcome t)) (clo node .ocValK []))
+  | .cancel f, node, env, vw => do
+    -- `fiberOf(⟦f⟧).cancel.as(VUnit)`; `cancel` reads `_cancel` now (`IOFiber.scala:197-201`);
+    -- `as` = `map(_ => b)` (`IO.scala:182-183`).
+    let .fiber t ← atomVal env f | throw .typeError
+    pure (.map (IO.cancelOf t (vw.outcome t)) (clo node .asUnit []))
+  | .racePair a b, node, env, vw => do
+    let ia ← tr a (node + 1) env vw
+    let ib ← tr b (node + 1 + a.size) env vw
     pure (.flatMap (.racePair ia ib) (clo node .rpK []))
-  | .sleep ms, node, _ =>
+  | .sleep ms, node, _, _ =>
     -- `IO.sleep(fd)` = `Sleep(fd)` (`IO.scala:1692-1696`), then `.as(VUnit)`.
     pure (.map (.sleep ms) (clo node .asUnit []))
-  | .refNew v, _, env => do
+  | .refNew v, node, env, _ => do
+    -- `IO.ref(v).map(r => VRef(h.newRef(r)))`; `IO.ref(a) = IO(Ref.unsafe(a))` (`IO.scala:1822`);
+    -- `IO(a) = delay(a)` (`IO.scala:1275`).
     let _ ← atomVal env v
-    throw (.unsupported "refNew")
-  | .refGet r, node, env => do
+    pure (.map (.delay (clo node .refNewThunk env)) (clo node .refHandle []))
+  | .refGet r, node, env, _ => do
     let _ ← refId env r
     pure (.delay (clo node .refGetThunk env))
-  | .refSet r v, node, env => do
+  | .refSet r v, node, env, _ => do
     let _ ← refId env r
     let _ ← atomVal env v
     pure (.flatMap (.delay (clo node .refSetThunk env)) (clo node .refSetThen env))
-  | .refModify r _, node, env => do
+  | .refModify r _, node, env, _ => do
     let _ ← refId env r
     pure (.delay (clo node .refModifyThunk env))
-  | .deferredNew, _, _ => throw (.unsupported "deferredNew")
-  | .deferredGet d, _, env => do
-    let .deferred _ ← atomVal env d | throw .typeError
-    throw (.unsupported "deferredGet")
-  | .deferredComplete d v, _, env => do
-    let .deferred _ ← atomVal env d | throw .typeError
-    let _ ← atomVal env v
-    throw (.unsupported "deferredComplete")
-  | .async _ _, node, env | .asyncFin _ _ _, node, env =>
+  | .deferredNew, node, _, _ =>
+    -- `IO.deferred[Val].map(d => VDeferred(h.newDeferred(d)))`;
+    -- `IO.deferred = IO(new IODeferred[A])` (`IO.scala:1824`).
+    pure (.map (.delay (clo node .deferredNewThunk [])) (clo node .deferredHandle []))
+  | .deferredGet d, _, env, vw => do
+    -- `deferredOf(⟦d⟧).get` reads `cell` now (`IODeferred.scala:71`).
+    let .deferred i ← atomVal env d | throw .typeError
+    pure (IO.deferredGetOf i (vw.deferred i))
+  | .deferredComplete d v, node, env, _ => do
+    -- `dfd.complete(v).flatMap(ok => IO.delay { emit complete; VBool(ok) })`;
+    -- `complete(a) = IO { … }` (`IODeferred.scala:62-69`).
+    let .deferred i ← atomVal env d | throw .typeError
+    let x ← atomVal env v
+    pure (.flatMap (.delay (.rt (.deferredComplete i x))) (clo node .dcThen env))
+  | .async _ _, node, env, _ | .asyncFin _ _ _, node, env, _ =>
     -- `IO.executionContext.flatMap { ec => IO.async[Val] { cb => IO.delay { … } } }`.
     pure (.flatMap .readEC (clo node .asyncEc env))
-  | .case on lk rk, node, env => do
+  | .case on lk rk, node, env, vw => do
     match ← atomVal env on with
-    | .left v => tr lk (node + 1) (v :: env)
-    | .right v => tr rk (node + 1 + lk.size) (v :: env)
+    | .left v => tr lk (node + 1) (v :: env) vw
+    | .right v => tr rk (node + 1 + lk.size) (v :: env) vw
     | _ => pure (.error typeErr)
-  | .split on k, node, env => do
+  | .split on k, node, env, vw => do
     match ← atomVal env on with
-    | .pair x y => tr k (node + 1) (y :: x :: env)
+    | .pair x y => tr k (node + 1) (y :: x :: env) vw
     | _ => pure (.error typeErr)
 
 end Difftest

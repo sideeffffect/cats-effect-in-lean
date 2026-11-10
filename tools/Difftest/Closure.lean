@@ -117,6 +117,18 @@ inductive Lam where
   | neverUnc
   /-- `IO.never`: the `Some`/`None` selection. `vals = [poll, cont s]`. -/
   | neverSel
+  /-- `IO.ref(v)`: the thunk `Ref.unsafe(v)` (`IO.scala:1822`, `Ref.scala:314`). -/
+  | refNewThunk
+  /-- `refNew`: `r => VRef(h.newRef(r))`. -/
+  | refHandle
+  /-- `IO.deferred`: the thunk `new IODeferred[A]` (`IO.scala:1824`). -/
+  | deferredNewThunk
+  /-- `deferredNew`: `d => VDeferred(h.newDeferred(d))`. -/
+  | deferredHandle
+  /-- `deferredComplete`: `ok => IO.delay { emit complete; VBool(ok) }`. -/
+  | dcThen
+  /-- `deferredComplete`: the thunk `{ emit complete; VBool(ok) }`. `vals = bool ok :: env`. -/
+  | dcEmit
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -126,7 +138,8 @@ def Lam.all : List Lam :=
    .constVal, .succFn, .gcFinK, .gcFinEmit, .gcFinThen, .fiberHandle, .ocValK, .rpK, .rpLeft,
    .rpRight, .refGetThunk, .refSetThunk, .refSetThen, .refSetEmit, .refModifyThunk, .asyncEc,
    .asyncBody, .asyncUnc, .asyncReg, .asyncSel, .asyncFinEmit, .asyncFinThen, .neverBody,
-   .neverUnc, .neverSel]
+   .neverUnc, .neverSel, .refNewThunk, .refHandle, .deferredNewThunk, .deferredHandle, .dcThen,
+   .dcEmit]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?
