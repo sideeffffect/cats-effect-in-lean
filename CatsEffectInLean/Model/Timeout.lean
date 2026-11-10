@@ -47,6 +47,12 @@ The source `fa` is a closure field. A `Val` cannot hold an `IO`, so the field is
 descriptor `src : Val`, and the caller gives the function `srcIO : Val → IO` that builds the
 source. For `q.take.timeout(d)`, `src = Val.ref q` (the queue handle, so the closure id shows
 that it captures `q`) and `srcIO (.ref q) = Std.Queue.takeIO q`.
+
+The `fallback` of `timeoutTo` is a closure field too, with a descriptor `fb : Val`
+(`fallbackOf`): `fb = Val.none` is the fallback that `timeout` passes
+(`IO.defer(IO.raiseError(new TimeoutException(...)))`, `fallbackIO`); `fb = Val.some c` is a
+caller fallback, and `srcIO c` builds it. So `timeout` and `timeoutTo` use the same lambdas,
+as in Scala (`timeout` calls `timeoutTo`, `IO.scala:820`).
 -/
 
 namespace CatsEffectInLean.Model.Timeout
@@ -67,11 +73,12 @@ def timeoutErr : Err := { code := timeoutCode }
 = a `poll`, `s` = a `ContState` id, `f` = a fiber id, `oc` = an outcome value, `snap` = what
 `f.join` read (`snapVal`). -/
 inductive TLam where
-  /-- `poll => poll(racePair(IO.sleep(fd))) flatMap { ... }` (`IO.scala:852-858`). -/
-  | body (src : Val) (d : Nat)
+  /-- `poll => poll(racePair(IO.sleep(fd))) flatMap { ... }` (`IO.scala:852-858`). `fb` is
+  the fallback descriptor (`fallbackOf`). -/
+  | body (src fb : Val) (d : Nat)
   /-- The `flatMap` function `{ case Left(...) => ...; case Right(...) => ... }`
   (`IO.scala:853-857`). -/
-  | sel (d m p : Nat)
+  | sel (fb : Val) (d m p : Nat)
   /-- `_ => that` of `f.cancel *> oc.embed(poll(IO.canceled) *> IO.never)` (`IO.scala:854`).
   `oc` is the code of the outcome. -/
   | embed (oc : Val) (m p : Nat)
@@ -79,9 +86,9 @@ inductive TLam where
   | constNever
   /-- `_ => that` of `f.cancel *> f.join.flatMap(...)` (`IO.scala:856`). `snap` is the code
   of what `f.join` read: `none`, or `some oc`. -/
-  | thenJoin (d f : Nat) (snap : Val)
+  | thenJoin (fb : Val) (d f : Nat) (snap : Val)
   /-- `oc => oc.fold(fallback, IO.raiseError, identity)` (`IO.scala:856`). -/
-  | fold (d : Nat)
+  | fold (fb : Val) (d : Nat)
   /-- The thunk of `IO.defer(IO.raiseError(new TimeoutException(...)))` (`IO.scala:822`). -/
   | fallbackThunk (d : Nat)
   /-- `ev` of `flatten` in that `IO.defer` (`IO.scala:472`). -/
@@ -98,12 +105,12 @@ inductive TLam where
 (`Val.poll m p`, `Val.cont s`, `Val.fiber f`), so they are visible in the id
 (`Model/WellFormed.lean`). -/
 def TLam.toVal : TLam → Val
-  | .body src d => cloVal ns 0 [src, .nat d]
-  | .sel d m p => cloVal ns 1 [.nat d, .poll m p]
+  | .body src fb d => cloVal ns 0 [src, fb, .nat d]
+  | .sel fb d m p => cloVal ns 1 [fb, .nat d, .poll m p]
   | .embed oc m p => cloVal ns 2 [oc, .poll m p]
   | .constNever => cloVal ns 3 []
-  | .thenJoin d f snap => cloVal ns 4 [.nat d, .fiber f, snap]
-  | .fold d => cloVal ns 5 [.nat d]
+  | .thenJoin fb d f snap => cloVal ns 4 [fb, .nat d, .fiber f, snap]
+  | .fold fb d => cloVal ns 5 [fb, .nat d]
   | .fallbackThunk d => cloVal ns 6 [.nat d]
   | .fallbackFlatten => cloVal ns 7 []
   | .neverBody => cloVal ns 8 []
@@ -112,12 +119,12 @@ def TLam.toVal : TLam → Val
 
 /-- The inverse of `TLam.toVal` on the tag and the fields (namespace already checked). -/
 def TLam.ofFields : Nat → List Val → Option TLam
-  | 0, [src, .nat d] => some (.body src d)
-  | 1, [.nat d, .poll m p] => some (.sel d m p)
+  | 0, [src, fb, .nat d] => some (.body src fb d)
+  | 1, [fb, .nat d, .poll m p] => some (.sel fb d m p)
   | 2, [oc, .poll m p] => some (.embed oc m p)
   | 3, [] => some .constNever
-  | 4, [.nat d, .fiber f, snap] => some (.thenJoin d f snap)
-  | 5, [.nat d] => some (.fold d)
+  | 4, [fb, .nat d, .fiber f, snap] => some (.thenJoin fb d f snap)
+  | 5, [fb, .nat d] => some (.fold fb d)
   | 6, [.nat d] => some (.fallbackThunk d)
   | 7, [] => some .fallbackFlatten
   | 8, [] => some .neverBody
@@ -129,14 +136,26 @@ def TLam.ofFields : Nat → List Val → Option TLam
 def TLam.fn (l : TLam) : Fn := libFn l.toVal
 
 /-- `fa.timeout(d)` for source code `src` (`IO.scala:818-823`, `IO.scala:850-860`):
+`timeoutTo(d, fallback)` with the `TimeoutException` fallback (`fb = Val.none`), and
 `IO.uncancelable(body)` = `Uncancelable` (`IO.scala:1712-1713`). -/
-def timeoutIO (src : Val) (d : Nat) : IO := .uncancelable (TLam.body src d).fn
+def timeoutIO (src : Val) (d : Nat) : IO := .uncancelable (TLam.body src .none d).fn
+
+/-- `fa.timeoutTo(d, fallback)` for source code `src` and caller fallback code `fb`
+(`IO.scala:850-860`): `IO.uncancelable(body)` = `Uncancelable` (`IO.scala:1712-1713`). -/
+def timeoutToIO (src fb : Val) (d : Nat) : IO := .uncancelable (TLam.body src (.some fb) d).fn
 
 /-- `IO.never` (`IO.scala:1560`, `kernel/.../Async.scala:168`, `IO.scala:1418-1431`). -/
 def neverIO : IO := .ioCont TLam.neverBody.fn
 
 /-- The `fallback` of `timeout` (`IO.scala:822`): `IO.defer(IO.raiseError(...))`. -/
 def fallbackIO (d : Nat) : IO := .flatMap (.delay (TLam.fallbackThunk d).fn) TLam.fallbackFlatten.fn
+
+/-- The `fallback` of `timeoutTo` from its descriptor: `Val.some c` is a caller fallback
+(`srcIO c`); otherwise it is the fallback of `timeout` (`IO.scala:820-822`). -/
+def fallbackOf (srcIO : Val → IO) (fb : Val) (d : Nat) : IO :=
+  match fb with
+  | .some c => srcIO c
+  | _ => fallbackIO d
 
 /-- `Option[Outcome]` from the code of a `join` snapshot. -/
 def snapOutcome : Val → Option Outcome
@@ -157,19 +176,19 @@ private def illTyped : UserResult := { out := .throw { code := 999999, kind := .
 /-- Run one timeout closure on `arg` with view `v`. `srcIO` builds the source from its code. -/
 def call (srcIO : Val → IO) (l : TLam) (arg : Val) (v : View) : UserResult :=
   match l with
-  | .body src d =>
+  | .body src fb d =>
     match arg with
     -- `poll(racePair(IO.sleep(finiteDuration))) flatMap { ... }` (`IO.scala:853`)
-    | .poll m p => prog (.flatMap (IO.applyPoll (.racePair (srcIO src) (.sleep d)) m p) (TLam.sel d m p).fn)
+    | .poll m p => prog (.flatMap (IO.applyPoll (.racePair (srcIO src) (.sleep d)) m p) (TLam.sel fb d m p).fn)
     | _ => illTyped
-  | .sel d m p =>
+  | .sel fb d m p =>
     match arg with
     -- `case Left((oc, f)) => f.cancel *> oc.embed(...)` (`IO.scala:854`)
     | .left (.pair oc (.fiber f)) =>
       prog (.flatMap (IO.cancelOf f (v.outcome f)) (TLam.embed oc m p).fn)
     -- `case Right((f, _)) => f.cancel *> f.join.flatMap { ... }` (`IO.scala:855-856`)
     | .right (.pair (.fiber f) _) =>
-      prog (.flatMap (IO.cancelOf f (v.outcome f)) (TLam.thenJoin d f (snapVal (v.outcome f))).fn)
+      prog (.flatMap (IO.cancelOf f (v.outcome f)) (TLam.thenJoin fb d f (snapVal (v.outcome f))).fn)
     | _ => illTyped
   | .embed oc m p =>
     match oc with
@@ -181,13 +200,13 @@ def call (srcIO : Val → IO) (l : TLam) (arg : Val) (v : View) : UserResult :=
     | .ocCanceled => prog (.flatMap (IO.applyPoll .canceled m p) TLam.constNever.fn)
     | _ => illTyped
   | .constNever => prog neverIO
-  | .thenJoin d f snap =>
+  | .thenJoin fb d f snap =>
     -- `f.join.flatMap { oc => ... }` (`IO.scala:856`); `f.join` as read before
-    prog (.flatMap (IO.joinOf f (snapOutcome snap)) (TLam.fold d).fn)
-  | .fold d =>
+    prog (.flatMap (IO.joinOf f (snapOutcome snap)) (TLam.fold fb d).fn)
+  | .fold fb d =>
     match arg with
     -- `oc.fold(fallback, IO.raiseError, identity)` (`IO.scala:856`)
-    | .ocCanceled => prog (fallbackIO d)
+    | .ocCanceled => prog (fallbackOf srcIO fb d)
     | .ocErrored e => prog (.error e)
     | .ocSucceeded a => prog (.pure a)
     | _ => illTyped

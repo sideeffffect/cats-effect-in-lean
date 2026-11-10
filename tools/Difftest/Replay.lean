@@ -308,10 +308,10 @@ def syncStepInit (p : Prog) (io : IO) (limit : Nat) : Except Summary (Sched RMas
     .ok { s with heap := { h with ready := h.ready ++ s.heap.ready } }
 
 /-- Run case `tc` from the scheduler state `s0` (the root term on `Sched.init`, or
-`syncStepInit`) in replay mode; the output fields (without `v`, `id`, `mode`). -/
-def replayFields (p : Prog) (choices : List Choice) (maxSteps : Nat) (s0 : Sched RMask) :
+`syncStepInit`) in replay mode with runtime thresholds `cfg` (case field `runtime`); the output
+fields (without `v`, `id`, `mode`). -/
+def replayFields (cfg : Config) (p : Prog) (choices : List Choice) (maxSteps : Nat) (s0 : Sched RMask) :
     List (String × Json) :=
-  let cfg : Config := {}
   let env := userEnv p
   let r0 : RS := { s := s0, cs := choices }
   let r := RS.run cfg env maxSteps (replayFuel cfg maxSteps) r0.absorb

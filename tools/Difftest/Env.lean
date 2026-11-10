@@ -119,16 +119,22 @@ def runClo (R : Resource.REnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DR
     | _ => DResult.harness
   | .succFn, _ => ret (.ocSucceeded arg)
   | .gcFinK, .guaranteeCase _ _ _ =>
-    prog (.flatMap (.delay (clo node .gcFinEmit (arg :: env))) (clo node .gcFinThen (arg :: env)))
+    -- `o => IO.delay(emit) *> run(fin).void`: `*>` takes `that` by value (`IO.scala:138-139`),
+    -- so Scala builds `run(fin)` now, in this closure. `gcFinThen` captures the snapshot.
+    prog (.flatMap (.delay (clo node .gcFinEmit (arg :: env)))
+      (clo node .gcFinThen (snapVal vw :: arg :: env)))
   | .gcFinEmit, .guaranteeCase _ _ tag =>
     match env with
     | o :: _ => ret .unit [.finGuaranteeCase tag o]
     | [] => DResult.harness
   | .gcFinThen, .guaranteeCase e fin _ =>
-    -- Scala builds `run(fin)` in `o => IO.delay(emit) *> run(fin).void`, one run-loop iteration
-    -- before this closure runs (`FlatMap` over `Delay`, `IOFiber.scala:420-437`); nothing else
-    -- runs in between, so the current view is the same.
-    ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr R fin (node + 1 + e.size) env vw)
+    -- `run(fin)` was built in `gcFinK`: use the captured snapshot. (Before 2026-11-10 this used
+    -- the current view. An auto-yield between the two closures let another fiber complete, so
+    -- `fib.cancel` read a different `_cancel`: found with small `runtime` thresholds.)
+    match env with
+    | snap :: env0 =>
+      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr R fin (node + 1 + e.size) env0 (snapView snap))
+    | [] => DResult.harness
   | .fiberHandle, _ =>
     match arg with
     | .fiber i => ret (.fiber i) [.handle i]
@@ -304,16 +310,22 @@ def denv (p : Prog) (id : Nat) (arg : Val) (vw : View) : DResult :=
     | none => DResult.harness
     | some n => runClo (renvOf p) c n arg vw
 
-/-- The source builder of `Timeout.call`: `src` is the code of a `timeoutSrc` closure value;
-the result is `I(e)` of that `timeout` node, built with the snapshot. -/
+/-- The source builder of `Timeout.call`: `src` is the code of a `timeoutSrc` closure value
+(the result is `I(e)` of that `timeout` or `timeoutTo` node) or of a `timeoutFb` closure value
+(the result is `I(fb)` of that `timeoutTo` node), built with the snapshot. -/
 def srcIO (p : Prog) (srcV : Val) : IO :=
+  let build (e : Prog) (n : Nat) (env : List Val) (snap : Val) : IO :=
+    match tr (renvOf p) e n env (snapView snap) with
+    | .ok io => io
+    | .error e => .error e.toErr
   match (match srcV with | .nat src => Clo.decode? src | _ => none) with
   | some { node, lam := .timeoutSrc, vals := snap :: env } =>
     match p.at? node with
-    | some (.timeout e _) =>
-      match tr (renvOf p) e (node + 1) env (snapView snap) with
-      | .ok io => io
-      | .error e => .error e.toErr
+    | some (.timeout e _) | some (.timeoutTo e _ _) => build e (node + 1) env snap
+    | _ => .error harnessErr
+  | some { node, lam := .timeoutFb, vals := snap :: env } =>
+    match p.at? node with
+    | some (.timeoutTo e fb _) => build fb (node + 1 + e.size) env snap
     | _ => .error harnessErr
   -- format v2: `I(a)` / `I(b)` of a combinator node (`Translate.combSrcs`)
   | some { node, lam := .raceSrcA, vals := snap :: env } =>

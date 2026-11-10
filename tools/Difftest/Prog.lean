@@ -35,10 +35,17 @@ open CatsEffectInLean.Model
 /-! ## Errors
 
 `Err.code` encodes the Scala exception class. Codes 0 and 1 are reserved for harness errors,
-so a `UserError(c)` has code `c + 2`. -/
+so a `UserError(c)` has code `c + 2`. Code `10^6` is the model `TimeoutException`
+(`Timeout.timeoutCode`), so `UserError(c)` for `c + 2 ≥ 10^6` has code `c + 3`. (Before
+2026-11-10, `UserError(999998)` had code `10^6` and printed as `TimeoutException`: a program
+that catches a `TimeoutException` gets `nat 999998` and can raise it again as a `UserError`.)
+Both errors give the value-language code 999998 (`Interp.scala` `CodeOf`). -/
+
+/-- The code of `Model.Timeout.timeoutErr` (`Tests.lean` checks that they agree). -/
+def timeoutModelCode : Nat := 1000000
 
 /-- `UserError(c)` (`difftest/.../UserFns.scala:6`). -/
-def userErr (c : Nat) : Err := { code := c + 2 }
+def userErr (c : Nat) : Err := { code := if c + 2 < timeoutModelCode then c + 2 else c + 3 }
 
 /-- `TypeError` (`difftest/.../UserFns.scala:9`): a value of the wrong shape. -/
 def typeErr : Err := { code := 0 }
@@ -47,9 +54,12 @@ def typeErr : Err := { code := 0 }
 yet (see `wiki/methodology/difftest-program-format.md`, "Lean side"). It never occurs in Scala. -/
 def harnessErr : Err := { code := 1 }
 
-/-- The `UserError` code of an error, if it is a `UserError`. -/
+/-- The value-language code of an error (`Interp.scala` `CodeOf`): `c` for `UserError(c)`, and
+999998 for the model `TimeoutException`. -/
 def userCode? (e : Err) : Option Nat :=
-  if e.kind = .nonFatal ∧ e.code ≥ 2 then some (e.code - 2) else none
+  if e.kind = .nonFatal ∧ e.code ≥ 2 then
+    some (if e.code ≤ timeoutModelCode then e.code - 2 else e.code - 3)
+  else none
 
 /-! ## AST -/
 
@@ -248,6 +258,12 @@ structure TestCase where
   mode : Mode
   prog : Prog
   maxSteps : Nat
+  /-- `IORuntimeConfig.cancelationCheckThreshold` of a replay run (optional case field
+  `runtime`; default 512, `IORuntimeConfig.scala`). -/
+  cancelCheck : Nat := 512
+  /-- `IORuntimeConfig.autoYieldThreshold` of a replay run (default 1024). A small value puts
+  an auto-yield (the effect of a `preempt` choice, `Model/SchedP.lean`) at many points. -/
+  autoYield : Nat := 1024
   deriving Repr
 
 /-- `Json.FormatVersion` in `Json.scala`. Versions 0, 1 and 2 are accepted. -/
@@ -529,7 +545,7 @@ private def choice (j : Json) : D Choice :=
 /-- Decode one test case (`Json.decodeCase`). -/
 def decodeCase (j : Json) : D TestCase := do
   let o ← obj j "case"
-  keys o ["v", "id", "mode", "choices", "seed", "maxSteps", "prog"] "case"
+  keys o ["v", "id", "mode", "choices", "seed", "maxSteps", "runtime", "prog"] "case"
   let v ← nat (← field o "v" "case") "case.v"
   if v > formatVersion then fail s!"case.v: unsupported format version {v}"
   let id ← str (← field o "id" "case") "case.id"
@@ -548,6 +564,20 @@ def decodeCase (j : Json) : D TestCase := do
   let maxSteps ← match get? o "maxSteps" with
     | some x => nat x "case.maxSteps"
     | none => pure defaultMaxSteps
-  pure { version := v, id, mode, prog := ← decodeProg (← field o "prog" "case") v, maxSteps }
+  -- `runtime`: the `IORuntimeConfig` thresholds of a replay run, with the checks of
+  -- `IORuntimeConfig.scala:33-40` (auto-yield > 1, cancelation check > 0, a multiple).
+  let (cancelCheck, autoYield) ← match get? o "runtime" with
+    | none => pure (512, 1024)
+    | some r =>
+      if (get? o "seed").isSome then fail "case: 'runtime' is only for mode replay"
+      let ro ← obj r "case.runtime"
+      keys ro ["cancelationCheckThreshold", "autoYieldThreshold"] "case.runtime"
+      let c ← nat (← field ro "cancelationCheckThreshold" "case.runtime") "case.runtime.cancelationCheckThreshold"
+      let a ← nat (← field ro "autoYieldThreshold" "case.runtime") "case.runtime.autoYieldThreshold"
+      if c == 0 || a ≤ 1 || a % c != 0 || a > maxLimit then
+        fail s!"case.runtime: invalid thresholds {c}, {a}"
+      pure (c, a)
+  pure { version := v, id, mode, prog := ← decodeProg (← field o "prog" "case") v, maxSteps,
+         cancelCheck, autoYield }
 
 end Difftest

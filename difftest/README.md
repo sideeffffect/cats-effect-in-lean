@@ -5,7 +5,7 @@ The Lean model and the real Cats Effect run the same generated programs. Method:
 ## Contents
 
 - `src/`, `build.sbt`, `run.sh` — Scala runner (Cats Effect 3.7.1). It reads JSON-line cases and prints one result line for each case.
-- `cases/` — hand-written golden cases. `sbt -batch test` checks them. Format v1 files: `syncstep.jsonl`, `resource.jsonl`, `queue.jsonl` (made by `cases/gen_v1.py`; they hold the calibration witnesses of CE-0001, CE-0002 and CE-0003).
+- `cases/` — hand-written golden cases. `sbt -batch test` checks them. Format v1 files: `syncstep.jsonl`, `resource.jsonl`, `queue.jsonl` (made by `cases/gen_v1.py`; they hold the calibration witnesses of CE-0001, CE-0002 and CE-0003). `preempt.jsonl` (made by `cases/gen_preempt.py`): small `runtime` thresholds (auto-yield after every few iterations) and `timeoutTo`.
 - `py/` — generator, driver and shrinker (Python 3, stdlib only):
   - `gen.py` — seeded, type-directed generator of v1 cases (weight table `WEIGHTS`, knobs `CONFIG`).
   - `typecheck.py` — scope and type checker. Each generated case must pass it (decision 8).
@@ -22,6 +22,7 @@ python3 difftest/py/drive.py scala-check --seeds 1 2 3 --n 10000
 python3 difftest/py/drive.py run --seeds 1 2 3 --n 10000 --lean "lake exe cediff" --shrink
 python3 difftest/py/drive.py check --lean "lake exe cediff" difftest/cases/basic.jsonl difftest/cases/sched.jsonl
 python3 difftest/py/drive.py run --seeds 1 2 3 4 5 --n 10000 --modes replay --lean "lake exe cediff" --allow-known-model-bugs
+python3 difftest/py/drive.py run --seeds 101 102 103 --n 100000 --modes replay --lean "lake exe cediff" --min-v1-agree 50000  # v1 depth
 python3 difftest/py/drive.py corpus [--lean "lake exe cediff"]
 python3 difftest/py/selftest.py
 ```
