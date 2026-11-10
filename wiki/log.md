@@ -75,3 +75,8 @@
 - Created: Registry and audit; Updated: Agent workflow, Inventory
 - Created: IO ADT and fiber state; Updated: Source layout, Project plan (26 constructors, not 25)
 - Created: Difftest program format v0; Updated: Differential testing
+
+## [2026-11-10] ingest | Phase 2 single-fiber run loop; Phase 3 Lean decoder and CI (2 parallel agents)
+- Created: Run-loop model (single fiber); Updated: IO ADT and fiber state
+- Updated: Difftest program format v0 (Lean side), Differential testing
+- Updated: Project plan (status, decisions 11–13)

@@ -26,6 +26,7 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [Bug history](cats-effect/bug-history.md) | Bug classes, open bugs (status on series/3.x checked), recommended first targets | 2026-11-10 |
 | [TestControl and schedule replay](cats-effect/testcontrol.md) | TestControl is seed-random only; a scripted EC in IORuntime replays and logs chosen schedules; difftest = replay first, refinement second | 2026-11-10 |
 | [IO ADT and fiber state (model data)](cats-effect/io-adt-and-fiber-state.md) | 26 IO constructors in tag order, UserFn/UserEnv, IOFiber fields, conts/resume tags, ContState, counter vs fresh-id mask models, NonFatal facts | 2026-11-10 |
+| [Run-loop model (single fiber)](cats-effect/runloop-model.md) | step mirrors IOFiber.runLoop for one fiber; result types; 34 examples by decide +kernel; escaped poll: counter = Canceled (matches CE 3.7.1), spec = Succeeded; escaped poll in a finalizer skips finalizers | 2026-11-10 |
 
 ## semantics
 

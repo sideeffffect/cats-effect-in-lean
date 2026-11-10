@@ -19,3 +19,9 @@ Later decisions on the same day (after Phase 1–3 agent reports):
 8. Difftest `TypeError` (for example `inc` on a pair) is a generator bug. The generator must produce only well-typed programs. It is not modelled as a user error.
 9. `Val` and `IO` stay separate inductives for now. Merge them into one mutual inductive only when a mirrored combinator needs an `IO` inside a value.
 10. `sorryAx` in the forbidden list: logged as Q2 in `QUESTIONS.md`; no change now.
+
+Decisions after the step-function and Lean-decoder reports:
+
+11. Escaped `poll` is public API (a user can return `poll` out of `uncancelable`). "Escaped poll in a finalizer skips the remaining finalizers" is a bug candidate for Phase 8, not a user question. It gets a property, a refutation and a reproducer like any other candidate, with an honest `maybe_intended`.
+12. Runtime-made closures (`join`, `cancel`, `IODeferred` get/complete, `racePair`/`sleep` registration) are `RtFn` cases. This mirrors CE, where these are closures over fiber fields.
+13. `UserEffect` gets additive cases for trace output (`emit`) and allocation (new `Ref`/`Deferred`). `Fn.user` may carry captured values, so the id-encoding workaround in `tools/Difftest/Closure.lean` can go later.

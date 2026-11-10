@@ -31,7 +31,10 @@ Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effe
   5. Monad transformers stay deferred (Q1 in `QUESTIONS.md`).
 - Phase 1 step 2 (inventory) done early: [Inventory](inventory.md).
 - Phase 1 steps 1, 3, 4 done: layout, [Registry and audit](registry-and-audit.md), CI jobs.
-- Phase 2 steps 1–4 (data) done: [IO ADT and fiber state](../cats-effect/io-adt-and-fiber-state.md). Next: the step function.
+- Phase 2 steps 1–4 (data) done: [IO ADT and fiber state](../cats-effect/io-adt-and-fiber-state.md).
+- Phase 2 step 5 done for one fiber: [Run-loop model](../cats-effect/runloop-model.md). 7 predictions match CE 3.7.1. Next: multi-fiber scheduler and concurrency tags (steps 6–9).
+- Phase 3 step 4 started: Lean decoder and `cediff` skeleton in `tools/Difftest/`; sbt job in CI.
+- Decisions 11–13 (escaped `poll` = Phase 8 candidate; `RtFn` for runtime closures; `UserEffect.emit` and allocation).
 - Phase 3 steps 1–2 (Scala runner) done: [Difftest program format v0](difftest-program-format.md). sbt is not in CI yet.
 - Later decisions: generator programs are well-typed (a `TypeError` is a generator bug); `Val` and `IO` stay separate until a combinator needs `IO` in a value.
 
