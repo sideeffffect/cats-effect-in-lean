@@ -1,12 +1,12 @@
 # Difftest program format v0 and Scala runner
 
-> Sources: own design and implementation in `difftest/` (Phase 3 steps 1–2) and `tools/Difftest/` (Lean side), run 2026-11-10 against cats-effect 3.7.1; IO.scala, IOFiber.scala, IORuntime.scala, TestControl.scala at v3.7.1
-> Raw: [Difftest runner notes](../../raw/project-decisions/2026-11-10-difftest-runner-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [Phase 0 decisions](../../raw/project-decisions/2026-11-10-phase0-decisions.md)
+> Sources: own design and implementation in `difftest/` (Phase 3 steps 1–2) and `tools/Difftest/` (Lean side), run 2026-11-10 against cats-effect 3.7.1; IO.scala, IOFiber.scala, IORuntime.scala, TestControl.scala at v3.7.1; first `cediff` replay runs (2026-11-10)
+> Raw: [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Difftest runner notes](../../raw/project-decisions/2026-11-10-difftest-runner-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [Phase 0 decisions](../../raw/project-decisions/2026-11-10-phase0-decisions.md)
 
 ## Overview
 
 This is the shared test-program language for the difftest. Scala and Lean read the same JSON.
-The Scala runner is in `difftest/`. The Lean decoder and translation are in `tools/Difftest/` (section "Lean side"); the Lean run waits for the step function.
+The Scala runner is in `difftest/`. The Lean decoder, translation and replay run are in `tools/Difftest/` (section "Lean side").
 Each AST node maps to **one fixed IO term** (table below). The Lean model must mirror these terms, not only their meaning, because replay compares task-level schedules.
 Format version: `"v":0`. Any change to a node, a user function or an event is a new version.
 
@@ -133,33 +133,34 @@ Output line: `{"v":0,"id","mode","outcome","trace","steps","time","schedule","fi
 - Update golden files: `sbt -batch -Ddifftest.update=true test`, then review the diff.
 - Run cases: `difftest/run.sh FILE.jsonl …` or `… | difftest/run.sh` (stdin). It caches the class path and runs plain `java`: about 4,500 cases/s. `sbt run` does not forward stdin in batch mode.
 - Other CE version: `sbt -Dce.version=<version> test`.
-- Lean side: `lake build Difftest cediff`, then `lake exe cediff difftest/cases/basic.jsonl`.
+- Lean side: `lake build Difftest cediff`, then `lake exe cediff difftest/cases/basic.jsonl`. Compare with Scala: `python3 difftest/py/drive.py check --lean "lake exe cediff" difftest/cases/*.jsonl` (only the input files, not `*.expected.jsonl`).
 - Generated cases, driver, shrinker: `difftest/py/` ([Differential testing](differential-testing.md), sections Generator and Driver).
-- CI: job `difftest` runs `sbt -batch test` (JDK 21), then `python3 difftest/py/selftest.py`; the `lean` job runs the Lean side on `basic.jsonl`.
+- CI: job `difftest` runs `sbt -batch test` (JDK 21), `python3 difftest/py/selftest.py`, then builds `cediff` and requires agreement (`drive.py check` on the fixed files, `corpus`, `run` on 3 × 2,000 replay cases); the `lean` job runs the Lean side on `basic.jsonl` and `sched.jsonl`.
 
 ## Lean side
 
 Code: `tools/Difftest/` (`lean_lib Difftest`, `lean_exe cediff`). It is test code, not part of the `CatsEffectInLean` library.
 
 - `Prog.lean`: AST and decoder. Same rejections as `Json.scala`. Names become de Bruijn indices (0 = innermost; `split` binds `b` at 0, `a` at 1). `seq` becomes left-nested binary `seq`; `seq [p]` is `p`.
-- `Translate.lean`: `tr p node env` gives the root `Model.IO` term with the same constructor nesting as `Interp.run`. Examples: `canceled` = `Map(Canceled, _ => unit)`; `never` = `IOCont(body)` (`IO.scala:2198`, `Async.scala:168`, `IO.scala:1418-1431`); `guaranteeCase` = `Uncancelable(poll => FlatMap(HandleErrorWith(OnCancel(UnmaskRunLoop(e), fin(canceled)), onError), flatTap))` (`IO.scala:523-530`, `605-606`, `474`, `967-971`); `async` = `FlatMap(ReadEC, ec => IOCont(…))`.
-- `Closure.lean`: each Scala lambda is `Fn.user (Clo.encode ⟨node, lam, vals⟩)`: pre-order node number, lambda kind (`Lam`, 43 kinds), captured values. The encoding is lossless (`Clo.decode?`).
-- `Env.lean`: `denv p` runs a closure and returns the model result plus trace events and `reportFailure` calls. `userEnv p : UserEnv` drops the last two.
+- `Translate.lean`: `tr p node env vw` gives the root `Model.IO` term with the same constructor nesting as `Interp.run`. Examples: `canceled` = `Map(Canceled, _ => unit)`; `never` = `IOCont(body)` (`IO.scala:2198`, `Async.scala:168`, `IO.scala:1418-1431`); `guaranteeCase` = `Uncancelable(poll => FlatMap(HandleErrorWith(OnCancel(UnmaskRunLoop(e), fin(canceled)), onError), flatTap))` (`IO.scala:523-530`, `605-606`, `474`, `967-971`); `async` = `FlatMap(ReadEC, ec => IOCont(…))`; `join` = `FlatMap(IO.joinOf t oc, ocVal)`; `refNew` = `Map(Delay(Ref.unsafe v), handle)`.
+- State read at build time: `vw` is the `View` when Scala builds the term. `join`/`cancel` read the fiber outcome (`_join`/`_cancel`), `deferredGet` reads the cell. Scala builds three sub-terms eagerly that the model builds later in a closure (the `onCancel` finalizer, the `this` of `guaranteeCase`, the `async` finalizer); these closures capture a snapshot (`snapVal`).
+- `Closure.lean`: each Scala lambda is `Fn.user (Clo.encode ⟨node, lam, vals⟩)`: pre-order node number, lambda kind (`Lam`, 49 kinds), captured values. The encoding is lossless (`Clo.decode?`).
+- `Env.lean`: `denv p id arg vw` runs a closure and returns the model result plus trace events and `reportFailure` calls. `userEnv p : UserEnv` turns the events into `UserEffect.emit` effects (`TraceEv.toVal`).
+- `Replay.lean`: runs the root term on `Model.Sched` (`counterMaskModel`, default `Config`) one micro-step at a time, and keeps what Scala prints but the model does not hold: fiber handles (decision 14: handle order of `h.fiberHandle`; a cancel choice maps the handle to the model id when it is used), task labels (`f<k>`, `x<k>`, `cb<a>.<i>`), async ids, the `cb` event of a `later` callback task, and the `failures` list.
 - Errors: `UserError(c)` is `Err.code = c + 2`; code 0 is `TypeError`; code 1 is a harness error.
-- Trace: `asyncReg`/`cb` events hold the `ContState` id; an internal `handle` event marks `h.fiberHandle`. The runner renumbers both by first appearance to get the Scala ids.
-- `Tests.lean`: 52 `#guard` checks that run during `lake build Difftest`.
-- `lake exe cediff [FILE…]` (stdin if no file): one line per case, `{"v":0,"id","mode","outcome":"unsupported","size":n,"unsupported":[ops]}` or `{"v":0,"id","error":"decode: …"}`. Exit 1 if a case is rejected. On `basic.jsonl`: 27 accepted, 20 without unsupported ops.
+- Trace: `asyncReg`/`cb` events hold the `ContState` id; internal events `handle` (`h.fiberHandle`) and `cbLater` (a `later` callback). The replay glue renumbers asyncs and fibers to the Scala ids.
+- `Tests.lean`: 62 `#guard` checks that run during `lake build Difftest`.
+- `lake exe cediff [FILE…]` (stdin if no file): one line per case. Replay case with supported ops: the Scala output fields plus `"compare":[…]` (the fields that the driver compares; now all nine). Otherwise `{"v":0,"id","mode","outcome":"unsupported","size":n,"unsupported":[ops]}` (`mode:testcontrol` for testcontrol cases, decision 15) or `{"v":0,"id","error":"decode: …"}`. Exit 1 if a case is rejected. Speed: 2,000 cases in 0.14 s.
 
 **What the model lacks** (these ops are reported as `unsupported`, never guessed):
 
 | Gap | Ops | Needed in the model |
 |-----|-----|---------------------|
-| `fib.join`/`fib.cancel` read the fields `_join`/`_cancel` when the term is built (`IOFiber.scala:142-205`) | `join`, `cancel` | model has it now (`View.outcomes`, `IO.joinOf`/`IO.cancelOf`, [Scheduler model](../cats-effect/scheduler-model.md)); the translation must still map handles to fiber ids |
-| `deferred.get` reads the cell when the term is built (`IODeferred.scala:71`); `complete` calls callbacks | `deferredGet`, `deferredComplete` | `IODeferred` mirror (Phase 2 step 9) and cells visible to user code |
-| `Ref.unsafe` / `new IODeferred` allocate in a `Delay` thunk (`IO.scala:1822-1824`) | `refNew`, `deferredNew` | `UserEffect.allocRef` exists (not used by the translation yet); no `Deferred` allocation yet |
-| no trace output | all (trace only) | `UserEffect.emit (v : Val)` exists; the translation does not use it yet |
-| `Fn.user` has no captured values | all | none (worked around by the encoding); cleaner: `Fn.user id env` |
-| `Val` cannot hold an `IO` (`async` returns `Option[IO[Unit]]`) | `async`, `never` | none (a `some unit` marker; the next closure rebuilds the term) |
+| `RacePair` (`IOFiber.scala:908-950`) | `racePair` | the step branch, two new fibers, `raceLeft`/`raceRight` callbacks |
+| `Sleep` and timers (`IOFiber.scala:952-981`) | `sleep` | virtual time and the timer list of the replay runner |
+| testcontrol mode | all | the bounded schedule search with a `complete` flag (decision 15) |
+| `Fn.user` has no captured values | none (workaround) | none (the encoding works); cleaner: `Fn.user id env` |
+| `Val` cannot hold an `IO` (`async` returns `Option[IO[Unit]]`, `IO.defer` returns an `IO`) | none (workaround) | none: a marker value, and the next closure rebuilds the term |
 
 ## Limits of v0
 

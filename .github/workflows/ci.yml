@@ -62,13 +62,14 @@ jobs:
         run: scripts/test_audit.sh
 
       # Lean side of the difftest: build the decoder/translation (its #guard checks run
-      # during the build), then decode and translate every golden case. `cediff` exits 1
+      # during the build), then decode, translate and run every golden case. `cediff` exits 1
       # if it rejects a case (wiki/methodology/difftest-program-format.md, "Lean side").
+      # The comparison with Scala is in the `difftest` job.
       - name: Difftest decoder (Lean)
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
           lake build --wfail Difftest cediff
-          lake exe cediff difftest/cases/basic.jsonl > /dev/null
+          lake exe cediff difftest/cases/basic.jsonl difftest/cases/sched.jsonl > /dev/null
 
   # Scala side of the difftest: runner tests against cats-effect 3.7.1 (golden files,
   # rerun determinism, hand-checked facts). See difftest/README.md.
@@ -94,6 +95,21 @@ jobs:
       # deterministic Scala runs, bins, shrinker, corpus rerun. About 15 s. See difftest/py/.
       - name: Difftest generator and driver self-test
         run: python3 difftest/py/selftest.py
+      # Lean model against Scala, replay mode (wiki/methodology/differential-testing.md):
+      # every case that the model can run must agree on all compared fields. Cases with ops
+      # that the model does not mirror yet are `unsupported`. Any mismatch, harness error or
+      # hang fails the job. Installs only the Lean toolchain; `cediff` needs the model, not
+      # the proofs.
+      - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          auto-config: "false"
+      - name: Difftest agreement (Lean model vs Scala)
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          lake build --wfail cediff
+          python3 difftest/py/drive.py check --lean "lake exe cediff" difftest/cases/basic.jsonl difftest/cases/sched.jsonl
+          python3 difftest/py/drive.py corpus --lean "lake exe cediff"
+          python3 difftest/py/drive.py run --seeds 1 2 3 --n 2000 --modes replay --lean "lake exe cediff"
 
   inventory:
     name: Inventory check

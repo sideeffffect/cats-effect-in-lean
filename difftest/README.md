@@ -9,7 +9,7 @@ The Lean model and the real Cats Effect run the same generated programs. Method:
 - `py/` — generator, driver and shrinker (Python 3, stdlib only):
   - `gen.py` — seeded, type-directed generator of v0 cases (weight table `WEIGHTS`, knobs `CONFIG`).
   - `typecheck.py` — scope and type checker. Each generated case must pass it (decision 8).
-  - `drive.py` — subcommands `run`, `scala-check`, `shrink`, `corpus`.
+  - `drive.py` — subcommands `run`, `check`, `scala-check`, `shrink`, `corpus`.
   - `mock_lean.py` — a fake Lean side with planted faults, for the self-test only.
   - `selftest.py` — fast self-test (about 15 s). CI runs it after `sbt -batch test`.
 - `corpus/` — shrunk cases that once disagreed (regression corpus). It is made when the first mismatch is saved.
@@ -20,6 +20,7 @@ The Lean model and the real Cats Effect run the same generated programs. Method:
 python3 difftest/py/gen.py --seed 1 --n 100                 # cases on stdout
 python3 difftest/py/drive.py scala-check --seeds 1 2 3 --n 10000
 python3 difftest/py/drive.py run --seeds 1 2 3 --n 10000 --lean "lake exe cediff" --shrink
+python3 difftest/py/drive.py check --lean "lake exe cediff" difftest/cases/basic.jsonl difftest/cases/sched.jsonl
 python3 difftest/py/drive.py corpus [--lean "lake exe cediff"]
 python3 difftest/py/selftest.py
 ```

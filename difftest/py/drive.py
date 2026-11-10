@@ -6,6 +6,7 @@ Rules: wiki/methodology/differential-testing.md ("Driver", "Triage bins", "Corpu
 Subcommands:
   run          generate cases, run Scala (replay + testcontrol), optionally Lean; sort into bins;
                shrink mismatches and save them to the corpus.
+  check        Fixed case files: Scala and Lean; fails unless each case agrees or is unsupported.
   scala-check  Scala alone: replay determinism, testcontrol determinism, testcontrol outcome in
                the replay outcome set, coverage histogram, timing.
   shrink       shrink the cases of a JSONL file against a Lean command.
@@ -384,6 +385,22 @@ def cmd_shrink(a):
     return 0
 
 
+def cmd_check(a):
+    """Run fixed case files through Scala and Lean. Fail on any bin other than `agree` and
+    `unsupported` (a case the model cannot run yet). Prints the bins."""
+    cases = [json.loads(x) for f in a.files for x in Path(f).read_text().splitlines() if x.strip()]
+    s = run_scala(cases)
+    lo = run_lean(a.lean, cases)
+    bins = collections.Counter()
+    for c in cases:
+        b, d = compare(c, s.get(c['id']), lo.get(c['id']))
+        bins[b] += 1
+        if b not in ('agree', 'unsupported'):
+            print(f"  {c['id']}: {b} {d}")
+    print(f"check: {len(cases)} cases  " + "  ".join(f"{b} {k}" for b, k in sorted(bins.items())))
+    return 0 if set(bins) <= {'agree', 'unsupported'} else 1
+
+
 def cmd_corpus(a):
     entries = load_corpus(Path(a.corpus_dir))
     if not entries:
@@ -659,6 +676,10 @@ def main(argv=None):
     k.add_argument('--lean')
     k.add_argument('--corpus-dir', default=str(CORPUS_DIR))
 
+    f = sub.add_parser('check', help='fixed case files: fail unless every case agrees or is unsupported')
+    f.add_argument('files', nargs='+')
+    f.add_argument('--lean', required=True)
+
     a = ap.parse_args(argv)
     if a.cmd == 'run':
         a.modes = set(a.modes.split(','))
@@ -667,6 +688,8 @@ def main(argv=None):
         return cmd_scala_check(a)
     if a.cmd == 'shrink':
         return cmd_shrink(a)
+    if a.cmd == 'check':
+        return cmd_check(a)
     return cmd_corpus(a)
 
 

@@ -1,11 +1,11 @@
 # Differential testing of the Lean model against Cats Effect
 
-> Sources: synthesized from wiki articles on python-formalization, julia-in-lean, formalization precedents, CE source layout, Lean tooling (2026-11-10); TestControl spike (2026-11-10); generator and driver build (2026-11-10)
-> Raw: [Generator and driver notes](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [python-formalization difftest harness](../../raw/python-formalization/2026-10-29-lean-core-and-difftest-harness.md); [Harness code copy](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [Cedar DRT + Lean FFI](../../raw/lean-tooling/cedar-spec-drt-and-lean-ffi-readmes.md); [TestControl docs](../../raw/lean-tooling/cats-effect-testcontrol-docs.md); [TestControl spike notes](../../raw/cats-effect/2026-11-10-testcontrol-spike-notes.md); [Netsem](../../raw/formalization-precedents/2018-10-netsem-engineering-with-logic-tcp-test-oracle.md); [SibylFS](../../raw/formalization-precedents/2015-10-sibylfs-formal-spec-oracle-based-testing-posix.md)
+> Sources: synthesized from wiki articles on python-formalization, julia-in-lean, formalization precedents, CE source layout, Lean tooling (2026-11-10); TestControl spike (2026-11-10); generator and driver build (2026-11-10); first Lean-vs-Scala replay runs (2026-11-10)
+> Raw: [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Generator and driver notes](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [python-formalization difftest harness](../../raw/python-formalization/2026-10-29-lean-core-and-difftest-harness.md); [Harness code copy](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [Cedar DRT + Lean FFI](../../raw/lean-tooling/cedar-spec-drt-and-lean-ffi-readmes.md); [TestControl docs](../../raw/lean-tooling/cats-effect-testcontrol-docs.md); [TestControl spike notes](../../raw/cats-effect/2026-11-10-testcontrol-spike-notes.md); [Netsem](../../raw/formalization-precedents/2018-10-netsem-engineering-with-logic-tcp-test-oracle.md); [SibylFS](../../raw/formalization-precedents/2015-10-sibylfs-formal-spec-oracle-based-testing-posix.md)
 
 ## Overview
 
-Both agent precedents and Cedar require the model to agree with the real implementation on many generated inputs **before** any property is stated. A mismatch is a model bug until proven otherwise. CE adds a new difficulty that the precedents did not have: scheduling nondeterminism. This article records the design. Built so far: the schedule spike, the Scala runner v0 in `difftest/`, the Lean decoder and translation in `tools/Difftest/` (see [Difftest program format v0](difftest-program-format.md)), and the generator, driver and shrinker in `difftest/py/` (sections below). The Lean run waits for the step function. All parts run in CI.
+Both agent precedents and Cedar require the model to agree with the real implementation on many generated inputs **before** any property is stated. A mismatch is a model bug until proven otherwise. CE adds a new difficulty that the precedents did not have: scheduling nondeterminism. This article records the design. Built so far: the schedule spike, the Scala runner v0 in `difftest/`, the Lean decoder and translation in `tools/Difftest/` (see [Difftest program format v0](difftest-program-format.md)), and the generator, driver and shrinker in `difftest/py/` (sections below). `cediff` runs replay cases on the model; section "Lean vs Scala results". All parts run in CI.
 
 ## Rules from precedents
 
@@ -17,8 +17,8 @@ Both agent precedents and Cedar require the model to agree with the real impleme
 
 ## Harness shape (proposed)
 
-- Lean side: `lean_exe cediff` reads one JSON case per line (files or stdin) and writes one JSON result per line (python-formalization `pydiff` pattern). Built: decode + translation into `Model.IO`; the run is next. Cedar shows FFI is faster, but a subprocess is probably enough.
-- Ops that the model cannot express yet (`join`, `cancel`, `refNew`, `deferred*`) are reported as `unsupported`. They are not approximated, because an approximation would make agreement meaningless ([Difftest program format v0](difftest-program-format.md), "Lean side").
+- Lean side: `lean_exe cediff` reads one JSON case per line (files or stdin) and writes one JSON result per line (python-formalization `pydiff` pattern). Built: decode, translation into `Model.IO`, and the replay run on `Model.Sched`. A subprocess is fast enough: 2,000 cases in 0.14 s.
+- Ops that the model cannot run yet (`racePair`, `sleep`) and testcontrol mode are reported as `unsupported`. They are not approximated, because an approximation would make agreement meaningless ([Difftest program format v0](difftest-program-format.md), "Lean side").
 - Scala side: an sbt project pinned to CE v3.7.1 generates programs (an IO AST), interprets them into real `IO`, runs them, and compares.
 - Deterministic runs: a scripted `ExecutionContext` that follows a choice list ([TestControl and schedule replay](../cats-effect/testcontrol.md)); also `TestControl` (single thread, virtual time, random ready-fiber choice with a seed; `tick`, `tickOne`, `tickAll`, `advance`, `results`, `isDeadlocked`). Docs warn it can hide real multi-thread races.
 
@@ -42,19 +42,37 @@ Both agent precedents and Cedar require the model to agree with the real impleme
 ## Driver (`difftest/py/drive.py`)
 
 - `run`: generate, run Scala (`difftest/run.sh`, replay and testcontrol), run Lean (`--lean "lake exe cediff"`), sort into bins, `--shrink` mismatches into the corpus.
+- `check FILE…`: fixed case files on Scala and Lean; fails unless each case agrees or is `unsupported`.
 - `scala-check`: Scala alone. Replay and testcontrol determinism, "TestControl outcome is a replay outcome" over FIFO + 8 random schedules, coverage histogram (static ops and patterns, trace events, schedule events), timing.
-- Compare. Replay: outcome, then trace, then schedule (if Lean prints one) must be equal; the first differing field is the detail. Testcontrol: refinement. Proposed Lean output: `"outcomes":[{"outcome","trace"}…]` and `"complete":bool`; not in the set and complete → mismatch; not complete → inconclusive. Scala `inconclusive` (step cap) → inconclusive.
+- Compare. Replay: Lean lists the fields it can compare (`compare`); now all nine Scala fields (outcome, trace, steps, time, schedule, fifoFrom, fibers, pending, failures). They must be equal; the first differing field is the detail. Testcontrol: refinement. Proposed Lean output: `"outcomes":[{"outcome","trace"}…]` and `"complete":bool`; not in the set and complete → mismatch; not complete → inconclusive. Scala `inconclusive` (step cap) → inconclusive.
 - Automatic bins: `agree`, `unsupported` (Lean prints `"outcome":"unsupported"`; not a mismatch), `inconclusive`, `mismatch`, `harness`, `generator-bug`, `hang` (a timed-out batch is bisected to the case).
 - Shrinker: greedy delta debugging over well-typed candidates (replace a node by a child or by `raise 0`/`never`/`pure`/`canceled`/`cede`, drop seq elements, callbacks, finalizers, tags; drop choice chunks; picks → 0). A candidate is kept only if it is strictly smaller and the mismatch field is the same (without "strictly smaller" it cycles). One Scala batch and one Lean batch per round.
 - Self-test `difftest/py/selftest.py` (about 15 s, CI job `difftest`): type checker, generator determinism, no generator bug, Scala determinism, bins and shrinking with a fake Lean side (`mock_lean.py`, planted fault: one missing `fin onCancel` event; a 69-node case shrinks to 3 nodes), corpus rerun.
 
 ## Corpus (`difftest/corpus/`)
 
-One JSON file per shrunk mismatch: `case`, `scala` (outcome, trace), `lean`, `field`, `expect` (`agree` by default, or `mismatch` for an accepted difference), `triage`, `note`, `found`. `drive.py corpus [--lean CMD]` fails if the Scala result changed or the Lean result is not `expect`. Format table: `difftest/README.md`. The corpus is empty now (no Lean run yet).
+One JSON file per shrunk mismatch: `case`, `scala` (outcome, trace), `lean`, `field`, `expect` (`agree` by default, or `mismatch` for an accepted difference), `triage`, `note`, `found`. `drive.py corpus [--lean CMD]` fails if the Scala result changed or the Lean result is not `expect`. Format table: `difftest/README.md`. The corpus is empty now: the first Lean runs had no mismatch to save.
 
 ## Scala-only results (2026-11-10)
 
 3 seeds × 10,000 cases in 50 s. 0 generator bugs, 0 hangs. Replay and testcontrol runs are deterministic (30,000 and 12,000 cases, each run twice). TestControl outcome in the replay outcome set: 99.8% with 9 schedules per case; every outcome miss was found with more schedules (sampling gap, not a runtime difference). Weak coverage: async finalizer runs 0.9%, external cancel of a child 1.9%. Full histogram: [raw note](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md).
+
+## Lean vs Scala results (2026-11-10)
+
+Replay mode, all nine fields compared. Details: [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md).
+
+| run | agree | unsupported | mismatch |
+|-----|------:|------------:|---------:|
+| seeds 1, 2, 3 × 2,000 | 1588, 1663, 1616 | 412, 337, 384 | 0 |
+| seeds 1-10 × 10,000 | 81,663 | 18,337 | 0 |
+| seeds 11-20 × 10,000, max size 80 | 80,148 | 19,852 | 0 |
+| `basic.jsonl` + `sched.jsonl` | 29 | 4 | 0 |
+
+- No model bug found: every runnable case agreed on the first full run.
+- Unsupported: `sleep` in 13% of cases, `racePair` in 7% (18% have one of them). Testcontrol cases: all (decision 15).
+- Mutation test (one planted bug in `Step.lean`, 8,153 runnable cases): 9 of 13 mutants killed (12 to 250 mismatches each). 3 survivors are equivalent in single-thread replay. 1 is a coverage gap: no case has 2+ fibers waiting on one `Deferred` when it completes.
+- CI job `difftest` runs `check` on the fixed files, the corpus, and 3 × 2,000 generated replay cases. Any mismatch fails the job.
+- The 50,000-case gate is met for the replay mode and the ops the model runs. Still open: `racePair`, `sleep`, testcontrol refinement, and the coverage gaps of decision 17.
 
 ## Triage bins for a mismatch
 

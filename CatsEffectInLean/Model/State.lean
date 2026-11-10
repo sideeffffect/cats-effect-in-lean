@@ -19,7 +19,9 @@ B (`FIB:937-938`). `FIB` = `core/shared/src/main/scala/cats/effect/IOFiber.scala
 namespace CatsEffectInLean.Model
 
 /-- One `IODeferred` cell (`core/shared/src/main/scala/cats/effect/IODeferred.scala:21-60`).
-Shape only; Phase 2 step 9 mirrors the methods. -/
+The scheduler keeps the cells in `Heap.deferreds`; `rtCall` mirrors `get`, `complete` and
+`clear` (`RtFn.deferred*`, `CatsEffectInLean/Model/Step.lean`). `pack` is not mirrored: it only
+frees cleared nodes and lowers `clearCounter`; the model removes a node when it is cleared. -/
 structure DeferredCell where
   /-- `cell: AtomicReference[IO[A]]` (`IODeferred.scala:58`): `none` for `initial`,
   `some a` for `IO.pure(a)` (`IODeferred.scala:63`). -/

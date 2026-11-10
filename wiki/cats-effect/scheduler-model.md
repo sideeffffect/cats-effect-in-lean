@@ -1,7 +1,7 @@
 # Scheduler model (multi-fiber, replay)
 
-> Sources: typelevel/cats-effect source at v3.7.1 (`IOFiber.scala`, `IO.scala`, `CallbackStack.scala`), read 2026-11-10; own difftest runner (`difftest/.../Runner.scala`, `Interp.scala`); own Phase 2 steps 6 and 8 (part) code in `CatsEffectInLean/Model/Step.lean`, `Sched.lean`, `SchedExamples.lean`; own replay runs on CE 3.7.1
-> Raw: [Scheduler model notes](../../raw/cats-effect/2026-11-10-scheduler-model-notes.md)
+> Sources: typelevel/cats-effect source at v3.7.1 (`IOFiber.scala`, `IO.scala`, `CallbackStack.scala`), read 2026-11-10; own difftest runner (`difftest/.../Runner.scala`, `Interp.scala`); own Phase 2 steps 6 and 8 (part) code in `CatsEffectInLean/Model/Step.lean`, `Sched.lean`, `SchedExamples.lean`; own replay runs on CE 3.7.1; `IODeferred.scala` and jvm-native `CallbackStack.scala` at v3.7.1; first `cediff` runs (2026-11-10)
+> Raw: [Scheduler model notes](../../raw/cats-effect/2026-11-10-scheduler-model-notes.md); [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md)
 
 ## Overview
 
@@ -30,12 +30,13 @@ Phase 2 steps 6 and 8 (part). `Sched.lean` runs many fibers with the task order 
 - `done` calls callbacks in `CallbackStack.apply` order (constructor callback first, then newest first). A join callback runs `contCallback`.
 - `contCallback` mirrors the three-way race: callback first (store), `Get` first (store and resume), second call (no-op), callback after cancel (loses `resume()`, stops). The spin of `loop()` is `Abort.cbSpin`.
 - `Get` pushes `contGetFin` and (stack tracing on) `monitorDeregister`, each with `OnCancelK`.
+- `IODeferred` (Phase 2 step 9, part): `get` reads `cell` when the term is built (`IO.deferredGetOf`, `View.deferreds`); `initial` is `IO.defer` + `asyncCheckAttempt` (same shape as `_join`); `complete` calls the waiters newest first and clears the stack. Cells: `Heap.deferreds`; allocation: `UserEffect.allocDeferred`. `pack` is not mirrored (no observable effect).
 - Not mirrored: `RacePair`, `Sleep` (no timers), foreign `EvalOn`, `Blocking` (all `unsupportedTag`).
 
 ## Additive model changes (decision 13)
 
-- `UserEffect.emit v` (trace output), `UserEffect.allocRef v` (new `Ref`). No `Deferred` allocation yet.
-- `UserEnv.callV` with a `View` (refs + fiber outcomes); default calls `call`, so old environments still work.
+- `UserEffect.emit v` (trace output), `UserEffect.allocRef v` (new `Ref`), `UserEffect.allocDeferred` (new `IODeferred`).
+- `UserEnv.callV` with a `View` (refs, fiber outcomes, `Deferred` cells); default calls `call`, so old environments still work.
 - `OutcomeCb.ext` for fibers that the harness starts (external canceller).
 - `Fn.user` has no captured values yet. The examples pack captured values into the id.
 
@@ -54,7 +55,7 @@ Phase 2 steps 6 and 8 (part). `Sched.lean` runs many fibers with the task order 
 | external-cancel-root-before-start | Canceled | x0 f0 |
 | never-blocked / fuel | blocked / fuel | f0 / f0 f0 f0 |
 
-Traces and pending counts agree too (details in the raw note). The Lean terms are written by hand; `cediff` does not run the model yet.
+Traces and pending counts agree too (details in the raw note). These Lean terms are written by hand. `cediff` now runs generated cases on this scheduler: 161,811 replay cases agree on all fields, with no model fix needed ([Differential testing](../methodology/differential-testing.md), "Lean vs Scala results").
 
 ## Surprises
 
@@ -64,8 +65,9 @@ Traces and pending counts agree too (details in the raw note). The Lean terms ar
 
 ## Open points
 
-- Wire `tools/Difftest` to the scheduler: handle-to-id map, `View` for `join`/`cancel`, `emit` for the trace, `allocRef` for `refNew`.
-- `RacePair`, `Sleep` and timers, `IODeferred`, foreign `EvalOn`.
+- Done: `tools/Difftest` runs on the scheduler (`Replay.lean`: handle-to-id map, task labels, `emit` trace, `allocRef`/`allocDeferred`).
+- `RacePair`, `Sleep` and timers, foreign `EvalOn`.
+- Not yet tested: the order of `complete` with 2+ waiters (no generated case has it; a planted reversal survived).
 - Refinement mode (`observe = false`, cancel at any iteration).
 
 ## See Also

@@ -21,6 +21,8 @@ Design (`wiki/lean/kernel-evaluation.md`, design rules):
   closures of `_cancel` and `_join` (`RtFn`, `rtCall`) and the `IOCont` callback
   (`contCallback`). These read and write other fibers through `Exec.fibers`. The multi-fiber
   scheduler is `CatsEffectInLean/Model/Sched.lean`.
+* Phase 2 step 9 (part): `IODeferred` (`get`, `complete`, `clear`) as runtime closures
+  (`RtFn.deferred*`) over `Heap.deferreds`.
 * `RacePair`, `Sleep`, a foreign `EvalOn` and `Blocking` give `Abort.unsupportedTag`. They
   never succeed silently.
 
