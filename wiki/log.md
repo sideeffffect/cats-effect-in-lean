@@ -91,3 +91,6 @@
 - Updated: Differential testing, Scheduler model, Difftest program format v0
 - Updated: Bug history (calibration section, CE-0001..0003)
 - Updated: Project plan (status, decisions 18–21)
+
+## [2026-11-10] ingest | CI fix: sbt class path cache in difftest/run.sh
+- Updated: Differential testing
