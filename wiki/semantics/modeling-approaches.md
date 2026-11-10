@@ -52,12 +52,13 @@ Recommendation (confidence 0.8): a **small-step operational semantics with an ex
 
 ## Open questions
 
-- Model fairness/liveness, or safety only?
+- ~~Model fairness/liveness, or safety only?~~ Decided: both. Definitions in [Fairness and liveness](fairness-and-liveness.md).
 - How to abstract `evalOn`, `blocking`, the work-stealing pool — probably as scheduler choices.
 - Not yet collected: "Tackling the awkward squad", Koka/Eff semantics, structured-concurrency formalizations, Spiewak talk transcripts.
 
 ## See Also
 
+- [Fairness and liveness](fairness-and-liveness.md)
 - [Semantics of CE3](../cats-effect/semantics.md)
 - [Differential testing](../methodology/differential-testing.md)
 - [Lean v4.35.0 toolchain](../lean/toolchain-v4-35.md)
