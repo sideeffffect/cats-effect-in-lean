@@ -160,3 +160,9 @@
 
 ## [2026-11-10] ingest | Phase 6 merge notes (orchestration)
 - Updated: Agent workflow (orchestration)
+## [2026-11-10] ingest | Review batch 4 (13 Phase 6 entries; 2 HOLLOW)
+- Updated: Agent workflow (review log: CE-0030 and CE-0005 FAITHFUL; bracket.releaseOnce and guarantee.finalizerOnce vacuous; satisfiability-witness check)
+- Raw: raw/project-decisions/2026-11-10-review-batch-4-notes.md
+
+## [2026-11-10] ingest | Decisions 53-54 (satisfiability witness, harness-only markers)
+- Updated: Agent workflow
