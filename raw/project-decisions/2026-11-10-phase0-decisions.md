@@ -32,3 +32,10 @@ Decisions after the scheduler, generator and kernel-typeclass reports:
 15. Testcontrol mode: Lean prints the set of allowed results from a bounded schedule search plus a `complete` flag (Phase 2 step 10). Until then, testcontrol mode checks Scala against itself only.
 16. Law rows: one registry entry per (law, instance). The IO entry makes the row `modelled`. A SyncIO entry is added where the root-scope split applies; both entries list the same row.
 17. Weak coverage spots (external cancel of a child 1.9%, async finalizer 0.9%, `complete` false 0.3%) need generator weights raised before the 50,000-case gate.
+
+Decisions after the first Lean-vs-Scala agreement, calibration reproducers and coverage work:
+
+18. Merged check (orchestrator, new generator): 5 seeds x 10,000 replay cases: 41,355 agree, 0 mismatch, 8,645 unsupported (`sleep` 6,670, `racePair` 2,543).
+19. Properties about `join`, `cancel`, `Ref`, `Deferred` and masks may start now, restricted to programs without `sleep`/`racePair`. The 50,000-case gate is met for that fragment (161,811 + 41,355 agreeing cases over 25 seeds). Properties that need `racePair` or `sleep` wait for their mirrors and their own 50,000 cases.
+20. "A canceled fiber whose last action is a masked region completes `Succeeded`" is a Phase 8 property candidate. Check it against the docs and laws. The generator keeps producing it often.
+21. Reproducers are not in CI yet (scala-cli download time). They run with `scripts/run_reproducers.sh` at each gate.

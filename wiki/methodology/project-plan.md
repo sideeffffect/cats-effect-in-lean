@@ -39,6 +39,10 @@ Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effe
 - Phase 3 steps 3 and 5 done: generator, driver, shrinker in `difftest/py/`; 30,000 Scala cases deterministic. Lean does not run cases yet.
 - Phase 4 step 1 groundwork done: [Kernel typeclasses model](../cats-effect/kernel-typeclasses-model.md); 33 laws stated, none registered.
 - Decisions 14–17 (handle mapping in `cediff`; Lean outcome sets for testcontrol; one registry entry per law and instance; raise weak generator weights).
+- Phase 3 step 4 done for replay mode: `cediff` runs the model. 0 mismatches on 203,166 runnable generated cases (25 seeds); `IODeferred` mirrored. CI runs 3 x 2,000 cases. Gaps: `RacePair`, `Sleep`, testcontrol refinement.
+- Generator coverage raised: every weak run event now ≥ 5.9% of cases.
+- Phase 5 Scala side done: CE-0001 (#4687), CE-0002 (#4627), CE-0003 (#4571) reproduce on v3.7.1 ([Bug history](../cats-effect/bug-history.md)). Lean refutations need `syncStep`, `Resource`, `racePair`, `sleep`, `timeout`, `Queue`.
+- Decisions 18–21 (properties may start on the fragment without `sleep`/`racePair`; masked-end `Succeeded` is a Phase 8 candidate; reproducers run at gates).
 - Phase 3 steps 1–2 (Scala runner) done: [Difftest program format v0](difftest-program-format.md). sbt is not in CI yet.
 - Later decisions: generator programs are well-typed (a `TypeError` is a generator bug); `Val` and `IO` stay separate until a combinator needs `IO` in a value.
 

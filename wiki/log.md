@@ -86,3 +86,8 @@
 - Updated: Differential testing, Difftest program format v0 (generator, driver, corpus)
 - Created: Kernel typeclasses model
 - Updated: Project plan (status, decisions 14–17)
+
+## [2026-11-10] ingest | First difftest agreement, calibration reproducers, generator coverage (3 parallel agents)
+- Updated: Differential testing, Scheduler model, Difftest program format v0
+- Updated: Bug history (calibration section, CE-0001..0003)
+- Updated: Project plan (status, decisions 18–21)
