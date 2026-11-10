@@ -36,7 +36,7 @@ Hierarchy: `MonadCancel ⊂ GenSpawn (+Unique) ⊂ GenConcurrent ⊂ GenTemporal
 
 - **PureConc** (`kernel-testkit/pure.scala`, 396): a pure reference model of `GenConcurrent` built on coop's `ThreadT` (free-monad green threads) and `MVar`; `FiberCtx` holds masks and finalizers. A second, independent implementation to compare against (open bug #3430: it does not run finalizers on cancel).
 - **TestContext** 331, **TimeT** 160, **Generators** 395 (ScalaCheck generators of programs).
-- **TestControl** (testkit, 438): single-threaded mock runtime with virtual time; `tick`, `tickOne`, `tickAll`, `advance`, `results`, `isDeadlocked`; picks a random ready fiber with a seed. This is the natural harness for a deterministic difftest against the Lean model.
+- **TestControl** (testkit, 438): single-threaded mock runtime with virtual time; `tick`, `tickOne`, `tickAll`, `advance`, `results`, `isDeadlocked`; picks a random ready fiber with a seed. It cannot follow a chosen schedule; a scripted EC can ([TestControl and schedule replay](testcontrol.md)).
 - `IOSuite` (2828) runs `AsyncTests[IO]` laws under a `Ticker`.
 
 ## See Also
@@ -45,3 +45,4 @@ Hierarchy: `MonadCancel ⊂ GenSpawn (+Unique) ⊂ GenConcurrent ⊂ GenTemporal
 - [Semantics of CE3](semantics.md)
 - [Bug history](bug-history.md)
 - [Differential testing against Scala](../methodology/differential-testing.md)
+- [TestControl and schedule replay](testcontrol.md)

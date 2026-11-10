@@ -1,1 +1,3 @@
 /.lake
+.scala-build/
+.bsp/
