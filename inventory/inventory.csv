@@ -1329,7 +1329,7 @@ core.IOFiber.setCurrentIOFiber,core,method,core/shared/src/main/scala/cats/effec
 core.IOFiber.onFatalFailure,core,method,core/shared/src/main/scala/cats/effect/IOFiber.scala,1597,todo,,
 core.IOFiber.runLoop.EndFiber,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,220,todo,,
 core.IOFiber.runLoop.Pure,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,259,todo,,
-core.IOFiber.runLoop.Error,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,263,todo,,
+core.IOFiber.runLoop.Error,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,263,modelled,,core.SyncIO.runLoop.Error.fatalTwin
 core.IOFiber.runLoop.Delay,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,271,todo,,
 core.IOFiber.runLoop.RealTime,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,295,todo,,
 core.IOFiber.runLoop.Monotonic,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,302,todo,,
@@ -1489,7 +1489,7 @@ core.SyncIO.tag.RealTime,core,constructor,core/shared/src/main/scala/cats/effect
 core.SyncIO.tag.Monotonic,core,constructor,core/shared/src/main/scala/cats/effect/SyncIO.scala,679,todo,,
 core.SyncIO.runLoop.Pure,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,237,todo,,
 core.SyncIO.runLoop.Suspend,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,241,todo,,
-core.SyncIO.runLoop.Error,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,257,todo,,
+core.SyncIO.runLoop.Error,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,257,modelled,,core.SyncIO.runLoop.Error.fatalTwin
 core.SyncIO.runLoop.Map,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,261,todo,,
 core.SyncIO.runLoop.FlatMap,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,269,todo,,
 core.SyncIO.runLoop.HandleErrorWith,core,runloop-branch,core/shared/src/main/scala/cats/effect/SyncIO.scala,277,todo,,

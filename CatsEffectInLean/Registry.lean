@@ -6,6 +6,8 @@ import CatsEffectInLean.Props.Calibration.ResourceEval
 import CatsEffectInLean.Proofs.Calibration.ResourceEval
 import CatsEffectInLean.Props.Calibration.QueueTimeout
 import CatsEffectInLean.Proofs.Calibration.QueueTimeout
+import CatsEffectInLean.Props.Calibration.FatalRaise
+import CatsEffectInLean.Proofs.Calibration.FatalRaise
 
 /-!
 # Property registry
@@ -127,7 +129,27 @@ def registry : List Entry := [
     note := "No lost element for program A of reproducers/CE-0003 (offer xs; take.timeout(d) in a \
       started fiber; cancel it; join; drain), all xs, d, s and pick schedules. Counterexample: \
       xs = [42], d = 1000, s = 1, FIFO schedule: the take racer completes Succeeded(42) after \
-      the consumer is canceled; the racePair finalizer drops the outcome." }
+      the consumer is canceled; the racePair finalizer drops the outcome." },
+  { id := "core.SyncIO.runLoop.Error.fatalTwin"
+    rows := ["core.IOFiber.runLoop.Error", "core.SyncIO.runLoop.Error"]
+    prop := ``Props.Calibration.raiseErrorTwin
+    status := .refuted
+    thm := some ``Proofs.Calibration.FatalRaise.raiseErrorTwin_refuted
+    bug := some "bugs/CE-0004.yaml"
+    note := "For every error e, IO.raiseError(e).handleErrorWith(_ => IO.pure(1)) (limit \
+      Int.MaxValue) has the same observations directly (IO run loop) and through syncStep \
+      (SyncIO run loop), over all step-only schedules. Counterexample: fatal e. Direct: fatal \
+      (IOFiber.scala:265-269 onFatalFailure); stepped: Succeeded(1) (SyncIO.scala:257-259 has \
+      no check). Fixed twin (SyncIOEnv.fixFatalRaise) holds on the bounded domain (fixed_twin); \
+      v3.7.1 holds on its non-fatal members (v371_nonFatal)." },
+  { id := "core.SyncIO.runLoop.Error.fatalTwin.nonFatal"
+    rows := ["core.IOFiber.runLoop.Error", "core.SyncIO.runLoop.Error"]
+    prop := ``Props.Calibration.raiseErrorTwinNonFatal
+    status := .«open»
+    note := "Ordinary inputs of CE-0004 (AGENTS.md section 6). Proven only for the bounded \
+      domain e in {nonFatal 0, interrupted 0} (Proofs.Calibration.FatalRaise.v371_nonFatal). \
+      A proof for all codes needs a lemma that runs do not depend on the error code (decide \
+      cannot check a free code)." }
 ]
 
 end CatsEffectInLean

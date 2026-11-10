@@ -260,17 +260,19 @@ def select : SVal → Option IO
   | .right (.val a) => some (.pure a)
   | _ => none
 
-/-- `fa.syncStep(limit).unsafeRunSync()` (`SyncIO.scala:226`), then the law's selector. The
-result is the `IO` to run next and the heap, or (`.error`) a model stop as a `Summary`
-(`outOfFuel` or `aborted`). A throw gives `IO.raiseError(e)` (`Error`, `IO.scala:2210-2212`). -/
-def steppedRest (fuel : Nat) (fa : IO) (limit : Int) (refs : List Val) :
-    Except Summary (IO × Heap) :=
-  match syncStep mm env fuel fa limit (prefixExec mm refs) with
+/-- `fa.syncStep(limit).unsafeRunSync()` (`SyncIO.scala:226`), then the law's selector, for a
+given `syncStep` function `ss` and `SyncIO` closure meaning `se` (Cats Effect v3.7.1 is
+`steppedRest`; the fixed twins of decision 39 give their own). The result is the `IO` to run
+next and the heap, or (`.error`) a model stop as a `Summary` (`outOfFuel` or `aborted`). A
+throw gives `IO.raiseError(e)` (`Error`, `IO.scala:2210-2212`). -/
+def steppedRestWith (ss : Nat → IO → Int → Exec M → IRes M) (se : SyncIOEnv M) (fuel : Nat)
+    (fa : IO) (limit : Int) (refs : List Val) : Except Summary (IO × Heap) :=
+  match ss fuel fa limit (prefixExec mm refs) with
   | .outOfFuel => .error .outOfFuel
   | .abort a => .error (.aborted a)
   | .thrown e x => .ok (.error e, x.heap)
   | .ok s x =>
-    match SyncIO.unsafeRunSync (senv mm env) fuel s x with
+    match SyncIO.unsafeRunSync se fuel s x with
     | .value v x =>
       match select v with
       | some p => .ok (p, x.heap)
@@ -278,6 +280,12 @@ def steppedRest (fuel : Nat) (fa : IO) (limit : Int) (refs : List Val) :
     | .thrown e x => .ok (.error e, x.heap)
     | .outOfFuel => .error .outOfFuel
     | .abort a => .error (.aborted a)
+
+/-- `fa.syncStep(limit).unsafeRunSync()` (`SyncIO.scala:226`), then the law's selector, for
+Cats Effect v3.7.1. -/
+def steppedRest (fuel : Nat) (fa : IO) (limit : Int) (refs : List Val) :
+    Except Summary (IO × Heap) :=
+  steppedRestWith mm (syncStep mm env) (senv mm env) fuel fa limit refs
 
 end SyncStep
 
@@ -316,13 +324,18 @@ variable (env : UserEnv)
 def directObs (fa : IO) (refs : List Val) (cs : List SoloChoice) : Obs :=
   ofSolo (Solo.exec {} counterMaskModel env cs (Solo.init counterMaskModel fa refs))
 
+/-- The observation of a stepped run, given the result `r` of the `SyncIO` part: a model stop,
+or the `IO` to run next as the root fiber on the heap that the `SyncIO` part left. -/
+def obsOfRest (refs : List Val) (r : Except Summary (IO × Heap)) (cs : List SoloChoice) : Obs :=
+  match r with
+  | .error s => (s, refs, [])
+  | .ok (p, h) => ofSolo (Solo.exec {} counterMaskModel env cs (rootOn counterMaskModel p h))
+
 /-- The stepped run: `fa.syncStep(limit).unsafeRunSync()` with fuel `fuel`, then the selected
 `IO` as the root fiber on the heap that the `SyncIO` part left, under schedule `cs`. -/
 def steppedObs (fa : IO) (limit : Int) (refs : List Val) (fuel : Nat) (cs : List SoloChoice) :
     Obs :=
-  match SyncStep.steppedRest counterMaskModel env fuel fa limit refs with
-  | .error s => (s, refs, [])
-  | .ok (p, h) => ofSolo (Solo.exec {} counterMaskModel env cs (rootOn counterMaskModel p h))
+  obsOfRest env refs (SyncStep.steppedRest counterMaskModel env fuel fa limit refs) cs
 
 end
 

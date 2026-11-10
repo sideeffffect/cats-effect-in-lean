@@ -162,10 +162,10 @@ theorem stepped_ne (fuel : Nat) (cs : List SoloChoice) :
     eraseObs (steppedObs cxEnv cxFa cxLimit cxRefs fuel cs) ≠ cxDirect := by
   intro heq
   by_cases hf : fuel < 6
-  · simp only [steppedObs, rest_small fuel hf, cxDirect, eraseObs] at heq
+  · simp only [steppedObs, obsOfRest, rest_small fuel hf, cxDirect, eraseObs] at heq
     cases heq
   · obtain ⟨m, rfl⟩ : ∃ m, fuel = m + 6 := ⟨fuel - 6, by omega⟩
-    simp only [steppedObs, rest_big] at heq
+    simp only [steppedObs, obsOfRest, rest_big] at heq
     exact reach_obs _ (exec_mem cs s0 (by decide +kernel)) heq
 
 /-! ## The witness is well-formed -/
