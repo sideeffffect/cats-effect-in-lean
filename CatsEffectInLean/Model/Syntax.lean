@@ -80,7 +80,8 @@ inductive IO where
   | start (ioa : IO)
   /-- Tag 18. `RacePair(ioa, iob)` (`IO.scala:2297-2300`). -/
   | racePair (ioa : IO) (iob : IO)
-  /-- Tag 19. `Sleep(delay)` (`IO.scala:2302-2304`). `delay` is in virtual-time units. -/
+  /-- Tag 19. `Sleep(delay)` (`IO.scala:2302-2304`). `delay` is in virtual-time units (the
+  difftest uses milliseconds). -/
   | sleep (delay : Nat)
   /-- Tag 20. `EvalOn(ioa, ec)` (`IO.scala:2306-2308`). `ec` is an `ExecutionContext` id. -/
   | evalOn (ioa : IO) (ec : Nat)
@@ -174,11 +175,43 @@ inductive RtFn where
   /-- The thunk of `complete(a)` (`IODeferred.scala:62-69`): `IO { if (cell.compareAndSet(initial,
   IO.pure(a))) { callbacks(Right(a)); true } else false }`. -/
   | deferredComplete (d : Nat) (v : Val)
-  /-- The `IO.async` registration that `RacePair` runs (`IOFiber.scala:912-950`). -/
-  | racePairRegister (ioa : IO) (iob : IO)
-  /-- The `IO.async` registration that `Sleep` runs when `delay > 0`
-  (`IOFiber.scala:960-977`). -/
-  | sleepRegister (delay : Nat)
+  /-- The `Cont` body of `IO.async { cb => ... }` in the `RacePair` branch
+  (`IOFiber.scala:911-950`; `IO.async` at `IO.scala:1418-1431`):
+  `(resume, get, lift) => G.uncancelable { poll => ... }`. It gets `Val.cont state`. -/
+  | racePairBody (ioa : IO) (iob : IO)
+  /-- `poll => lift(k(resume)) flatMap { ... }` of that `IO.async` (`IO.scala:1422-1426`). -/
+  | racePairUnc (ioa : IO) (iob : IO) (state : Nat)
+  /-- `k(cb)` of `RacePair`: the thunk `IO { ... }` (`IOFiber.scala:914-949`). It makes `fiberA`
+  and `fiberB`, sets their callbacks, schedules A then B, and returns `Some(cancel)`. A `Val`
+  cannot hold an `IO`, so it returns `Val.some (Val.pair (Val.fiber a) (Val.fiber b))`;
+  `racePairSel` builds `cancel` again. `state` is the `ContState` of the `IO.async`. -/
+  | racePairRegister (ioa : IO) (iob : IO) (state : Nat)
+  /-- The `flatMap` function of `IO.async` (`IO.scala:1423-1425`) for `RacePair`:
+  `Some(fin) => G.onCancel(poll(get), lift(fin))`, `None => get`. `fin` is the `cancel` of
+  `IOFiber.scala:940-946`. -/
+  | racePairSel (state : Nat) (maskId : Nat) (self : Nat)
+  /-- `cancelA => fiberB.cancel.start.flatMap(cancelB => ...)` in the `for` of
+  `IOFiber.scala:941-946`. `fiberB.cancel` is read when this function runs. -/
+  | racePairCancelB (b : Nat)
+  /-- `cancelB => cancelA.join.flatMap(_ => ...)` (`IOFiber.scala:944`). -/
+  | racePairJoinA (cancelA : Nat)
+  /-- `_ => cancelB.join.map(_ => ())` (`IOFiber.scala:945-946`). -/
+  | racePairJoinB (cancelB : Nat)
+  /-- The `Cont` body of `IO.async[Unit] { cb => ... }` in the `Sleep` branch when
+  `delay > 0` (`IOFiber.scala:959-978`; `IO.async` at `IO.scala:1418-1431`). -/
+  | sleepBody (delay : Nat)
+  /-- `poll => lift(k(resume)) flatMap { ... }` of that `IO.async`. -/
+  | sleepUnc (delay : Nat) (state : Nat)
+  /-- `k(cb)` of `Sleep`: the thunk `IO { ... }` (`IOFiber.scala:961-977`). The scheduler is not
+  a `WorkStealingThreadPool` (difftest runtime), so `scheduler.sleep(delay, () => cb(RightUnit))`
+  (`IOFiber.scala:972`) adds a timer (`Heap.timers`). It returns `Some(IO(cancel.run()))` as
+  `Val.some (Val.nat timer)`; `sleepSel` builds the `IO` again. -/
+  | sleepRegister (delay : Nat) (state : Nat)
+  /-- The `flatMap` function of `IO.async` for `Sleep` (`IO.scala:1423-1425`). -/
+  | sleepSel (state : Nat) (maskId : Nat) (self : Nat)
+  /-- The thunk of `IO(cancel.run())` (`IOFiber.scala:973`): the `Runnable` that
+  `scheduler.sleep` returned removes the timer. -/
+  | sleepCancel (timer : Nat)
 
 end
 

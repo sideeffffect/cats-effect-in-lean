@@ -283,7 +283,7 @@ def fnSize : Fn → Nat
   | .rt k => rtSize k
 /-- `IO` constructors inside a runtime closure. -/
 def rtSize : RtFn → Nat
-  | .racePairRegister a b => ioSize a + ioSize b
+  | .racePairBody a b | .racePairUnc a b _ | .racePairRegister a b _ => ioSize a + ioSize b
   | _ => 0
 end
 

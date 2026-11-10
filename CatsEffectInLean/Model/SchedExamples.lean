@@ -200,8 +200,10 @@ def tasksOf {M : Type} (s : Sched M) : List (Option Nat) :=
   (s.log.filterMap fun
     | .pick _ (.fiber i) => some (some i)
     | .pick _ (.cb _ _) => some none
+    | .pick _ (.timer _ _) => some none
     | .cancel _ c => some (some c)
-    | .cancelSkipped _ => none).reverse
+    | .cancelSkipped _ => none
+    | .advance _ _ => none).reverse
 
 /-- Summary, emitted trace (oldest first), number of tasks, task order, and the number of
 tasks left in the ready list (`pending` of the difftest output; no timers here). -/

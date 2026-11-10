@@ -18,7 +18,9 @@ micro-step and keeps the parts of the Scala output that the model does not hold:
   model id when it is used; an unknown `h` is a skipped cancel, as in Scala. Fiber values in the
   output are printed with their handles.
 * Task labels (`ScriptedEC.label`): `f<k>` at the first enqueue of a fiber, `x<k>` for an
-  external canceller, `cb<a>.<i>` for a `later` callback task. `labels` is aligned with the ready
+  external canceller, `cb<a>.<i>` for a `later` callback task, `t<k>` for a timer task.
+* Time: the model clock is in milliseconds (the unit of `sleep`), as the `time` field and the
+  `advance` log entries of Scala (`now / 1000000`). `labels` is aligned with the ready
   list (`Heap.ready`): a pick removes one entry, and new entries are appended at the end.
 * Async ids: Scala counts `async` registrations (`h.newAsync`); the model events hold the
   `ContState` id. The glue renumbers by the first `asyncReg` event.
@@ -136,6 +138,8 @@ def absorb (r : RS) : RS := Id.run do
         r := { r with labels := r.labels.push { name := s!"cb{a}.{i}", cb := some (a, i) },
                       later := r.later.insert st rest }
       | _, _ => r := r.setErr "callback task without a later callback"
+    -- a timer task of the virtual-time `Scheduler`: `CbTask(s"t$timerCount", …)`
+    | .timer k _ => r := { r with labels := r.labels.push { name := s!"t{k}" } }
   return r
 
 /-- The labels of the ready list as JSON. -/
@@ -186,6 +190,10 @@ def step (cfg : Config) (env : UserEnv) (maxTasks : Nat) (r : RS) : RS :=
       | some (.cancelSkipped _) =>
         absorb { r with log := r.log.push (Json.mkObj [("cancel", toJson (hd.getD 0)),
                                                         ("skipped", .bool true)]) }
+      | some (.advance t woken) =>
+        -- `{"advance":ms,"woken":[…]}`; the woken timers are now at the end of the ready list
+        absorb { r with log := r.log.push (Json.mkObj [("advance", toJson t),
+          ("woken", Json.arr (woken.map (fun k => Json.str s!"t{k}")).toArray)]) }
       | none => absorb (r.setErr "empty schedule log")
 
 /-- Run at most `fuel` micro-steps. -/
@@ -269,9 +277,10 @@ def replayFields (p : Prog) (choices : List Choice) (maxSteps : Nat) (io : IO) :
   let fibers := Json.mkObj ((r.hids.toList.zipIdx).map fun (i, h) =>
     (toString h, Json.str (r.fibLabel.getD i "?")))
   [("outcome", outcome), ("trace", Json.arr (r.trace.map (evJson hOf))),
-   ("steps", toJson r.s.tasks), ("time", toJson (0 : Nat)), ("schedule", Json.arr r.log),
+   ("steps", toJson r.s.tasks), ("time", toJson r.s.liveHeap.clock), ("schedule", Json.arr r.log),
    ("fifoFrom", match r.fifoFrom with | some n => toJson n | none => .null),
-   ("fibers", fibers), ("pending", toJson r.s.heap.ready.length),
+   -- `ec.ready.size + timers.size`
+   ("fibers", fibers), ("pending", toJson (r.s.liveHeap.ready.length + r.s.liveHeap.timers.length)),
    ("failures", Json.arr (r.failures.map Json.str)),
    ("compare", Json.arr (comparedFields.map Json.str).toArray)]
 

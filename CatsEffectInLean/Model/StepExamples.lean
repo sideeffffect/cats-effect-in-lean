@@ -169,9 +169,13 @@ example : both (.flatMap (.pure .unit) (.user 0)) = same (.aborted .illTyped, .u
   decide +kernel
 
 -- Ex 16. `Cede` yields and the single-fiber driver runs the fiber again (`cedeR`,
--- FIB:1453-1455). `Sleep` is not mirrored yet: an explicit `unsupportedTag`.
+-- FIB:1453-1455). `Sleep` with a positive delay registers a timer and suspends
+-- (FIB:959-978); the single-fiber driver has no timers, so the fiber stays suspended.
+-- `Sleep(0)` is `IO.cede` (FIB:979).
 example : both .cede = same (.done (.succeeded .unit), .unit) := by decide +kernel
-example : both (.flatMap (.sleep 1) (.user 4)) = same (.aborted (.unsupportedTag 19), .unit) := by
+example : both (.flatMap (.sleep 1) (.user 4)) = same (.suspended, .unit) := by
+  decide +kernel
+example : both (.flatMap (.sleep 0) (.user 4)) = same (.done (.succeeded (.nat 2)), .unit) := by
   decide +kernel
 
 /-! ## Cancelation and masking -/

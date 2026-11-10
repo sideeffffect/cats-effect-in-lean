@@ -189,8 +189,8 @@ def vDone : View := { outcomes := [none, some (.succeeded (.nat 3))], deferreds 
         .asyncReg 4, .cb 4 1, .handle 3, .cbLater 4 2, .failure (userErr 6)].all
   fun e => TraceEv.ofVal? e.toVal == some e
 
--- Unsupported ops are reported, not guessed.
-#guard unsupportedOps (.seq (.sleep 1) (.racePair .cede .cede)) == ["sleep", "racePair"]
+-- Every op of format v0 runs on the model (no unsupported op left).
+#guard unsupportedOps (.seq (.sleep 1) (.racePair .cede .cede)) == []
 #guard rootTerm (.join (.lit .unit)) == .error .typeError
 
 end Difftest.Tests

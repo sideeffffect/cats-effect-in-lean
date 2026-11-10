@@ -1,7 +1,7 @@
 # Differential testing of the Lean model against Cats Effect
 
-> Sources: synthesized from wiki articles on python-formalization, julia-in-lean, formalization precedents, CE source layout, Lean tooling (2026-11-10); TestControl spike (2026-11-10); generator and driver build (2026-11-10); first Lean-vs-Scala replay runs (2026-11-10); generator coverage work (2026-11-10)
-> Raw: [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Generator coverage notes](../../raw/project-decisions/2026-11-10-generator-coverage-notes.md); [Generator and driver notes](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [python-formalization difftest harness](../../raw/python-formalization/2026-10-29-lean-core-and-difftest-harness.md); [Harness code copy](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [Cedar DRT + Lean FFI](../../raw/lean-tooling/cedar-spec-drt-and-lean-ffi-readmes.md); [TestControl docs](../../raw/lean-tooling/cats-effect-testcontrol-docs.md); [TestControl spike notes](../../raw/cats-effect/2026-11-10-testcontrol-spike-notes.md); [Netsem](../../raw/formalization-precedents/2018-10-netsem-engineering-with-logic-tcp-test-oracle.md); [SibylFS](../../raw/formalization-precedents/2015-10-sibylfs-formal-spec-oracle-based-testing-posix.md); [Orchestrator merge notes](../../raw/project-decisions/2026-11-10-orchestrator-merge-notes.md)
+> Sources: synthesized from wiki articles on python-formalization, julia-in-lean, formalization precedents, CE source layout, Lean tooling (2026-11-10); TestControl spike (2026-11-10); generator and driver build (2026-11-10); first Lean-vs-Scala replay runs (2026-11-10); generator coverage work (2026-11-10); `RacePair`/`Sleep` runs (2026-11-10)
+> Raw: [RacePair and Sleep notes](../../raw/cats-effect/2026-11-10-racepair-sleep-notes.md); [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Generator coverage notes](../../raw/project-decisions/2026-11-10-generator-coverage-notes.md); [Generator and driver notes](../../raw/project-decisions/2026-11-10-difftest-generator-driver-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [python-formalization difftest harness](../../raw/python-formalization/2026-10-29-lean-core-and-difftest-harness.md); [Harness code copy](../../raw/lean-tooling/python-formalization-difftest-harness-code.md); [Cedar DRT + Lean FFI](../../raw/lean-tooling/cedar-spec-drt-and-lean-ffi-readmes.md); [TestControl docs](../../raw/lean-tooling/cats-effect-testcontrol-docs.md); [TestControl spike notes](../../raw/cats-effect/2026-11-10-testcontrol-spike-notes.md); [Netsem](../../raw/formalization-precedents/2018-10-netsem-engineering-with-logic-tcp-test-oracle.md); [SibylFS](../../raw/formalization-precedents/2015-10-sibylfs-formal-spec-oracle-based-testing-posix.md); [Orchestrator merge notes](../../raw/project-decisions/2026-11-10-orchestrator-merge-notes.md)
 
 ## Overview
 
@@ -18,7 +18,7 @@ Both agent precedents and Cedar require the model to agree with the real impleme
 ## Harness shape (proposed)
 
 - Lean side: `lean_exe cediff` reads one JSON case per line (files or stdin) and writes one JSON result per line (python-formalization `pydiff` pattern). Built: decode, translation into `Model.IO`, and the replay run on `Model.Sched`. A subprocess is fast enough: 2,000 cases in 0.14 s.
-- Ops that the model cannot run yet (`racePair`, `sleep`) and testcontrol mode are reported as `unsupported`. They are not approximated, because an approximation would make agreement meaningless ([Difftest program format v0](difftest-program-format.md), "Lean side").
+- Ops that the model cannot run yet (none in format v0 since `RacePair` and `Sleep` are mirrored) and testcontrol mode are reported as `unsupported`. They are not approximated, because an approximation would make agreement meaningless ([Difftest program format v0](difftest-program-format.md), "Lean side").
 - Scala side: an sbt project pinned to CE v3.7.1 generates programs (an IO AST), interprets them into real `IO`, runs them, and compares.
 - Deterministic runs: a scripted `ExecutionContext` that follows a choice list ([TestControl and schedule replay](../cats-effect/testcontrol.md)); also `TestControl` (single thread, virtual time, random ready-fiber choice with a seed; `tick`, `tickOne`, `tickAll`, `advance`, `results`, `isDeadlocked`). Docs warn it can hide real multi-thread races.
 
@@ -76,12 +76,16 @@ Replay mode, all nine fields compared. Details: [First difftest agreement notes]
 | seeds 1-10 × 10,000 | 81,663 | 18,337 | 0 |
 | seeds 11-20 × 10,000, max size 80 | 80,148 | 19,852 | 0 |
 | `basic.jsonl` + `sched.jsonl` | 29 | 4 | 0 |
+| after `RacePair`/`Sleep`: seeds 1-5 × 10,000 | 10,000 each | 0 | 0 |
+| after `RacePair`/`Sleep`: seeds 11-20 × 10,000, max size 80 | 100,000 | 0 | 0 |
+| after `RacePair`/`Sleep`: `basic`, `sched`, `deferred`, `racesleep` | 51 | 2 (testcontrol) | 0 |
 
-- No model bug found: every runnable case agreed on the first full run.
-- Unsupported: `sleep` in 13% of cases, `racePair` in 7% (18% have one of them). Testcontrol cases: all (decision 15).
-- Mutation test (one planted bug in `Step.lean`, 8,153 runnable cases): 9 of 13 mutants killed (12 to 250 mismatches each). 3 survivors are equivalent in single-thread replay. 1 is a coverage gap: no case has 2+ fibers waiting on one `Deferred` when it completes.
-- CI job `difftest` runs `check` on the fixed files, the corpus, and 3 × 2,000 generated replay cases. Any mismatch fails the job.
-- The 50,000-case gate is met for the replay mode and the ops the model runs. Still open: `racePair`, `sleep`, testcontrol refinement, and the coverage gaps of decision 17.
+- No model bug found: every runnable case agreed on the first full run, also after `RacePair` and `Sleep` ([RacePair and Sleep notes](../../raw/cats-effect/2026-11-10-racepair-sleep-notes.md)).
+- Before `RacePair`/`Sleep`: `sleep` in 13% of cases, `racePair` in 7% were unsupported. Now no replay op is unsupported. Testcontrol cases: all (decision 15).
+- Mutation test (one planted bug in `Step.lean`, 8,153 runnable cases): 9 of 13 mutants killed (12 to 250 mismatches each). 3 survivors are equivalent in single-thread replay. 1 was a coverage gap (2+ fibers waiting on one `Deferred` at `complete`); `difftest/cases/deferred.jsonl` now kills it.
+- Mutation test of `RacePair`/`Sleep` (seed 1, 10,000 cases): 9 of 11 mutants killed (7 to 263 mismatches). 2 survive generated cases (wake order of timers with one due time); `racesleep.jsonl` (`sleep-order`) kills them.
+- CI job `difftest` runs `check` on the fixed files (`basic`, `sched`, `deferred`, `racesleep`), the corpus, and 3 × 2,000 generated replay cases. Any mismatch fails the job.
+- The 50,000-case gate is met for the replay mode, all ops (150,000 cases after `RacePair`/`Sleep`). Still open: testcontrol refinement, and the coverage gaps of decision 17.
 
 ## Triage bins for a mismatch
 

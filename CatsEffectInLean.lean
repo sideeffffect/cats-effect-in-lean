@@ -12,6 +12,7 @@ import CatsEffectInLean.Model.Run
 import CatsEffectInLean.Model.StepExamples
 import CatsEffectInLean.Model.Sched
 import CatsEffectInLean.Model.SchedExamples
+import CatsEffectInLean.Model.RaceSleepExamples
 import CatsEffectInLean.Kernel.MonadCancel
 import CatsEffectInLean.Kernel.GenSpawn
 import CatsEffectInLean.Props.Kernel.MonadCancelLaws

@@ -25,7 +25,12 @@ that a replay choice list gives the same task order in Lean and in Scala:
 * The run stops when the root fiber (id 0) has an outcome (checked between tasks), when no task
   is ready ("blocked"), or when the task limit is reached.
 
-No timers: `Sleep` is not mirrored yet, so "time moves when nothing is ready" is not here.
+Timers (`Sleep`, `FIB:954-981`): `Heap.timers` mirrors the timer list of the virtual-time
+`Scheduler` of `Runner.replay`. Time moves only when nothing is ready: then all timers with the
+earliest due time move to the ready list in creation order (`Task.timer`), and the clock jumps
+to that time. In Scala this happens in the same loop turn as the next pick; here it is a
+micro-step of its own (`LogEntry.advance`) that does not count as a task and uses no choice.
+Nothing runs between the two, so the task order and the schedule log are the same.
 
 `FIB` = `core/shared/src/main/scala/cats/effect/IOFiber.scala` at `v3.7.1`.
 
@@ -55,6 +60,9 @@ inductive LogEntry where
   | cancel (target : Nat) (canceller : Nat)
   /-- External cancel of a fiber that does not exist: no step (`"skipped":true`). -/
   | cancelSkipped (target : Nat)
+  /-- Time moved to `time`; the timers `woken` (ids, creation order) went to the ready list
+  (the `{"advance":ms,"woken":[…]}` entry of `Runner.replay`). -/
+  | advance (time : Nat) (woken : List Nat)
   deriving DecidableEq, Repr
 
 /-- The global state of the scheduler. -/
@@ -135,6 +143,27 @@ def runTask (s : Sched M) : Task → Sched M
         (s.finish (contCallback mm st r { fib := f, heap := s.heap, fibers := s.fibers })).checkBroken
       | none => s.stop (.aborted .badHandle)
     | none => s.stop (.aborted .badContState)
+  | .timer _ st =>
+    -- a timer task: `() => cb(RightUnit)` (FIB:972) on the scheduler thread
+    match s.heap.conts[st]? with
+    | some c =>
+      match s.fibers[c.fiber]? with
+      | some f =>
+        (s.finish (contCallback mm st (.right .unit) { fib := f, heap := s.heap, fibers := s.fibers })).checkBroken
+      | none => s.stop (.aborted .badHandle)
+    | none => s.stop (.aborted .badContState)
+
+/-- Move time to the earliest due time; the timers due then go to the ready list in creation
+order (`Runner.replay`: `timers.map(_._1).min`, `filter`, `now = t`, `ec.execute`). -/
+def advance (s : Sched M) : Sched M :=
+  match s.heap.timers.map (·.due) |>.min? with
+  | none => s
+  | some t =>
+    let due := s.heap.timers.filter (·.due == t)
+    let rest := s.heap.timers.filter (·.due != t)
+    { s with heap := { s.heap with timers := rest, clock := t,
+                                   ready := s.heap.ready ++ due.map (fun tm => .timer tm.id tm.state) },
+             log := .advance t (due.map (·.id)) :: s.log }
 
 /-- One micro-step: one run-loop iteration of the running task, or (between tasks) the start
 of the next task. Mirrors the `while` loop of `Runner.replay`. `maxTasks` is `maxSteps`. -/
@@ -167,7 +196,9 @@ def tick (maxTasks : Nat) (cs : List RChoice) (s : Sched M) : Sched M × List RC
         if maxTasks ≤ s.tasks then (s.stop .taskLimit, cs)
         else
           match s.heap.ready with
-          | [] => (s.stop .blocked, cs)
+          | [] =>
+            -- `ec.ready.isEmpty && timers.isEmpty`: blocked; else time moves (no task, no choice)
+            if s.heap.timers.isEmpty then (s.stop .blocked, cs) else (s.advance, cs)
           | rd =>
             -- `Choice.Pick(i)`, or index 0 (FIFO) when the choices ran out
             let (n, rest) := match cs with

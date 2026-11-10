@@ -135,7 +135,7 @@ Output line: `{"v":0,"id","mode","outcome","trace","steps","time","schedule","fi
 - Other CE version: `sbt -Dce.version=<version> test`.
 - Lean side: `lake build Difftest cediff`, then `lake exe cediff difftest/cases/basic.jsonl`. Compare with Scala: `python3 difftest/py/drive.py check --lean "lake exe cediff" difftest/cases/*.jsonl` (only the input files, not `*.expected.jsonl`).
 - Generated cases, driver, shrinker: `difftest/py/` ([Differential testing](differential-testing.md), sections Generator and Driver).
-- CI: job `difftest` runs `sbt -batch test` (JDK 21), `python3 difftest/py/selftest.py`, then builds `cediff` and requires agreement (`drive.py check` on the fixed files, `corpus`, `run` on 3 × 2,000 replay cases); the `lean` job runs the Lean side on `basic.jsonl` and `sched.jsonl`.
+- CI: job `difftest` runs `sbt -batch test` (JDK 21), `python3 difftest/py/selftest.py`, then builds `cediff` and requires agreement (`drive.py check` on the fixed files, `corpus`, `run` on 3 × 2,000 replay cases); the `lean` job runs the Lean side on the fixed case files (`basic`, `sched`, `deferred`, `racesleep`).
 
 ## Lean side
 
@@ -152,12 +152,10 @@ Code: `tools/Difftest/` (`lean_lib Difftest`, `lean_exe cediff`). It is test cod
 - `Tests.lean`: 62 `#guard` checks that run during `lake build Difftest`.
 - `lake exe cediff [FILE…]` (stdin if no file): one line per case. Replay case with supported ops: the Scala output fields plus `"compare":[…]` (the fields that the driver compares; now all nine). Otherwise `{"v":0,"id","mode","outcome":"unsupported","size":n,"unsupported":[ops]}` (`mode:testcontrol` for testcontrol cases, decision 15) or `{"v":0,"id","error":"decode: …"}`. Exit 1 if a case is rejected. Speed: 2,000 cases in 0.14 s.
 
-**What the model lacks** (these ops are reported as `unsupported`, never guessed):
+**What the model lacks** (these ops are reported as `unsupported`, never guessed). `racePair` and `sleep` run since 2026-11-10 ([Scheduler model](../cats-effect/scheduler-model.md)); the replay glue labels timer tasks `t<k>`, prints `advance` entries, `time`, and counts timers in `pending`:
 
 | Gap | Ops | Needed in the model |
 |-----|-----|---------------------|
-| `RacePair` (`IOFiber.scala:908-950`) | `racePair` | the step branch, two new fibers, `raceLeft`/`raceRight` callbacks |
-| `Sleep` and timers (`IOFiber.scala:952-981`) | `sleep` | virtual time and the timer list of the replay runner |
 | testcontrol mode | all | the bounded schedule search with a `complete` flag (decision 15) |
 | `Fn.user` has no captured values | none (workaround) | none (the encoding works); cleaner: `Fn.user id env` |
 | `Val` cannot hold an `IO` (`async` returns `Option[IO[Unit]]`, `IO.defer` returns an `IO`) | none (workaround) | none: a marker value, and the next closure rebuilds the term |

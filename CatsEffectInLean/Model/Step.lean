@@ -23,8 +23,11 @@ Design (`wiki/lean/kernel-evaluation.md`, design rules):
   scheduler is `CatsEffectInLean/Model/Sched.lean`.
 * Phase 2 step 9 (part): `IODeferred` (`get`, `complete`, `clear`) as runtime closures
   (`RtFn.deferred*`) over `Heap.deferreds`.
-* `RacePair`, `Sleep`, a foreign `EvalOn` and `Blocking` give `Abort.unsupportedTag`. They
-  never succeed silently.
+* `RacePair` and `Sleep` (`FIB:908-981`) are mirrored as `IO.async` terms with runtime
+  closures (`RtFn.racePair*`, `RtFn.sleep*`). `Sleep` adds a timer to `Heap.timers` (the
+  difftest `Scheduler` is not a `WorkStealingThreadPool`); the scheduler moves due timers to the
+  ready list (`Task.timer`).
+* A foreign `EvalOn` and `Blocking` give `Abort.unsupportedTag`. They never succeed silently.
 
 The cancelation and auto-yield counters of `runLoop` (`FIB:213-240`) are `Loop` fields. The
 read barrier (`FIB:228`) and the `observe` flag of a step make a pending external cancel
@@ -107,6 +110,23 @@ inductive Task where
   /-- A task that calls the `IOCont` callback of cell `state` with `result`
   (`UserEffect.deferCb`; in the difftest a `CbTask`). -/
   | cb (state : Nat) (result : Val)
+  /-- A timer task: the timer `id` is due and calls the `IOCont` callback of cell `state` with
+  `Right(())` (`scheduler.sleep(delay, () => cb(RightUnit))`, `FIB:972`). In the difftest it is
+  the `CbTask` with label `t<id>` that the virtual-time `Scheduler` of `Runner.replay` makes. -/
+  | timer (id : Nat) (state : Nat)
+  deriving DecidableEq, Repr
+
+/-- One pending timer of the runtime `Scheduler` (`IORuntime.scheduler`). The difftest replay
+`Scheduler` (`difftest/src/main/scala/cats/effect/difftest/Runner.scala`, `replay`) keeps the
+timers in a list in creation order, each with its due time `now + delay`; `sleep` returns a
+`Runnable` that removes the timer. -/
+structure Timer where
+  /-- Creation number (`timerCount`); the task label is `t<id>`. -/
+  id : Nat
+  /-- Due time in the virtual-time unit (`now + d.toNanos`; the difftest unit is ms). -/
+  due : Nat
+  /-- The `ContState` of the sleeping `IO.async`: the timer calls its `cb`. -/
+  state : Nat
   deriving DecidableEq, Repr
 
 /-- The part of the world that one fiber step reads and writes, other than the fibers. -/
@@ -131,6 +151,10 @@ structure Heap where
   broken : Option Abort := none
   /-- `IODeferred` cells (index = `Deferred` id; `UserEffect.allocDeferred`). -/
   deferreds : List DeferredCell := []
+  /-- Pending timers of the runtime `Scheduler`, in creation order (`Sleep`, `FIB:972`). -/
+  timers : List Timer := []
+  /-- The number of timers made so far (the next timer id). -/
+  timerCount : Nat := 0
   deriving DecidableEq, Repr
 
 /-- What the run loop does next, as computed by one branch, `succeeded` or `failed`. -/
@@ -432,7 +456,91 @@ def rtCall (k : RtFn) (arg : Val) (x : Exec M) : Except Abort (UserOut × Exec M
         let x := x.setDeferred d { c with value := some v, callbacks := [] }
         let x := c.callbacks.foldl (fun x p => contCallback mm p.2 (.right v) x) x
         .ok (.ret (.bool true), x)
-  | .racePairRegister _ _ | .sleepRegister _ => .error .unsupportedFn
+  -- RacePair (FIB:911-950); `IO.async` is `IOCont(body)` (IO.scala:1418-1431)
+  | .racePairBody a b =>
+    match arg with
+    -- IO.scala:1421 `G.uncancelable { poll => ... }`
+    | .cont s => .ok (.prog (.uncancelable (.rt (.racePairUnc a b s))), x)
+    | _ => .error .illTyped
+  | .racePairUnc a b s =>
+    match arg with
+    -- IO.scala:1422 `lift(k(resume)) flatMap { ... }`; `k(cb) = IO { ... }` (FIB:914)
+    | .poll m p => .ok (.prog (.flatMap (.delay (.rt (.racePairRegister a b s))) (.rt (.racePairSel s m p))), x)
+    | _ => .error .illTyped
+  | .racePairRegister a b s =>
+    -- FIB:915-916 `ec = currentCtx; rt = runtime`
+    let ec := x.fib.currentCtx
+    let ida := x.fibers.length
+    let idb := ida + 1
+    -- FIB:918-932 `new IOFiber(localState, null, cur.ioa/iob, ec, rt)`; FIB:934-935
+    -- `setCallback`: the constructor callback (handle 0)
+    let fa := Fiber.new mm ida x.fib.localState ec a (some (.raceLeft s idb))
+    let fb := Fiber.new mm idb x.fib.localState ec b (some (.raceRight s ida))
+    let x := { x with fibers := x.fibers ++ [fa, fb] }
+    -- FIB:937-938 `scheduleFiber(ec, fiberA); scheduleFiber(ec, fiberB)`
+    let x := (x.enqueue (.fiber ida)).enqueue (.fiber idb)
+    -- FIB:948 `Some(cancel)`
+    .ok (.ret (.some (.pair (.fiber ida) (.fiber idb))), x)
+  | .racePairSel s m p =>
+    match arg with
+    | .some (.pair (.fiber ida) (.fiber idb)) =>
+      -- FIB:940-946: `fiberA.cancel.start.flatMap(cancelA => ...)`. `fiberA.cancel` was read in
+      -- the thunk (FIB:942), in the same run-loop iteration as this function (`FlatMap` over
+      -- `Delay`, FIB:420-437), so the outcome read here is the same.
+      match x.getFib ida with
+      | none => .error .badHandle
+      | some fa =>
+        let cancel := IO.flatMap (.start (IO.cancelOf ida fa.outcome)) (.rt (.racePairCancelB idb))
+        -- IO.scala:1424 `G.onCancel(poll(get), lift(fin))`; `poll(get)` = `UnmaskRunLoop`
+        .ok (.prog (.onCancel (.unmaskRunLoop (.contGet s) m p) cancel), x)
+    -- IO.scala:1425
+    | .none => .ok (.prog (.contGet s), x)
+    | _ => .error .illTyped
+  | .racePairCancelB b =>
+    match arg, x.getFib b with
+    -- FIB:943 `fiberB.cancel.start`: `fiberB.cancel` reads `_cancel` now (FIB:197-201)
+    | .fiber ca, some fb =>
+      .ok (.prog (.flatMap (.start (IO.cancelOf b fb.outcome)) (.rt (.racePairJoinA ca))), x)
+    | .fiber _, none => .error .badHandle
+    | _, _ => .error .illTyped
+  | .racePairJoinA ca =>
+    match arg, x.getFib ca with
+    -- FIB:944 `cancelA.join`: reads `_join` now (FIB:203-207)
+    | .fiber cb, some f => .ok (.prog (.flatMap (IO.joinOf ca f.outcome) (.rt (.racePairJoinB cb))), x)
+    | .fiber _, none => .error .badHandle
+    | _, _ => .error .illTyped
+  | .racePairJoinB cb =>
+    match x.getFib cb with
+    -- FIB:945-946 `cancelB.join` then `yield ()` (`map(_ => ())`)
+    | some f => .ok (.prog (.map (IO.joinOf cb f.outcome) (.rt .voidK)), x)
+    | none => .error .badHandle
+  -- Sleep with `delay > 0` (FIB:959-978)
+  | .sleepBody d =>
+    match arg with
+    | .cont s => .ok (.prog (.uncancelable (.rt (.sleepUnc d s))), x)
+    | _ => .error .illTyped
+  | .sleepUnc d s =>
+    match arg with
+    | .poll m p => .ok (.prog (.flatMap (.delay (.rt (.sleepRegister d s))) (.rt (.sleepSel s m p))), x)
+    | _ => .error .illTyped
+  | .sleepRegister d s =>
+    -- FIB:972 `scheduler.sleep(delay, () => cb(RightUnit))`: the difftest `Scheduler` adds a
+    -- timer due at `now + delay` and returns a `Runnable` that removes it
+    let t := x.heap.timerCount
+    let x := { x with heap := { x.heap with
+      timers := x.heap.timers ++ [{ id := t, due := x.heap.clock + d, state := s }],
+      timerCount := t + 1 } }
+    -- FIB:973-976 `Some(IO(cancel.run()))`
+    .ok (.ret (.some (.nat t)), x)
+  | .sleepSel s m p =>
+    match arg with
+    -- IO.scala:1424 `G.onCancel(poll(get), lift(fin))`; `fin = IO(cancel.run())` (FIB:973)
+    | .some (.nat t) => .ok (.prog (.onCancel (.unmaskRunLoop (.contGet s) m p) (.delay (.rt (.sleepCancel t)))), x)
+    | .none => .ok (.prog (.contGet s), x)
+    | _ => .error .illTyped
+  | .sleepCancel t =>
+    -- `cancel.run()`: `timers -= e` (no effect if the timer is due and gone)
+    .ok (.ret .unit, { x with heap := { x.heap with timers := x.heap.timers.filter (·.id != t) } })
 
 /-- Apply the effects of one user call, in order. -/
 def applyEffects : List UserEffect → Exec M → Exec M
@@ -497,7 +605,10 @@ variable {M : Type} (cfg : Config) (mm : MaskModel M)
 def runOutcomeCb (oc : Outcome) (x : Exec M) : OutcomeCb → Exec M
   | .root | .ext => x
   | .join s => contCallback mm s (.right oc.toVal) x
-  | .raceLeft _ _ | .raceRight _ _ => x.markBroken .unsupportedFn
+  -- FIB:934 `oc => cb(Right(Left((oc, fiberB))))`
+  | .raceLeft s b => contCallback mm s (.right (.left (.pair oc.toVal (.fiber b)))) x
+  -- FIB:935 `oc => cb(Right(Right((fiberA, oc))))`
+  | .raceRight s a => contCallback mm s (.right (.right (.pair (.fiber a) oc.toVal))) x
 
 /-- `done(oc)` (`FIB:1092-1126`). `_join`/`_cancel` (`FIB:1094-1095`) follow from `outcome`.
 `currentCtx = null` (`FIB:1121`) is not modelled (no read after `done`). -/
@@ -972,9 +1083,13 @@ def dispatch (l : Loop M) (nc na : Nat) : StepResult M :=
     let x := { x with fibers := x.fibers ++ [child] }
     -- FIB:904 `scheduleFiber(ec, fiber)`, FIB:906 `succeeded(fiber, 0)`
     ret (succeededK cfg mm env (x.enqueue (.fiber id)) (.fiber id) 0) nc
-  -- `RacePair`, `Sleep` (FIB:908-981): not mirrored yet
-  | .racePair _ _ => ret (x, .abort (.unsupportedTag 18)) nc
-  | .sleep _ => ret (x, .abort (.unsupportedTag 19)) nc
+  -- FIB:908-952 `RacePair`: `next = IO.async { cb => IO { ... } }` = `IOCont(body)`
+  -- (IO.scala:1418-1431); then `runLoop(next, ...)`
+  | .racePair ioa iob => ret (x, .io (.ioCont (.rt (.racePairBody ioa iob)))) nc
+  -- FIB:954-981 `Sleep`: `IO.async { ... }` if `delay.length > 0`, else `IO.cede`
+  | .sleep d =>
+    if d > 0 then ret (x, .io (.ioCont (.rt (.sleepBody d)))) nc
+    else ret (x, .io .cede) nc
   -- FIB:983-1011 `EvalOn`
   | .evalOn ioa ec =>
     -- FIB:987-988 fast path when `cur.ec eq currentCtx`

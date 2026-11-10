@@ -30,8 +30,8 @@ captures a snapshot (`snapVal`).
 
 ## Ops the model cannot express yet
 
-`racePair` and `sleep` (no `RacePair`/`Sleep` mirror in the step function). See
-`unsupportedReason` and the wiki ("Lean side").
+None in format v0 (`unsupportedReason`). `racePair` and `sleep` run on the `RacePair` and
+`Sleep` mirrors of the step function.
 -/
 
 namespace Difftest
@@ -173,10 +173,9 @@ inductive TrErr where
   | unsupported (op : String)
   deriving DecidableEq, Repr
 
-/-- What the model lacks for each unsupported op. -/
+/-- What the model lacks for each unsupported op. Empty since `RacePair` and `Sleep` are
+mirrored: every op of format v0 runs on the model. -/
 def unsupportedReason : String → String
-  | "racePair" => "the step function does not mirror RacePair (IOFiber.scala:908-950) yet"
-  | "sleep" => "the step function does not mirror Sleep and timers (IOFiber.scala:952-981) yet"
   | _ => "unknown"
 
 /-- `⟦a⟧`. -/
