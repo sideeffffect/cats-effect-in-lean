@@ -1,7 +1,7 @@
 # Agent workflow and review protocol
 
 > Sources: synthesized from python-formalization AGENTS.md / REVIEW_PROMPT.md and julia-in-lean ARCHITECTURE.md / review prompts (2026-10..11)
-> Raw: [User decision: no bugs outside this repo](../../raw/project-decisions/2026-11-10-no-bugs-outside-this-repo.md); [python AGENTS.md](../../raw/python-formalization/2026-11-09-agents-md-current.md); [python REVIEW_PROMPT.md](../../raw/python-formalization/2026-11-01-review-prompt.md); [python orchestration scripts](../../raw/python-formalization/2026-11-05-orchestration-scripts.md); [julia ARCHITECTURE.md](../../raw/julia-formalization/2026-11-07-julia-base-architecture.md); [julia coverage review prompt](../../raw/julia-formalization/2026-10-29-julia-base-coverage-review-prompt.md); [julia memsafety review prompt](../../raw/julia-formalization/2026-10-29-julia-base-memsafety-review-prompt.md)
+> Raw: [User decision: no bugs outside this repo](../../raw/project-decisions/2026-11-10-no-bugs-outside-this-repo.md); [Review batch 1 notes](../../raw/project-decisions/2026-11-10-review-batch-1-notes.md); [python AGENTS.md](../../raw/python-formalization/2026-11-09-agents-md-current.md); [python REVIEW_PROMPT.md](../../raw/python-formalization/2026-11-01-review-prompt.md); [python orchestration scripts](../../raw/python-formalization/2026-11-05-orchestration-scripts.md); [julia ARCHITECTURE.md](../../raw/julia-formalization/2026-11-07-julia-base-architecture.md); [julia coverage review prompt](../../raw/julia-formalization/2026-10-29-julia-base-coverage-review-prompt.md); [julia memsafety review prompt](../../raw/julia-formalization/2026-10-29-julia-base-memsafety-review-prompt.md)
 
 ## Overview
 
@@ -42,6 +42,10 @@ Breadth-first thin properties (<50% survived review); success-path-only models; 
 ## Orchestration (python-formalization)
 
 Subagents in git worktrees (`worktree-agent-<hex>`), one module each; merge gate rejects files outside the module; review verdicts on main win conflicts; a lock serializes merges; every merge reruns all difftests and reproducers; heavy builds on a separate big machine with a memory watchdog.
+
+## Review log
+
+- 2026-11-10, batch 1 ([review](../../review/2026-11-10-review-batch-1.md), [notes](../../raw/project-decisions/2026-11-10-review-batch-1-notes.md)): 5 registry entries. FAITHFUL: the two proven `MonadCancel` laws (low strength), `onCancelAssociatesOverUncancelableBoundary` (open, as a statement). HOLLOW: `uncancelablePollIsIdentity` (open; forged ids and iteration-count sensitivity of `Eqv`) and CE-0001 `syncStepIdentitySyncIO` (external cancel in the schedule makes `¬P` true for a correct `syncStep`; the bug itself is real).
 
 ## See Also
 
