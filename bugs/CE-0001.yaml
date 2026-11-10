@@ -1,0 +1,85 @@
+id: CE-0001
+title: "IO#syncStep drops uncancelable and onCancel from the IO it returns in Left"
+status: draft  # calibration bug; known upstream; Lean refutation not done yet
+priority: medium
+kind: law
+area: core
+files:
+  - core/shared/src/main/scala/cats/effect/IO.scala:1161   # IO#syncStep(limit)
+  - core/shared/src/main/scala/cats/effect/IO.scala:2173   # asyncForIO.syncStep -> SyncStep.interpret
+  - core/shared/src/main/scala/cats/effect/IO.scala:2348   # SyncStep.interpret
+  - core/shared/src/main/scala/cats/effect/IO.scala:2390   # case IO.Uncancelable: body(identity poll), mask dropped
+  - core/shared/src/main/scala/cats/effect/IO.scala:2396   # case IO.OnCancel: finalizer dropped
+  - laws/shared/src/main/scala/cats/effect/laws/AsyncLaws.scala:84  # syncStepIdentity
+functions:
+  - IO#syncStep(limit)
+  - Async[IO].syncStep[SyncIO, A]
+summary: >
+  When SyncStep.interpret runs with G = SyncIO (root cancel scope Uncancelable), it walks into
+  IO.Uncancelable (it calls the body with an identity Poll) and past IO.OnCancel (it drops the
+  finalizer). If the walk then stops at an async boundary, it returns the inner IO in Left
+  without the mask and without the finalizer. When that remainder runs on IO and is canceled,
+  masked regions are interrupted and onCancel finalizers do not run. Resource.use is built from
+  these two nodes, so its release is skipped.
+likelihood: >
+  Low to medium. Only code that calls syncStep and then runs the Left remainder on a cancelable
+  IO is affected (for example libraries that run an IO synchronously "as far as possible", such
+  as evolution-gaming cats-helper and kafka-flow, which reference the upstream issue). Ordinary
+  IO programs never call syncStep.
+maybe_intended: >
+  No. The two branches were added on purpose in PR #3064/#3065 to step through a
+  Resource.allocated with a synchronous acquire, and the shortcut was noticed in review, but the
+  loss of the mask and finalizer on the Left remainder is not documented and breaks
+  syncStepIdentity. The upstream issue is labelled bug and fix PR #4700 is open.
+reproducer: reproducers/CE-0001/Repro.scala
+output:
+  v3.7.1: |
+    Resource.use release runs on cancel: direct=true stepped=false DIFFERENT
+    uncancelable body completes before cancel: direct=true stepped=false DIFFERENT
+    onCancel finalizer runs on cancel: direct=true stepped=false DIFFERENT
+    cases that differ: 3 / 3
+    REPRODUCED CE-0001
+  # series/3.x = 3.7.1-89-de84c01 (origin/series/3.x de84c01f76), publishLocal, 2026-11-10
+  series/3.x: |
+    Resource.use release runs on cancel: direct=true stepped=false DIFFERENT
+    uncancelable body completes before cancel: direct=true stepped=false DIFFERENT
+    onCancel finalizer runs on cancel: direct=true stepped=false DIFFERENT
+    cases that differ: 3 / 3
+    REPRODUCED CE-0001
+  # series/3.7.x = 3.7.1-15-2f94201 (origin/series/3.7.x 2f9420145f), publishLocal, 2026-11-10
+  series/3.7.x: |
+    Resource.use release runs on cancel: direct=true stepped=false DIFFERENT
+    uncancelable body completes before cancel: direct=true stepped=false DIFFERENT
+    onCancel finalizer runs on cancel: direct=true stepped=false DIFFERENT
+    cases that differ: 3 / 3
+    REPRODUCED CE-0001
+expected: |
+  Each case: direct and stepped give the same value (true), so the last line is
+  NOT REPRODUCED CE-0001.
+promised_by:
+  - "AsyncLaws.syncStepIdentity, laws/shared/src/main/scala/cats/effect/laws/AsyncLaws.scala:84-88: F.syncStep(fa, limit).flatMap { case Left(fa) => fa; case Right(a) => F.pure(a) } <-> fa"
+  - "Scaladoc of IO#syncStep, core/shared/src/main/scala/cats/effect/IO.scala:1154-1156: 'runs the original IO to its completion, the limit number of stages, or until the first stage that cannot be expressed with SyncIO (typically an asynchronous boundary)' (the Left value is the rest of the original IO)"
+cause: >
+  IO.scala:2390-2397. The Uncancelable and OnCancel branches are guarded only by
+  G.rootCancelScope == CancelScope.Uncancelable. They are correct while the walk stays in G, but
+  on the Left path the caller gets `ioa` (or `body(identityPoll)`) instead of the wrapped node.
+  The laws do not catch it: syncStepIdentity is checked with G = F = IO (cancelable root scope),
+  which never takes these branches.
+possible_fix: >
+  Re-wrap the Left result: for OnCancel, map Left(io) to Left(io.onCancel(fin)); for
+  Uncancelable, return Left of IO.uncancelable(poll => ...) that keeps the mask for the rest of
+  the body (upstream PR #4700 "Keep uncancelable and onCancel on the syncStep remainder").
+duplicates:
+  upstream:
+    - "typelevel/cats-effect#4687 (open, bug) - this defect"
+    - "typelevel/cats-effect#4686 (open PR, pending tests)"
+    - "typelevel/cats-effect#4700 (open PR, fix)"
+  related:
+    - "typelevel/cats-effect#3064, #3065 (merged PRs that added the two branches)"
+    - "typelevel/cats-effect#2858 (closed, syncStep double execution; different defect)"
+  queries:
+    - "gh search issues 'syncStep' -R typelevel/cats-effect (2026-11-10)"
+    - "gh search prs 'syncStep' -R typelevel/cats-effect (2026-11-10)"
+lean:
+  property: syncStep_identity_SyncIO   # planned name
+  theorem: open                        # syncStep_identity_SyncIO_refuted, when the model exists
