@@ -53,3 +53,4 @@ import CatsEffectInLean.Proofs.Calibration.SyncStepTwin
 import CatsEffectInLean.Model.Race
 import CatsEffectInLean.Model.Leak
 import CatsEffectInLean.Props.Phase6.Race
+import CatsEffectInLean.Proofs.Lemmas.Frame

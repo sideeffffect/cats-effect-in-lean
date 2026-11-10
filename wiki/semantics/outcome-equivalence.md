@@ -118,6 +118,7 @@ Decision 29/36 (done): `EqvP`. Smoke tests (`Model/EnumPExamples.lean`), with `f
 ## See Also
 
 - [race, both and fiber leaks](../cats-effect/race-both-model.md) (leak observation beside `Obs`; exact search too large for 3 fibers)
+- [Race no-leak invariant and frame lemmas](race-invariant.md) (F1/F2 proven for all runs; law left side 4,441 states)
 
 - [Kernel typeclasses model](../cats-effect/kernel-typeclasses-model.md)
 - [Scheduler model](../cats-effect/scheduler-model.md)

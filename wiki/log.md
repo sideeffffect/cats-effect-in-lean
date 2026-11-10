@@ -138,3 +138,8 @@
 ## [2026-11-10] ingest | Track D: difftest depth, timeoutTo mirror, preempt coverage
 - Raw: raw/project-decisions/2026-11-10-difftest-depth-track-d-notes.md
 - Updated: Differential testing (format-v1 depth table, preempt coverage, CI), Difftest program format (`runtime` field, `timeoutTo` mirrored, UserError 999998 code, idpoll status), Outcome sets and Eqv (preempt vs auto-yield difftest), Phase 5 gate report (caveats 3 and 4 status)
+
+## [2026-11-10] ingest | Track P: race no-leak invariant design, frame lemmas F1/F2
+- Raw: raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md
+- Created: Race no-leak invariant and frame lemmas
+- Updated: race, both and fiber leaks (why open, 4,441 states), Lean v4.35.0 toolchain (tactic gotchas), Outcome sets (See Also), index
