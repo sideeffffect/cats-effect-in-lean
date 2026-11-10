@@ -56,6 +56,8 @@ Why open: a proof for all programs needs a simulation or a state invariant over 
 
 Ops `guarantee`, `bracket`, `bracketCase`, `bracketFull` ([format](../methodology/difftest-program-format.md)). Agreement: per op 51,290 to 55,575 agreeing cases over seeds 1-3 (details in the raw note). The language cannot make a throwing `use`, so CE-0005 is only in the reproducer.
 
+After the merge with tracks R and D (one format v2 with `race`, `raceOutcome`, `both`, `bothOutcome`; D's `runtime` thresholds): `difftest/py/opcount.py --seeds 11 12 13 --n 20000` with all 8 v2 ops: 60,000 cases, all agree. Cases per op: race 3,908, raceOutcome 3,384, both 3,973, bothOutcome 3,475, guarantee 4,152, bracket 3,678, bracketCase 3,687, bracketFull 3,925. The generator weights of the track G ops were lowered (guarantee 1.0, bracket* 0.8, tpl_bracket 1.0), so the v1 and track R coverage minimums of `selftest.py` still hold.
+
 ## See Also
 
 - [Kernel typeclasses model](kernel-typeclasses-model.md)

@@ -92,7 +92,7 @@ WEIGHTS = {
     # format v2 (track R)
     'race': 2.5, 'raceOutcome': 2.5, 'both': 2.5, 'bothOutcome': 2.5, 'tpl_comb': 5, 'tpl_combCancel': 2.5,
     # format v2 (track G)
-    'guarantee': 1.5, 'bracket': 1.2, 'bracketCase': 1.2, 'bracketFull': 1.2, 'tpl_bracket': 1.5,
+    'guarantee': 1.0, 'bracket': 0.8, 'bracketCase': 0.8, 'bracketFull': 0.8, 'tpl_bracket': 1.0,
 }
 
 # Other knobs (probabilities and ranges).

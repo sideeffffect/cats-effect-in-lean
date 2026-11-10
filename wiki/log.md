@@ -144,3 +144,6 @@
 - Created: guarantee and bracket model, CE-0005
 - Updated: Difftest program format (format v2 ops, failure text of UserError 999998), Resource model (IO#guarantee now mirrored), Kernel typeclasses model (twin results), Bug history (CE-0005)
 - Raw: raw/cats-effect/2026-11-10-track-g-bracket-notes.md
+
+## [2026-11-10] ingest | Track G merged with tracks R and D
+- Updated: guarantee and bracket model (merged difftest counts, weights, TwinChecks), Difftest program format (one format v2 section; 999998 fix of track D kept, track G Scala text fix dropped)
