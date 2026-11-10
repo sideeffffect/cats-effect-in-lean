@@ -75,8 +75,10 @@ cause: >
   (commit 61c462d391, v3.5.0).
 possible_fix: >
   `case (poll, finished @ Finished(result)) => finished -> poll(fromEither(result).flatten)`.
-  The Lean fixed twin (variant 1 of Model/Memoize.lean) is never blocked on the witness and on all
-  120 one-preemption schedules (Proofs/Phase6/MemoizeFixed.lean), and on 9 x 400 random schedules
+  The Lean fixed twin (variant 1 of Model/Memoize.lean) completes on all 120 one-preemption
+  schedules for 7 fa (canceled, pure, raiseError, emit >> canceled, start(emit) >> canceled,
+  cede >> canceled also on a two-preemption grid, uncancelable(_ => canceled)), where v3.7.1 is
+  stuck exactly for the self-canceling fa (Proofs/Phase6/MemoizeFixed.lean), and on 9 x 400 random schedules
   (test/Phase6/MemoizeSmoke.lean); the reproducer's `fixedMemoize` hangs in 0 of 800 runs.
 duplicates:
   upstream: []

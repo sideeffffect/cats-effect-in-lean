@@ -187,3 +187,7 @@
 ## [2026-11-10] ingest | Review batch 5 (4 track Res entries; 3 HOLLOW)
 - Updated: Agent workflow (review log: CE-0020 HOLLOW as registered, bug real; use.releaseOnce and flatMap.releaseOrder HOLLOW; eval.preservesCancelable FAITHFUL; UserMarkersOnly forgeable through library closures)
 - Raw: raw/project-decisions/2026-11-10-review-batch-5-notes.md
+
+## [2026-11-10] update | Track M follow-up: decisions 53-54, CE-0030 twin family
+- Updated: memoize model (satisfiability witnesses, non-forgeable observations, fixed twin on 7 fa)
+- Raw: raw/cats-effect/2026-11-10-memoize-track-m-followup-notes.md

@@ -65,3 +65,4 @@ import CatsEffectInLean.Model.ResourceUse
 import CatsEffectInLean.Model.ResourceUseExamples
 import CatsEffectInLean.Props.Phase6.Resource
 import CatsEffectInLean.Proofs.Phase6.ResourceBoth
+import CatsEffectInLean.Proofs.Phase6.MemoizeSat

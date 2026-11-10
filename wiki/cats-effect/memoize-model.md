@@ -1,7 +1,7 @@
 # memoize model and CE-0030
 
 > Sources: Cats Effect v3.7.1 (`IO.scala:944-945`, `:1822-1824`, `:1996-2180`; `kernel/.../GenConcurrent.scala:33-112`; `Ref.scala:140-141`, `:314`; `jvm-native/.../SyncRef.scala`; `Outcome.scala:73-74`; `Resource.scala:792-803`, `:1479-1480`; `tests/.../MemoizeSuite.scala`); git history of `GenConcurrent.scala`; own Lean and scala-cli runs, 2026-11-10
-> Raw: [Track M notes](../../raw/cats-effect/2026-11-10-memoize-track-m-notes.md)
+> Raw: [Track M notes](../../raw/cats-effect/2026-11-10-memoize-track-m-notes.md); [Track M follow-up notes](../../raw/cats-effect/2026-11-10-memoize-track-m-followup-notes.md)
 
 ## Overview
 
@@ -18,7 +18,8 @@ Phase 6, batch 6.2, track M. Mirror of `IO#memoize`, difftest ops `memoize`/`mem
 | `Model/Memoize.lean` | `MLam` (22 closures, namespace 30), effect codes `Eff` (namespace 31), state encoding `St`, `memoizeIO`, `getIO`, `call`; variant 1 = fixed twin (not CE code) |
 | `Props/Phase6/Memoize.lean` | test programs `twoGets`, `countedTwoGets` (closures namespace 32), `env`, `run`, 3 properties |
 | `Proofs/Phase6/MemoizeStuck.lean` | `memoizeNoStuckGet_refuted`, well-formed witness, `fixed_wit` |
-| `Proofs/Phase6/MemoizeFixed.lean` | fixed-twin check over 120 one-preemption schedules (`lean_lib TwinChecks`, about 2 min) |
+| `Proofs/Phase6/MemoizeFixed.lean` | fixed-twin check: 7 `fa` × 120 one-preemption schedules, plus a two-preemption grid (`lean_lib TwinChecks`, about 20 min, under 8 GB) |
+| `Proofs/Phase6/MemoizeSat.lean` | decision 53 satisfiability witnesses (`getsAgree_sat`, `atMostOnce_sat`), decision 54 non-forgeability (`forged_*`) |
 | `test/Phase6/MemoizeSmoke.lean` | `#guard` smoke and wrong-function tests (about 3 min) |
 | `reproducers/CE-0030/Repro.scala` | TestControl reproducer with a fixed twin |
 | `spikes/memoize/` | first TestControl spike; default-runtime spike |
@@ -37,7 +38,7 @@ When `fa` cancels itself, the memo becomes `Finished(Right(canceled *> never))`.
 
 - Lean witness: `fa = IO.canceled`, two `get` fibers, one preemption after 35 micro-steps (also 36, 37): blocked with a `Finished` memo (`decide +kernel`).
 - Scala: TestControl with thresholds (1,2), (1,4), (2,4): 50, 53, 38 of 200 seeds hang; default thresholds 0 of 200. Default multi-threaded runtime: 2,098 of 100,000 runs. Same on `series/3.x` and `series/3.7.x`.
-- Fix: `finished -> poll(fromEither(result).flatten)`. Fixed twin (variant 1): never blocked in Lean (120 one-preemption schedules, 9 × 400 random schedules) and in Scala (0 of 800).
+- Fix: `finished -> poll(fromEither(result).flatten)`. Fixed twin (variant 1) completes in Lean on 7 `fa` × 120 one-preemption schedules and in Scala (0 of 800). v3.7.1 in the same family: stuck at positions 35–37 for `canceled`, `emit >> canceled`, `start(emit) >> canceled`, `uncancelable(_ => canceled)`; never for `pure`, `raiseError`; `cede >> canceled` needs two preemptions (9 of 150 grid schedules).
 - Priority medium: needs a self-canceling `fa`, but then about 2 % of concurrent `get`s hang on a real runtime.
 
 ## Properties
@@ -50,6 +51,8 @@ When `fa` cancels itself, the memo becomes `Finished(Right(canceled *> never))`.
 
 - All `WellFormed` `fa`, all user code, all `PChoice` schedules (decisions 27, 29, 36). Test-program closures are library-side (odd ids): user code cannot reach the counter.
 - Smoke (9 `fa` × 400 random schedules): stuck runs only for self-canceling `fa` (9, 5, 6) and none for the fixed twin; `getsAgree` 0 violations; counter max 1. Wrong function (a `get` that is `fa`): `getsAgree` fails for `fa = IO.ref(0)`, counter 2.
+- Decision 53: `getsAgree_sat` and `atMostOnce_sat` (`fa = IO.cede`, FIFO): `fa` is well-formed, a second `get` subscribes while `fa` runs (`Evaluating(d, 2)`), the root completes, the counter is 1. CE-0030's hypothesis holds for its witness (`fa_wf`).
+- Decision 54: the observed cells (memo cell, counter) are made by library-side code; user code holds no handle to them. `forged_*` show that programs naming the closures that write them are not `WellFormed`.
 - Why open: a proof for all `fa` needs a state invariant over `SchedP` (memo cell, `Deferred` cell, `go` fiber outcome, subscriber count). Not done.
 - Not stated: "cancel of one waiting `get` does not cancel the evaluation for the others" (MemoizeSuite tests it; difftest shape `cancelOne` covers it). A candidate for later.
 
