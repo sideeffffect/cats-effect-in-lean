@@ -7,7 +7,10 @@ import CatsEffectInLean.Model.WellFormed
 Each law of `laws/shared/src/main/scala/cats/effect/laws/MonadCancelLaws.scala` (`L/` below) at
 Cats Effect `v3.7.1`, instantiated at `IO`: `F` is the model's `IO`, each `F.x` call is the
 `IO.asyncForIO` operation in `CatsEffectInLean/Model/IOInstance.lean` (`IOI.x`), and `<->` is
-`Eqv` (`CatsEffectInLean/Model/Outcomes.lean`): the same observation sets over all schedules.
+`EqvP` (`CatsEffectInLean/Model/Outcomes.lean`): the same observation sets over all schedules
+of the preemptive scheduler (`CatsEffectInLean/Model/SchedP.lean`, decisions 29 and 36). A
+preemption can come between any two run-loop iterations, as on the multi-threaded runtime, so
+the auto-yield position (an implementation detail) is not observed.
 
 - The generic statement of each law is in `CatsEffectInLean/Props/Kernel/MonadCancelLaws.lean`.
   The calls and their nesting here are the same. Why this is not
@@ -22,7 +25,7 @@ Cats Effect `v3.7.1`, instantiated at `IO`: `F` is the model's `IO`, each `F.x` 
   `ContState` ids, user code reads only through handles it holds). This is a type invariant,
   not an assumption about the interesting case. A side is well-formed when `fa` and the user
   functions are; the law adds no other hypothesis.
-- `Eqv` uses the default runtime configuration (`Config`: thresholds 512 and 1024, the
+- `EqvP` uses the default runtime configuration (`Config`: thresholds 512 and 1024, the
   `TestControl` and default `IORuntime` values) and the `IOFiber` mask model
   (`counterMaskModel`).
 - One property per law and instance (decision 16 in
@@ -38,7 +41,7 @@ open CatsEffectInLean.Model
 
 /-- `<->` for `IO` in the laws below. -/
 def IOEqv (env : UserEnv) (p q : IO) : Prop :=
-  Eqv {} counterMaskModel env p q
+  EqvP {} counterMaskModel env p q
 
 /-- `L/MonadCancelLaws.scala:94-95` (root scope `Cancelable` only), at `IO`:
 `F.canceled >> fa.void <-> F.canceled`.

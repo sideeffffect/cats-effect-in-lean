@@ -64,13 +64,15 @@ def registry : List Entry := [
     prop := ``Props.IO.MonadCancelLaws.canceledAssociatesLeftOverFlatMap
     status := .proven
     thm := ``Proofs.IO.MonadCancelLaws.canceledAssociatesLeftOverFlatMap_proven
-    note := "IO, Eqv over all pick schedules; fa never runs (both sides: Canceled, empty trace)" },
+    note := "IO, EqvP (all schedules, preemption at any run-loop iteration); fa never runs \
+      (both sides: Canceled, empty trace; state families of 13 and 8 states)" },
   { id := "laws.MonadCancelLaws.forceRCanceledShortCircuits.IO"
     rows := ["laws.MonadCancelLaws.forceRCanceledShortCircuits"]
     prop := ``Props.IO.MonadCancelLaws.forceRCanceledShortCircuits
     status := .proven
     thm := ``Proofs.IO.MonadCancelLaws.forceRCanceledShortCircuits_proven
-    note := "IO, forceR = handleError(_ => ()).productR (IO.scala:452-454); fa never runs" },
+    note := "IO, EqvP; forceR = handleError(_ => ()).productR (IO.scala:452-454); fa never runs \
+      (state family of 19 states)" },
   { id := "laws.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary.IO"
     rows := ["laws.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary"]
     prop := ``Props.IO.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary
@@ -83,13 +85,11 @@ def registry : List Entry := [
     rows := ["laws.MonadCancelLaws.uncancelablePollIsIdentity"]
     prop := ``Props.IO.MonadCancelLaws.uncancelablePollIsIdentity
     status := .«open»
-    note := "Open. Statement now has WellFormedIO (decision 27), so the old bounded counterexample \
-      (a child cancels fiber 0, a forged id) is excluded. Re-run 2026-11-10 with a well-formed fa \
-      = start(emit 9) >> emit 1 >> n flatMaps >> emit 2 (picks 3, depth 3, fuel 1300, n = 500..515): \
-      the outcome sets still differ, at n = 508 only. Left side also has trace [1, 9, 2]: its 2 \
-      extra run-loop iterations move the auto-yield before emit 2, so the child runs first. Cause: \
-      Eqv sees iteration counts, not a CE promise (decision 29: add a preemption choice to Eqv; \
-      not done yet). Do not refute; prove after the Eqv change." },
+    note := "Open, statement now with EqvP (decision 36). The replay-Eqv difference for \
+      fa = start(emit 9) >> emit 1 >> n flatMaps >> emit 2 (n = 509 at default thresholds) is gone: \
+      the right side reaches trace [1, 9, 2] with one preemption (EnumPExamples.default_rhs_preempt); \
+      with thresholds 2/4 the exact EqvP sets agree for n = 0..9 (kernel: n = 0..3). A proof for all \
+      fa needs a simulation between the runs (extra Uncancelable/UnmaskRunLoop pair); not done." },
   { id := "core.IO.syncStep.syncStepIdentitySyncIO"
     rows := ["core.IO.syncStep#2", "core.IO.IOAsync.syncStep", "core.SyncStep.MaxSteps",
       "core.SyncStep.interpret#2", "core.SyncIO.unsafeRunSync"]
