@@ -11,6 +11,8 @@ import CatsEffectInLean.Proofs.Calibration.FatalRaise
 import CatsEffectInLean.Props.Phase6.Race
 import CatsEffectInLean.Props.Phase6.Bracket
 import CatsEffectInLean.Proofs.Phase6.BracketFullTwin
+import CatsEffectInLean.Props.Phase6.Memoize
+import CatsEffectInLean.Proofs.Phase6.MemoizeStuck
 import CatsEffectInLean.Props.Phase6.Resource
 import CatsEffectInLean.Proofs.Phase6.ResourceBoth
 
@@ -269,6 +271,35 @@ def registry : List Entry := [
     note := "Invariant: guarantee in a child fiber that the parent cancels and joins; the \
       finalizer runs at most once, and it runs if fa started. Smoke-tested by #guard (test/Phase6/BracketSmokeParent.lean). Open: same \
       missing state invariant as core.IO.bracket.releaseOnce." },
+  -- Phase 6, track M (memoize)
+  { id := "core.IO.memoize.noStuckGet"
+    rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
+    prop := ``Props.Phase6.Memoize.memoizeNoStuckGet
+    status := .refuted
+    thm := some ``Proofs.Phase6.memoizeNoStuckGet_refuted
+    bug := some "bugs/CE-0030.yaml"
+    note := "IO#memoize = kernel GenConcurrent#memoize with IOAsync (no IO twin). Two get fibers, \
+      all WellFormed fa, all PChoice schedules: a blocked run never has a Finished memo. \
+      Counterexample: fa = IO.canceled, one preemption of the second get between state.get and \
+      state.flatModifyFull; flatModifyFull returns canceled *> never without poll (masked), so \
+      the get waits forever (K/GenConcurrent.scala:91-92). Fixed twin poll(fromEither(..).flatten) \
+      is never blocked with one preemption < 120 (Proofs/Phase6/MemoizeFixed.lean)." },
+  { id := "core.IO.memoize.getsAgree"
+    rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
+    prop := ``Props.Phase6.Memoize.memoizeGetsAgree
+    status := .«open»
+    note := "Two concurrent gets observe the same outcome when the root completes (all \
+      WellFormed fa, all PChoice schedules). Smoke: 9 fa x 400 random schedules, 0 violations; a \
+      memoize without cache breaks it (test/Phase6/MemoizeSmoke.lean). Open: a proof for all fa \
+      needs a state invariant over SchedP (memo cell, deferred cell, go fiber outcome)." },
+  { id := "core.IO.memoize.atMostOnce"
+    rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
+    prop := ``Props.Phase6.Memoize.memoizeAtMostOnce
+    status := .«open»
+    note := "Without a cancel from the program, fa starts at most once (counter <= 1 in every \
+      reachable state of countedTwoGets). Smoke: 9 fa x 400 random schedules, max 1; a memoize \
+      without cache gives 2 (test/Phase6/MemoizeSmoke.lean). Open: same missing invariant as \
+      core.IO.memoize.getsAgree (at most one Evaluating transition while no get is canceled)." },
   -- Phase 6, track Res (Resource use/allocated/both)
   { id := "kernel.Resource.both.releaseOnce"
     rows := ["kernel.Resource.both", "kernel.Resource.use", "kernel.Resource.fold",

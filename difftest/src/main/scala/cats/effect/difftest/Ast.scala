@@ -24,6 +24,7 @@ enum Val:
   case VRef(id: Int)
   case VDeferred(id: Int)
   case VQueue(id: Int) // v1
+  case VMemo(id: Int) // v2 (track M): the `get` of a `memoize`
 
 /** An argument position: a literal value or a bound variable. */
 enum Atom:
@@ -91,6 +92,11 @@ enum Prog:
   case BracketCase(acq: Prog, x: String, use: Prog, y: String, rel: Prog, tag: Long)
   /** `IO.bracketFull(poll => acq)(x => use)((x, oc) => ...)` (release as in `BracketCase`). */
   case BracketFull(poll: String, acq: Prog, x: String, use: Prog, y: String, rel: Prog, tag: Long)
+  // ---- format v2 (Phase 6, track M)
+  /** `e.memoize.map(get => VMemo(h.newMemo(get)))`. */
+  case Memoize(e: Prog)
+  /** The `get` of a memo handle (the `IO[Val]` itself). */
+  case MemoGet(m: Atom)
   // ---- format v2 (Phase 6, track Res)
   /** `I_R(r).use(x => k)`. */
   case RUse(r: Res, x: String, k: Prog)

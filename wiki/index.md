@@ -34,6 +34,7 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [Resource model and CE-0002](cats-effect/resource-model.md) | Resource ADT + allocatedCase mirror (F = IO), closure-id codec; resourceEvalPreservesUncancelable refuted (CE-0002, reproducer case C); use/both in ResourceUse | 2026-11-10 |
 | [guarantee and bracket model, CE-0005](cats-effect/bracket-model.md) | IO#guarantee/guaranteeCase/bracket*/IO.bracketFull + kernel twins mirror; UserEffect.report; difftest v2; bracketFull twin refuted (CE-0005), 4 open | 2026-11-10 |
 | [Queue and timeout model](cats-effect/queue-model.md) | UnboundedAsyncQueue + IO#timeout/timeoutTo/never mirror; takeTimeoutNoLostElement refuted by the FIFO schedule (CE-0003) | 2026-11-10 |
+| [memoize model and CE-0030](cats-effect/memoize-model.md) | IO#memoize = kernel GenConcurrent#memoize mirror (no twin); difftest ops memoize/memoGet; CE-0030 refuted (masked `canceled *> never` hangs a racing get), 2 open | 2026-11-10 |
 | [Resource use, allocated, both, and CE-0020](cats-effect/resource-use-both-model.md) | fold/use/allocated/rel2/both mirror (`ResourceUse`), difftest v2 rUse/rAllocated/rBoth (≥51k each), CE-0020 refuted (both skips a release), 3 open | 2026-11-10 |
 | [race, both and fiber leaks](cats-effect/race-both-model.md) | Kernel-default mirror of race/raceOutcome/both/bothOutcome (no IO twin), leak observation liveRaceChildren, difftest v2 (≥50k per op), 5 open entries, smoke 0 violations | 2026-11-10 |
 

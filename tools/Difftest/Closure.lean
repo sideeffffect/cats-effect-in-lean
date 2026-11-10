@@ -207,6 +207,11 @@ inductive Lam where
   | brcFinThen
   /-- `bracketFull`: `poll => I(acq)`. -/
   | bfAcq
+  -- format v2 (track M): `memoize`
+  /-- `memoize`: source code of `I(e)` (built with the op). `vals = snap :: env`. -/
+  | memoSrc
+  /-- `memoize`: `get => VMemo(h.newMemo(get))`. -/
+  | memoHandle
   -- format v2 (track Res): `rUse`, `rAllocated`, `rBoth` run on the mirror
   -- `Model/ResourceUse.lean`; these are the program lambdas and the resource codes.
   /-- `rUse`: `x => I(k)` (the `use` function). `vals = env`. -/
@@ -239,6 +244,7 @@ def Lam.all : List Lam :=
    .timeoutFb,
    .gSrcE, .gSrcFin, .gFinEmit, .gFinThen, .brAcqSrc, .brUse, .brRel, .brFinEmit, .brRelThen,
    .brcRel, .brcFinK, .brcFinEmit, .brcFinThen, .bfAcq,
+   .memoSrc, .memoHandle,
    .ruUse, .raK, .raRelAs, .ruRes, .rbA, .rbB, .rbPair]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l

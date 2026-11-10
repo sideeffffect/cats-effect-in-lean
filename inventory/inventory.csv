@@ -1076,7 +1076,7 @@ core.IO.productL,core,method,core/shared/src/main/scala/cats/effect/IO.scala,900
 core.IO.productR,core,method,core/shared/src/main/scala/cats/effect/IO.scala,903,todo,,
 core.IO.start,core,method,core/shared/src/main/scala/cats/effect/IO.scala,929,todo,,
 core.IO.background,core,method,core/shared/src/main/scala/cats/effect/IO.scala,941,todo,,
-core.IO.memoize,core,method,core/shared/src/main/scala/cats/effect/IO.scala,944,todo,,
+core.IO.memoize,core,method,core/shared/src/main/scala/cats/effect/IO.scala,944,modelled,,core.IO.memoize.noStuckGet;core.IO.memoize.getsAgree;core.IO.memoize.atMostOnce
 core.IO.uncancelable,core,method,core/shared/src/main/scala/cats/effect/IO.scala,955,todo,,
 core.IO.void,core,method,core/shared/src/main/scala/cats/effect/IO.scala,961,todo,,
 core.IO.reportError,core,method,core/shared/src/main/scala/cats/effect/IO.scala,967,excluded,internal: private helper; modelled as part of its public caller,
@@ -1864,7 +1864,7 @@ kernel.Fiber.joinWithNever,kernel,method,kernel/shared/src/main/scala/cats/effec
 kernel.Fiber.joinWithUnit,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Fiber.scala,83,todo,,
 kernel.GenConcurrent.ref,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,29,todo,,
 kernel.GenConcurrent.deferred,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,31,todo,,
-kernel.GenConcurrent.memoize,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,43,todo,,
+kernel.GenConcurrent.memoize,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,43,modelled,,core.IO.memoize.noStuckGet;core.IO.memoize.getsAgree;core.IO.memoize.atMostOnce
 kernel.GenConcurrent.parReplicateAN,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,117,todo,,
 kernel.GenConcurrent.parSequenceN,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,123,todo,,
 kernel.GenConcurrent.parSequenceN_,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,129,todo,,

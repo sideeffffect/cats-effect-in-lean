@@ -1,0 +1,97 @@
+id: CE-0030
+title: "IO#memoize: a `get` that races with the self-cancelation of `fa` waits forever in a masked `never` and cannot be canceled"
+status: draft  # found in Phase 6 track M (2026-11-10); Lean refutation done, waits for review
+priority: medium
+kind: liveness
+area: kernel
+files:
+  - kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala:91   # case (_, finished @ Finished(result)) => finished -> fromEither(result).flatten  (no poll)
+  - kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala:68   # Outcome.Canceled() => tryComplete(Finished(Right(productR(canceled)(never))))
+  - kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala:107  # state.get: Finished => fromEither(result).flatten (not masked)
+  - kernel/shared/src/main/scala/cats/effect/kernel/Ref.scala:140            # flatModifyFull = uncancelable(poll => flatten(modify(f(poll, _))))
+  - core/shared/src/main/scala/cats/effect/IO.scala:944                      # IO#memoize = Concurrent[IO].memoize(this)
+functions:
+  - GenConcurrent#memoize
+  - IO#memoize
+  - Concurrent.memoize (every Concurrent instance that uses the kernel default)
+summary: >
+  When `fa` cancels itself, `memoize` stores `Finished(Right(canceled *> never))`. A `get` that
+  reads `Finished` in `state.get` runs `canceled *> never` unmasked and ends Canceled. A `get`
+  that read Unevaluated or Evaluating in `state.get`, and then sees `Finished` inside
+  `state.flatModifyFull`, gets the same effect back from the Finished case of
+  `flatModifyFull`. That case does not use `poll`, so the effect runs inside the
+  `uncancelable` of `flatModifyFull`: `canceled` does nothing in a masked region, and `never`
+  waits forever. The fiber never completes, and `fiber.cancel` on it never returns either
+  (cancel is backpressured, the fiber is masked). Every fiber that joins it hangs too. The
+  window is between `state.get` and the `modify` of `flatModifyFull` (a `deferred` allocation
+  and a few run-loop iterations), while the evaluation fiber ends with Canceled.
+likelihood: >
+  Low to medium. It needs an `fa` that cancels itself (`IO.canceled`, a `both`/`parTupled`
+  where one side self-cancels, `uncancelable(_ => canceled)`) and a second `get` that is in the
+  window when the evaluation ends. On the default multi-threaded runtime (16 CPUs, default
+  IORuntimeConfig) the program of the reproducer (two `get` fibers on `IO.canceled.memoize`)
+  hung in 2,098 of 100,000 runs (spikes/memoize/RealRuntime.scala). The effect is severe: a
+  fiber that can never complete and never be canceled (a leak and a deadlock of every joiner).
+maybe_intended: >
+  No. The same state gives two results depending on timing: the fast path (line 108) ends
+  Canceled, the slow path (line 92) hangs. Before PR #3351 (v3.4.5, 2023-01-16) the slow path was
+  `other -> poll(get)` and ran the result after `poll`; the redesign lost the `poll` in the
+  Finished case. Issue #1519 ("F.memoize(F.canceled) deadlocks and… really shouldn't", closed
+  2021) says that a self-canceled memo must not deadlock. MemoizeSuite tests
+  "memoize uncancelable canceled and then flatten is identity" only with one `get`.
+reproducer: reproducers/CE-0030/Repro.scala
+output:
+  v3.7.1: |
+    thresholds (1,2)       seeds with a hung get: IO#memoize  50/200, copy  50/200, fixed twin   0/200
+    thresholds (1,4)       seeds with a hung get: IO#memoize  53/200, copy  53/200, fixed twin   0/200
+    thresholds (2,4)       seeds with a hung get: IO#memoize  38/200, copy  38/200, fixed twin   0/200
+    thresholds (512,1024)  seeds with a hung get: IO#memoize   0/200, copy   0/200, fixed twin   0/200
+    REPRODUCED CE-0030
+  # series/3.x = 3.7.1-89-de84c01 (publishLocal, 2026-11-10): same output (GenConcurrent.memoize unchanged)
+  series/3.x: |
+    (same lines as v3.7.1)
+    REPRODUCED CE-0030
+  # series/3.7.x = 3.7.1-15-2f94201 (publishLocal, 2026-11-10): same output
+  series/3.7.x: |
+    (same lines as v3.7.1)
+    REPRODUCED CE-0030
+  # Note: TestControl runs one thread; the fiber switch inside `get` is an auto-yield, so the runs
+  # use small IORuntimeConfig thresholds. With the default thresholds the auto-yield never falls
+  # in the window on TestControl; the default multi-threaded runtime hits it (2,098 / 100,000).
+expected: |
+  Every `get` of a self-canceled memo ends Canceled (as the fast path and the first `get` do), and
+  `cancel` of a `get` fiber returns. The reproducer prints 0/200 for IO#memoize in every row, and
+  the last line is NOT REPRODUCED CE-0030.
+promised_by:
+  - "Scaladoc of GenConcurrent#memoize (K/GenConcurrent.scala:33-42): 'The returned inner effect ... will evaluate fa and cache the result. If get is sequenced multiple times fa will only be evaluated once.' A cached result must not depend on the timing of the get."
+  - "MemoizeSuite.scala:106-117: memoize then flatten is identity, also for a self-canceling fa (Concurrent[F].uncancelable(_ => Concurrent[F].canceled))."
+  - "Issue #1519 (closed): F.memoize(F.canceled) must not deadlock."
+  - "Undisputed invariant (AGENTS.md 3b): no deadlock, no fiber that can never be canceled."
+cause: >
+  GenConcurrent.scala:91-92: the Finished case of `state.flatModifyFull` returns
+  `fromEither(result).flatten` without `poll`. `flatModifyFull` runs the returned effect inside
+  `F.uncancelable(poll => ...)` (Ref.scala:140-141), so `productR(canceled)(never)` runs masked.
+  Introduced by PR #3351 (commit 3128049d7c, v3.4.5); kept by the refactor to `flatModifyFull`
+  (commit 61c462d391, v3.5.0).
+possible_fix: >
+  `case (poll, finished @ Finished(result)) => finished -> poll(fromEither(result).flatten)`.
+  The Lean fixed twin (variant 1 of Model/Memoize.lean) is never blocked on the witness and on all
+  120 one-preemption schedules (Proofs/Phase6/MemoizeFixed.lean), and on 9 x 400 random schedules
+  (test/Phase6/MemoizeSmoke.lean); the reproducer's `fixedMemoize` hangs in 0 of 800 runs.
+duplicates:
+  upstream: []
+  related:
+    - "typelevel/cats-effect#1519 (closed 2021) Proper handling for self cancelation in memoize: F.memoize(F.canceled) deadlocks; fixed by the Finished(Right(canceled *> never)) result; the race of this record came later"
+    - "typelevel/cats-effect#3348 (closed) memoize doc and implementation out of sync; fixed by PR #3351, which introduced this code"
+    - "typelevel/cats-effect#802 (closed, CE2) Concurrent.memoize's effect can hang if the first one is canceled: a different body"
+    - "typelevel/cats-effect#3370 (closed) RFC: add Ref#flatModify and flatModifyFull"
+  queries:
+    - "gh search issues 'memoize' -R typelevel/cats-effect (2026-11-10): #3513, #3527, #4620, #3474, #3757, #3819, #3764, #3348, #1620, #802, #3079, #2728, #2291, #1519, #1576, #1111, #1619, #78, #120, #530, #1116; none is this race"
+    - "gh search issues 'memoize hang' / 'memoize cancel' / 'memoize deadlock' / 'memoize uncancelable' / 'memoize never' / 'memoize self-cancel' / 'memoize Finished' / 'memoize canceled' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'flatModifyFull' -R typelevel/cats-effect (2026-11-10): #3370 only"
+    - "gh search prs 'memoize' -R typelevel/cats-effect (2026-11-10): #4105, #3890, #3351, #3518, #3080, #2729, #1204, #1484, #1552, #537, #544 and others; none changes the Finished case of flatModifyFull"
+lean:
+  property: CatsEffectInLean.Props.Phase6.Memoize.memoizeNoStuckGet
+  theorem: CatsEffectInLean.Proofs.Phase6.memoizeNoStuckGet_refuted
+  fixed_twin: CatsEffectInLean/Proofs/Phase6/MemoizeFixed.lean
+  ordinary_inputs: "Not needed: the input (a self-canceling fa) is an ordinary input that MemoizeSuite and issue #1519 test; for fa that does not cancel itself the statement held on all smoke runs (test/Phase6/MemoizeSmoke.lean: 0 stuck runs for pure, error, cede, sleep, newRef, never)"

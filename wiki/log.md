@@ -153,7 +153,16 @@
 - Created: Race no-leak invariant and frame lemmas
 - Updated: race, both and fiber leaks (why open, 4,441 states), Lean v4.35.0 toolchain (tactic gotchas), Outcome sets (See Also), index
 
+## [2026-11-10] ingest | Phase 6 track M: memoize, CE-0030
+- Created: memoize model and CE-0030
+- Updated: Bug history (CE-0030, memoize issue history), Difftest program format (ops `memoize`, `memoGet`; `Deferred` and memo handle renumbering)
+- Raw: raw/cats-effect/2026-11-10-memoize-track-m-notes.md
+
 ## [2026-11-10] ingest | Track Res: Resource use, allocated, both; CE-0020
 - New: Resource use, allocated, both, and CE-0020 (cats-effect/resource-use-both-model.md)
 - Updated: Resource model (limits), guarantee and bracket model (MarkersOnly caveat), race and both model (See Also), Bug history (CE-0020), Difftest program format (track Res ops), index
 - Raw: raw/cats-effect/2026-11-10-track-res-resource-notes.md
+
+## [2026-11-10] ingest | Track Res merged with track M
+- Updated: Resource use, allocated, both (generator weights after the merge)
+- Raw: raw/cats-effect/2026-11-10-track-res-merge-m-notes.md

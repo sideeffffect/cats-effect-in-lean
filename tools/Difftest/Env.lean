@@ -275,7 +275,11 @@ def runClo (U : ResourceUse.UEnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) :
     | _ => DResult.harness
   | .deferredNewThunk, _ =>
     { base := { effects := [.allocDeferred], out := .ret (.deferred vw.deferreds.length) } }
-  | .deferredHandle, _ => ret arg
+  -- `h.newDeferred(d)` counts `Deferred`s in creation order (the `memoize` mirror makes cells too)
+  | .deferredHandle, _ =>
+    match arg with
+    | .deferred i => ret arg [.deferredH i]
+    | _ => DResult.harness
   | .dcThen, .deferredComplete _ _ => prog (.delay (clo node .dcEmit (arg :: env)))
   | .dcEmit, .deferredComplete d v =>
     match env with
@@ -349,6 +353,11 @@ def runClo (U : ResourceUse.UEnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) :
       ofTr ((fun io => IO.map io (clo node .voidFn [])) <$>
         tr R rel (node + 1 + acq.size + use.size) env0 (snapView snap))
     | [] => DResult.harness
+  -- format v2 (track M): `get => VMemo(h.newMemo(get))`
+  | .memoHandle, _ =>
+    match Memoize.Eff.ofVal? arg with
+    | some (.get r _ _) => ret arg [.memoH r]
+    | _ => DResult.harness
   -- format v2 (track Res; `Model/ResourceUse.lean` runs the library lambdas)
   -- `x => I(k)` of `rUse`
   | .ruUse, .rUse r k => ofTr (tr R k (node + 1 + r.size) (arg :: env) vw)
@@ -397,6 +406,11 @@ def srcIO (p : Prog) (srcV : Val) : IO :=
       | .ok io => io
       | .error e => .error e.toErr
     | none => .error harnessErr
+  -- format v2 (track M): `I(e)` of a `memoize` node
+  | some { node, lam := .memoSrc, vals := snap :: env } =>
+    match p.at? node with
+    | some (.memoize e) => build e (node + 1) env snap
+    | _ => .error harnessErr
   | some { node, lam := .raceSrcB, vals := snap :: env } =>
     match (p.at? node).bind Prog.combArgs? with
     | some (a, b) =>
@@ -435,6 +449,7 @@ inductive LibClo where
   | resource (c : Resource.Clo)
   | race (l : Race.RLam)
   | bracket (l : Bracket.BLam)
+  | memoize (l : Memoize.MLam)
   | ures (l : ResourceUse.ULam)
 
 /-- The library closure of an id that is not a difftest closure id, if exactly one mirror
@@ -452,6 +467,7 @@ def libClo? (id : Nat) : Option LibClo :=
           else if k == Timeout.ns then (Timeout.TLam.ofFields tag fs).map .timeout
           else if k == Race.ns then (Race.RLam.ofFields tag fs).map .race
           else if k == Bracket.ns then (Bracket.BLam.ofFields tag fs).map .bracket
+          else if k == Memoize.ns then (Memoize.MLam.ofFields tag fs).map .memoize
           else if k == ResourceUse.ns then (ResourceUse.ULam.ofFields tag fs).map .ures
           else none
         | none => none
@@ -493,6 +509,7 @@ def dispatch (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
     -- `Bracket` calls its user functions: difftest closures, or `ResourceUse` lambdas (track Res)
     | some (.bracket l) => Bracket.call (dispatchRes p) (bracketSrcIO p) l arg vw
     | some (.ures l) => ResourceUse.callU (uenvOf p) (dispatchDt p) l arg vw
+    | some (.memoize l) => Memoize.call (srcIO p) l arg vw
     | none => DResult.harness.toUser
 
 /-- The `Model.UserEnv` of program `p` (see module doc). -/

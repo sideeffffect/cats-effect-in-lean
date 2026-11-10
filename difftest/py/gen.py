@@ -23,6 +23,11 @@ Design notes: wiki/methodology/differential-testing.md ("Generator").
   type fits, and `tpl_comb` (any type: bind the result of a combinator, often with a sleeping,
   never-ending or masked side) and `tpl_combCancel` (decision 50: a parent starts the combinator and
   cancels it).
+- Format v2 (decision 51, track M): `memoize` and `memoGet` only through `tpl_memo` (a memo handle
+  of type `('memo', A)` is bound and used by `memoGet`, never printed): sequential `get`s, two
+  `get` fibers, a parent that cancels one `get` fiber, or cancels all and runs `get` again; `fa`
+  often waits (`cede`, `sleep`) or cancels itself (the CE-0030 shape). `memoGet` is also a
+  production of type A wherever a memo of type A is in scope.
 
 Usage:
   gen.py --seed 1 --n 1000 [--max-size 40] [--mode replay|testcontrol] [--out FILE]
@@ -54,6 +59,7 @@ def fiber(a): return ('fiber', a)
 def ref(a): return ('ref', a)
 def deferred(a): return ('deferred', a)
 def queue(a): return ('queue', a)
+def memo(a): return ('memo', a)
 
 
 def race_type(a, b):
@@ -93,8 +99,11 @@ WEIGHTS = {
     'race': 2.5, 'raceOutcome': 2.5, 'both': 2.5, 'bothOutcome': 2.5, 'tpl_comb': 5, 'tpl_combCancel': 2.5,
     # format v2 (track G)
     'guarantee': 1.0, 'bracket': 0.8, 'bracketCase': 0.8, 'bracketFull': 0.8, 'tpl_bracket': 1.0,
+    # format v2 (track M)
+    # tpl_memo 0.4: with 1.0 (or 0.5) a static share in selftest.py fell below its minimum (N = 400 is noisy)
+    'tpl_memo': 0.4, 'memoGet': 4,
     # format v2 (track Res)
-    'rUse': 0.8, 'rAllocated': 0.6, 'res_both': 2.0, 'tpl_resBoth': 0.8,
+    'rUse': 0.5, 'rAllocated': 0.4, 'res_both': 2.0, 'tpl_resBoth': 0.5,
 }
 
 # Other knobs (probabilities and ranges).
@@ -327,6 +336,9 @@ class Gen:
         if t[0] == 'queue':
             opts.append((w['queueNew'], lambda: {'op': 'queueNew'}))
         opts += self.queue_opts(t, env)
+        ms = self.vars_of(env, lambda u: u == memo(t))
+        if ms:
+            opts.append((w['memoGet'] * hb, lambda: {'op': 'memoGet', 'm': {'t': 'var', 'x': self.r.choice(ms)}}))
         rg = self.vars_of(env, lambda u: u == ref(t))
         if rg:
             opts.append((w['refGet'] * hb, lambda: {'op': 'refGet', 'r': {'t': 'var', 'x': self.r.choice(rg)}}))
@@ -581,6 +593,8 @@ class Gen:
             opts.append((w['tpl_combCancel'], lambda: self.tpl_comb_cancel(t, env, size, ctx)))
         if size >= 4 and self.res_ok(t):
             opts.append((w['tpl_resource'], lambda: self.tpl_resource(t, env, size, cc)))
+        if size >= 4:
+            opts.append((w['tpl_memo'], lambda: self.tpl_memo(t, env, size, ctx)))
         return opts
 
     # ------------------------------------------------------- format v2
@@ -635,6 +649,61 @@ class Gen:
         else:
             ps.append(k)
         return {'op': 'bind', 'x': f, 'e': {'op': 'start', 'e': child}, 'k': {'op': 'seq', 'ps': ps}}
+
+    # ------------------------------------------------------- format v2 (track M)
+
+    def memo_source(self, a, env, size, ctx):
+        """`fa` of a memoize: often a marker first (the trace shows each evaluation), then a wait
+        (cede, sleep) so other `get`s subscribe, sometimes a self-cancel (CE-0030) or an error."""
+        self.rids += 1
+        ps = [{'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_000_000 + self.rids}}] if self.r.random() < 0.8 else []
+        x = self.r.random()
+        if x < 0.35:
+            ps.append(self.pick([(3, {'op': 'cede'}), (2, {'op': 'sleep', 'ms': self.pick([(1, 0), (2, 1), (2, 10), (1, 100)])})]))
+        elif x < 0.5:
+            ps.append({'op': 'canceled'})
+        elif x < 0.6:
+            ps.append({'op': 'raise', 'code': self.code()})
+        ps.append(self.prog(a, env, max(1, size), ctx))
+        return ps[0] if len(ps) == 1 else {'op': 'seq', 'ps': ps}
+
+    def tpl_memo(self, t, env, size, ctx):
+        """bind m = memoize(fa) in one of: sequential gets; two get fibers joined; a parent that
+        cancels one of two get fibers; a parent that cancels the only get fiber and runs get again."""
+        a = self.small_type()
+        sf, sk = self.split_size(size, 2)
+        m = self.fresh('m')
+        mv = {'t': 'var', 'x': m}
+        get = {'op': 'memoGet', 'm': mv}
+        env2 = {**env, m: ('val', memo(a))}
+        fa = self.memo_source(a, env, max(1, sf), ctx)
+        shape = self.pick([(2, 'seq'), (3, 'two'), (2, 'cancelOne'), (2, 'rerun')])
+        k = self.prog(t, env2, max(1, sk), ctx)
+        cedes = lambda: [{'op': 'cede'} for _ in range(self.pick([(2, 0), (2, 1), (1, 2), (1, 4)]))]
+        if shape == 'seq':
+            body = {'op': 'seq', 'ps': [get for _ in range(self.pick([(2, 1), (2, 2), (1, 3)]))] + [k]}
+        else:
+            f1, f2 = self.fresh('x'), self.fresh('x')
+            v1, v2 = {'t': 'var', 'x': f1}, {'t': 'var', 'x': f2}
+            env3 = {**env2, f1: ('val', fiber(a)), f2: ('val', fiber(a))}
+            k3 = self.prog(t, env3, max(1, sk), ctx)
+            if shape == 'two':
+                inner = {'op': 'seq', 'ps': cedes() + [self.join_marked(v1, a, self.join_marked(v2, a, k3, env3), env3)]}
+                body = {'op': 'bind', 'x': f1, 'e': {'op': 'start', 'e': get},
+                        'k': {'op': 'bind', 'x': f2, 'e': {'op': 'start', 'e': get}, 'k': inner}}
+            elif shape == 'cancelOne':
+                inner = {'op': 'seq', 'ps': cedes() + [{'op': 'cancel', 'f': v1}, self.join_marked(v2, a, k3, env3)]}
+                body = {'op': 'bind', 'x': f1, 'e': {'op': 'start', 'e': get},
+                        'k': {'op': 'bind', 'x': f2, 'e': {'op': 'start', 'e': get}, 'k': inner}}
+            else:
+                env4 = {**env2, f1: ('val', fiber(a))}
+                k4 = self.prog(t, env4, max(1, sk), ctx)
+                o = self.fresh('x')
+                after = {'op': 'bind', 'x': o, 'e': get,
+                         'k': {'op': 'seq', 'ps': [{'op': 'delay', 'fn': 1, 'arg': {'t': 'var', 'x': o}}, k4]}}
+                body = {'op': 'bind', 'x': f1, 'e': {'op': 'start', 'e': get},
+                        'k': {'op': 'seq', 'ps': cedes() + [{'op': 'cancel', 'f': v1}, after]}}
+        return {'op': 'bind', 'x': m, 'e': {'op': 'memoize', 'e': fa}, 'k': body}
 
     # ------------------------------------------------------- format v1
 

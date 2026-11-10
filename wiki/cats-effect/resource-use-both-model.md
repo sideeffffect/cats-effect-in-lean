@@ -1,7 +1,7 @@
 # Resource use, allocated, both, and CE-0020
 
 > Sources: Cats Effect v3.7.1 (`Resource.scala:156-314`, `:388-397`, `:464-552`, `:826-993`, `:1229-1234`; `IO.scala:961-962`, `:1822`, `:2062-2064`, `:2152`, `:2161`; `SyncRef.scala:30`, `:65-73`; `GenSpawn.scala:476-498`); upstream commit `3af09e6d56` (PR #4630); own Phase 6 track Res work and scala-cli runs, 2026-11-10
-> Raw: [Track Res notes](../../raw/cats-effect/2026-11-10-track-res-resource-notes.md)
+> Raw: [Track Res notes](../../raw/cats-effect/2026-11-10-track-res-resource-notes.md); [Merge with track M](../../raw/cats-effect/2026-11-10-track-res-merge-m-notes.md)
 
 ## Overview
 
@@ -50,7 +50,7 @@ Hypothesis note: `UserMarkersOnly` restricts only user ids (even). `Bracket.Mark
 
 ## Difftest (format v2)
 
-Ops `rUse`, `rAllocated`, `rBoth` ([format](../methodology/difftest-program-format.md)). Fixed cases `cases/resuse.jsonl` (228, all agree; case `res-both-relfail-sched5-1` shows CE-0020 on both sides). `opcount.py` seeds 21-23, 240,000 cases, all agree: rUse 87,130, rAllocated 51,777, rBoth 54,462 agreeing cases.
+Ops `rUse`, `rAllocated`, `rBoth` ([format](../methodology/difftest-program-format.md)). Fixed cases `cases/resuse.jsonl` (228, all agree; case `res-both-relfail-sched5-1` shows CE-0020 on both sides). `opcount.py` seeds 21-23, 240,000 cases, all agree: rUse 87,130, rAllocated 51,777, rBoth 54,462 agreeing cases. After the merge with track M the default weights are `rUse` 0.5, `rAllocated` 0.4, `tpl_resBoth` 0.5, `res_both` 2.0 (so `race` keeps its 5 % selftest minimum).
 
 ## See Also
 
