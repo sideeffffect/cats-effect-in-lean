@@ -16,6 +16,10 @@ Design notes: wiki/methodology/differential-testing.md ("Generator").
   CE-0003 shape), and `allocatedCase` of `Resource` trees (`g_res`). Programs inside resource
   nodes see no fiber or `Deferred` variables of the outer scope: the Lean `Resource` mirror builds
   them without a heap view (`Prog.resViewFree` in tools/Difftest/Prog.lean).
+- Format v2 (decision 51, track R): `race`, `raceOutcome`, `both`, `bothOutcome` where the wanted
+  type fits, and `tpl_comb` (any type: bind the result of a combinator, often with a sleeping,
+  never-ending or masked side) and `tpl_combCancel` (decision 50: a parent starts the combinator and
+  cancels it).
 
 Usage:
   gen.py --seed 1 --n 1000 [--max-size 40] [--mode replay|testcontrol] [--out FILE]
@@ -28,7 +32,7 @@ import sys
 
 from typecheck import check_prog
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 MAX_LIMIT = 2**31 - 1  # Int.MaxValue: the largest syncStep limit
 
 # Region markers: `delay fn1 arg nat M` with M = MARK_BASE + kind * MARK_KIND + 2 * id + exit.
@@ -82,6 +86,8 @@ WEIGHTS = {
     'timeout': 1.2, 'timeoutTo': 0.35, 'allocatedCase': 2.2,
     'queueNew': 2, 'queueOffer': 3, 'queueTake': 3, 'queueTryTake': 6, 'tpl_queue': 2.2, 'tpl_resource': 1,
     'res_pure': 2.5, 'res_eval': 2.5, 'res_make': 3.5, 'res_flatMap': 12,
+    # format v2 (track R)
+    'race': 2, 'raceOutcome': 2, 'both': 2, 'bothOutcome': 2, 'tpl_comb': 3.5, 'tpl_combCancel': 2,
 }
 
 # Other knobs (probabilities and ranges).
@@ -514,6 +520,14 @@ class Gen:
         if self.res_ok(t):
             opts.append((w['allocatedCase'], lambda: {'op': 'allocatedCase', 'res': self.g_res(t, env, size - 1, cc)}))
 
+        # ---- format v2 (track R): type-directed combinators
+        if size >= 3 and t[0] in ('either', 'pair'):
+            kind = 'race' if t[0] == 'either' else 'both'
+            opts.append((w[kind], lambda: self.g_comb(kind, t[1], t[2], env, size, cc)))
+            if t[1][0] == 'outcome' and t[2][0] == 'outcome':
+                kind2 = 'raceOutcome' if t[0] == 'either' else 'bothOutcome'
+                opts.append((w[kind2] * 2, lambda: self.g_comb(kind2, t[1][1], t[2][1], env, size, cc)))
+
         # ---- templates
         if size >= 4:
             opts.append((w['tpl_escapedPoll'], lambda: self.tpl_escaped_poll(t, env, size, ctx)))
@@ -528,6 +542,10 @@ class Gen:
             opts.append((w['tpl_scenario'], lambda: self.tpl_scenario(t, env, size, ctx)))
         if size >= 4:
             opts.append((w['tpl_queue'], lambda: self.tpl_queue(t, env, size, ctx)))
+        if size >= 4:
+            opts.append((w['tpl_comb'], lambda: self.tpl_comb(t, env, size, ctx)))
+        if size >= 5:
+            opts.append((w['tpl_combCancel'], lambda: self.tpl_comb_cancel(t, env, size, ctx)))
         if size >= 4 and self.res_ok(t):
             opts.append((w['tpl_resource'], lambda: self.tpl_resource(t, env, size, cc)))
         return opts
@@ -805,6 +823,77 @@ class Gen:
               'k': self.prog(t, {**env, f2: ('val', fiber(a)), o2: ('val', outcome(b))}, s2, ctx)}
         return {'op': 'bind', 'x': r, 'e': {'op': 'racePair', 'a': self.prog(a, env, sa, cc), 'b': self.prog(b, env, sb, cc)},
                 'k': {'op': 'case', 'on': {'t': 'var', 'x': r}, 'l': l, 'lk': lk, 'r': rr, 'rk': rk}}
+
+    # ---- format v2 (track R)
+
+    COMBS = ('race', 'raceOutcome', 'both', 'bothOutcome')
+
+    @staticmethod
+    def comb_type(kind, a, b):
+        """The value type of `kind(a, b)` after the interpreter's conversion."""
+        if kind == 'race':
+            return either(a, b)
+        if kind == 'raceOutcome':
+            return either(outcome(a), outcome(b))
+        if kind == 'both':
+            return pair(a, b)
+        return pair(outcome(a), outcome(b))
+
+    def comb_side(self, t, env, size, ctx):
+        """One side of a combinator: often it waits first (sleep, cede), never ends, is masked, or
+        has a finalizer, so the loser is really canceled and the cancel paths run."""
+        k = self.pick([(5, 'plain'), (3, 'sleep'), (1.5, 'cede'), (1, 'never'), (1, 'masked'), (1.5, 'fin'),
+                       (1, 'canceled'), (0.8, 'raise')])
+        if k == 'never':
+            return {'op': 'never'}
+        if k == 'canceled':
+            return {'op': 'seq', 'ps': [{'op': 'canceled'}, self.prog(t, env, max(1, size - 1), ctx)]}
+        if k == 'raise':
+            return {'op': 'seq', 'ps': [self.prog(UNIT, env, max(1, size // 2), ctx), {'op': 'raise', 'code': self.r.randint(0, 9)}]}
+        e = self.prog(t, env, size, ctx)
+        if k == 'plain':
+            return e
+        if k == 'masked':
+            q = self.fresh('p')
+            return {'op': 'uncancelable', 'poll': q, 'body': {'op': 'seq', 'ps': [{'op': 'sleep', 'ms': self.pick([(1, 1), (1, 10)])}, e]}}
+        if k == 'fin':
+            x = self.fresh('x', env)
+            return self.tag({'op': 'guaranteeCase', 'e': e, 'x': x,
+                             'fin': self.prog(UNIT, {**env, x: ('val', outcome(t))}, 1, self.fin_ctx(ctx))})
+        w = {'op': 'cede'} if k == 'cede' else {'op': 'sleep', 'ms': self.pick([(2, 1), (3, 10), (1, 100)])}
+        return {'op': 'seq', 'ps': [w, e]}
+
+    def g_comb(self, kind, a, b, env, size, ctx):
+        sa, sb = self.split_size(size, 2)
+        return {'op': kind, 'a': self.comb_side(a, env, sa, ctx), 'b': self.comb_side(b, env, sb, ctx)}
+
+    def tpl_comb(self, t, env, size, ctx):
+        """bind x = comb(a, b) in k (any wanted type)."""
+        kind = self.r.choice(self.COMBS)
+        a, b = self.small_type(), self.small_type()
+        sc, sk = self.split_size(size, 2)
+        x = self.fresh('x', env)
+        e = self.g_comb(kind, a, b, env, max(3, sc), self.child_ctx(ctx))
+        return {'op': 'bind', 'x': x, 'e': e,
+                'k': self.prog(t, {**env, x: ('val', self.comb_type(kind, a, b))}, sk, ctx)}
+
+    def tpl_comb_cancel(self, t, env, size, ctx):
+        """Decision 50: bind f = start(comb(a, b)) in seq(maybe cede/sleep, cancel f, maybe join f, k)."""
+        kind = self.r.choice(self.COMBS)
+        a, b = self.small_type(), self.small_type()
+        sc, sk = self.split_size(size, 2)
+        f = self.fresh('x')
+        fv = {'t': 'var', 'x': f}
+        ct = self.comb_type(kind, a, b)
+        env2 = {**env, f: ('val', fiber(ct))}
+        ps = [self.pick([(3, {'op': 'cede'}), (2, {'op': 'sleep', 'ms': 1}), (1, {'op': 'sleep', 'ms': 10}),
+                         (1, {'op': 'pure', 'v': {'t': 'unit'}})])]
+        ps.append({'op': 'cancel', 'f': fv})
+        if self.r.random() < 0.7:
+            ps.append({'op': 'join', 'f': fv})
+        ps.append(self.prog(t, env2, sk, ctx))
+        return {'op': 'bind', 'x': f, 'e': {'op': 'start', 'e': self.g_comb(kind, a, b, env, max(3, sc), self.child_ctx(ctx))},
+                'k': {'op': 'seq', 'ps': ps}}
 
     def tpl_ref(self, t, env, size, ctx):
         """bind r = refNew(n) in bind f = start(updates of r) in seq(updates of r, k)."""

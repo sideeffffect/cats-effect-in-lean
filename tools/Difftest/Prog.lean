@@ -133,13 +133,23 @@ inductive Prog where
   | rEval (e : Prog)
   | rMake (acq rel : Prog)
   | rFlatMap (res k : Prog)
+  -- format v2 (track R)
+  /-- `I(a).race(I(b))` then `Left(v) ↦ left v`, `Right(v) ↦ right v`. -/
+  | race (a b : Prog)
+  /-- `I(a).raceOutcome(I(b))` then `ocVal` under `left`/`right`. -/
+  | raceOutcome (a b : Prog)
+  /-- `I(a).both(I(b))` then `(x, y) ↦ pair x y`. -/
+  | both (a b : Prog)
+  /-- `I(a).bothOutcome(I(b))` then `ocVal` of each, as a pair. -/
+  | bothOutcome (a b : Prog)
   deriving DecidableEq, Repr
 
 /-- Number of nodes. Nodes are numbered in pre-order from 0; the children of a node with
 number `n` are `n + 1` and `n + 1 + size first`. -/
 def Prog.size : Prog → Nat
   | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
-  | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k => 1 + e.size + k.size
+  | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k
+  | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => 1 + e.size + k.size
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => 1 + e.size
   | _ => 1
@@ -150,7 +160,8 @@ def Prog.at? : Prog → Nat → Option Prog
   | p, i + 1 =>
     match p with
     | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
-    | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k =>
+    | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k
+    | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k =>
       if i < e.size then e.at? i else k.at? (i - e.size)
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => e.at? i
@@ -172,12 +183,20 @@ def Prog.opName : Prog → String
   | .queueNew => "queueNew" | .queueOffer .. => "queueOffer" | .queueTake .. => "queueTake"
   | .queueTryTake .. => "queueTryTake" | .allocatedCase .. => "allocatedCase"
   | .rPure .. => "rPure" | .rEval .. => "rEval" | .rMake .. => "rMake" | .rFlatMap .. => "rFlatMap"
+  | .race .. => "race" | .raceOutcome .. => "raceOutcome" | .both .. => "both"
+  | .bothOutcome .. => "bothOutcome"
+
+/-- The two sub-programs of a v2 combinator (`race`, `raceOutcome`, `both`, `bothOutcome`). -/
+def Prog.combArgs? : Prog → Option (Prog × Prog)
+  | .race a b | .raceOutcome a b | .both a b | .bothOutcome a b => some (a, b)
+  | _ => none
 
 /-- All op names that occur in the program (pre-order, with repeats). -/
 def Prog.ops (p : Prog) : List String :=
   p.opName :: match p with
     | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
-    | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k => e.ops ++ k.ops
+    | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k
+    | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => e.ops ++ k.ops
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => e.ops
     | _ => []
@@ -192,6 +211,7 @@ def Prog.eagerReads : Prog → Bool
   | .allocatedCase e => e.eagerReads
   | .onCancel e k _ | .racePair e k | .timeoutTo e k _ | .case _ e k | .rMake e k
   | .rFlatMap e k => e.eagerReads || k.eagerReads
+  | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => e.eagerReads || k.eagerReads
   | .split _ k => k.eagerReads
   | _ => false
 
@@ -203,6 +223,7 @@ def Prog.resViewFree : Prog → Bool
   | .rMake a r => !a.eagerReads && !r.eagerReads && a.resViewFree && r.resViewFree
   | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
   | .racePair e k | .case _ e k | .timeoutTo e k _ | .rFlatMap e k => e.resViewFree && k.resViewFree
+  | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => e.resViewFree && k.resViewFree
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e => e.resViewFree
   | _ => true
@@ -221,22 +242,24 @@ inductive Mode where
 
 /-- One test case (one input line). -/
 structure TestCase where
-  /-- The format version of the line (0 or 1). -/
-  version : Nat := 1
+  /-- The format version of the line (0, 1 or 2). -/
+  version : Nat := 2
   id : String
   mode : Mode
   prog : Prog
   maxSteps : Nat
   deriving Repr
 
-/-- `Json.FormatVersion` in `Json.scala`. Versions 0 and 1 are accepted. -/
-def formatVersion : Nat := 1
+/-- `Json.FormatVersion` in `Json.scala`. Versions 0, 1 and 2 are accepted. -/
+def formatVersion : Nat := 2
 /-- `Json.MaxLimit`: `Int.MaxValue`, the largest `syncStep` limit. -/
 def maxLimit : Nat := 2147483647
 /-- Ops of format v1 (`Json.V1Ops`). -/
 def v1Ops : List String :=
   ["syncStep", "timeout", "timeoutTo", "queueNew", "queueOffer", "queueTake", "queueTryTake",
    "allocatedCase", "rPure", "rEval", "rMake", "rFlatMap"]
+/-- Ops of format v2 (`Json.V2Ops`): a decode error in a v0 or v1 case. -/
+def v2Ops : List String := ["race", "raceOutcome", "both", "bothOutcome"]
 /-- The resource ops. -/
 def resOps : List String := ["rPure", "rEval", "rMake", "rFlatMap"]
 /-- `Json.DefaultMaxSteps` in `Json.scala`. -/
@@ -463,11 +486,27 @@ partial def decodeProgIn (j : Json) (scope : Scope) (v1 : Bool) (pos : Pos := .i
   | "rFlatMap" =>
     only ["res", "x", "k"]; let x ← s "x"
     pure (.rFlatMap (← r "res") (← r "k" ((x, .v) :: scope)))
+  | "race" => only ["a", "b"]; pure (.race (← p "a") (← p "b"))
+  | "raceOutcome" => only ["a", "b"]; pure (.raceOutcome (← p "a") (← p "b"))
+  | "both" => only ["a", "b"]; pure (.both (← p "a") (← p "b"))
+  | "bothOutcome" => only ["a", "b"]; pure (.bothOutcome (← p "a") (← p "b"))
   | _ => fail s!"unknown op '{op}'"
+
+/-- Reject a v2 op anywhere in `j` (a case of format v0 or v1; `Json.checkNoV2`). -/
+partial def checkNoV2 : Json → D Unit
+  | .obj kvs => do
+    match kvs.toList.lookup "op" with
+    | some (.str op) =>
+      if v2Ops.contains op then fail s!"op '{op}': not in format v0/v1 (use \"v\":2)"
+    | _ => pure ()
+    kvs.toList.forM fun (_, v) => checkNoV2 v
+  | .arr xs => xs.toList.forM checkNoV2
+  | _ => pure ()
 
 /-- Decode a closed program. `syncStep` is allowed only here, at the root. -/
 def decodeProg (j : Json) (version : Nat := formatVersion) : D Prog := do
   let v1 := version ≥ 1
+  if version < 2 then checkNoV2 j
   let o ← obj j "prog"
   match get? o "op" with
   | some (.str "syncStep") =>

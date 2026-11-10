@@ -516,7 +516,7 @@ def static_features(prog):
                 pats.add('start inside uncancelable')
             walk(p['e'], {k: True for k in polls}, False, in_fin_polls)
             return
-        if op == 'racePair':
+        if op in ('racePair', 'race', 'raceOutcome', 'both', 'bothOutcome'):
             for k in ('a', 'b'):
                 walk(p[k], {k2: True for k2 in polls}, False, in_fin_polls)
             return

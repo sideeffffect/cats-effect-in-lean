@@ -8,8 +8,8 @@ import ujson.Value
   * all decode errors.
   */
 object Json:
-  val FormatVersion = 1
-  val Versions = Set(0L, 1L)
+  val FormatVersion = 2
+  val Versions = Set(0L, 1L, 2L)
   /** `Int.MaxValue`: the largest `syncStep` limit. */
   val MaxLimit = 2147483647L
   val DefaultMaxSteps = 10000
@@ -100,9 +100,23 @@ object Json:
       "allocatedCase", "rPure", "rEval", "rMake", "rFlatMap")
   private val ResOps = Set("rPure", "rEval", "rMake", "rFlatMap")
 
+  /** Ops of format v2 (a decode error in a v0 or v1 case). */
+  val V2Ops: Set[String] = Set("race", "raceOutcome", "both", "bothOutcome")
+
+  /** Reject a v2 op anywhere in `j` (a case of format v0 or v1). */
+  private def checkNoV2(j: Value): Unit = j match
+    case o: ujson.Obj =>
+      o.value.get("op") match
+        case Some(ujson.Str(op)) if V2Ops.contains(op) => fail(s"op '$op': not in format v0/v1 (use \"v\":2)")
+        case _ => ()
+      o.value.valuesIterator.foreach(checkNoV2)
+    case ujson.Arr(xs) => xs.foreach(checkNoV2)
+    case _ => ()
+
   /** Decode a closed program. `syncStep` is allowed only here, at the root. */
   def decodeProg(j: Value, version: Long = FormatVersion): Prog =
     val v1 = version >= 1
+    if version < 2 then checkNoV2(j)
     obj(j, "prog").get("op") match
       case Some(ujson.Str("syncStep")) if v1 =>
         val o = obj(j, "prog")
@@ -212,6 +226,10 @@ object Json:
       case "queueTake" => only("q"); Prog.QueueTake(a("q"))
       case "queueTryTake" => only("q"); Prog.QueueTryTake(a("q"))
       case "allocatedCase" => only("res"); Prog.AllocatedCase(res(field(o, "res", ctx), scope, v1))
+      case "race" => only("a", "b"); Prog.Race(p("a"), p("b"))
+      case "raceOutcome" => only("a", "b"); Prog.RaceOutcome(p("a"), p("b"))
+      case "both" => only("a", "b"); Prog.Both(p("a"), p("b"))
+      case "bothOutcome" => only("a", "b"); Prog.BothOutcome(p("a"), p("b"))
       case "syncStep" => fail(s"$ctx: only at the root of a program")
       case r if ResOps.contains(r) => fail(s"$ctx: a resource op outside a resource position")
       case _ => fail(s"unknown op '$op'")

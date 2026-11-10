@@ -38,6 +38,9 @@ COV_MAX_STUCK = 0.25
 V1_OPS = ('syncStep', 'timeout', 'timeoutTo', 'queueNew', 'queueOffer', 'queueTake', 'queueTryTake',
           'allocatedCase', 'rPure', 'rEval', 'rMake', 'rFlatMap')
 V1_MIN = 0.03
+# Format v2 (track R): each op in at least this share of generated cases (static count)
+V2_OPS = ('race', 'raceOutcome', 'both', 'bothOutcome')
+V2_MIN = 0.05
 V1_MIN_TIMEOUTTO = 0.005
 
 
@@ -50,7 +53,7 @@ def check(cond, msg):
 def main():
     t0 = time.time()
     # 1. type checker
-    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue')
+    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race')
              for x in (drive.REPO / f'difftest/cases/{f}.jsonl').read_text().splitlines() if x.strip()]
     check(all(well_typed(c['prog']) for c in basic), f"type checker accepts all {len(basic)} golden cases")
     N1 = {'t': 'nat', 'v': 1}
@@ -64,6 +67,9 @@ def main():
         # format v1: syncStep only at the root; resource ops only at resource positions
         {'op': 'seq', 'ps': [{'op': 'syncStep', 'e': {'op': 'cede'}, 'limit': 1}]},
         {'op': 'rPure', 'v': N1},
+        # format v2: `both` gives a pair, `race` an either
+        {'op': 'bind', 'x': 'x', 'e': {'op': 'both', 'a': {'op': 'cede'}, 'b': {'op': 'cede'}},
+         'k': {'op': 'case', 'on': {'t': 'var', 'x': 'x'}, 'l': 'a', 'lk': {'op': 'cede'}, 'r': 'b', 'rk': {'op': 'cede'}}},
         {'op': 'allocatedCase', 'res': {'op': 'cede'}},
         {'op': 'bind', 'x': 'q', 'e': {'op': 'queueNew'}, 'k': {'op': 'seq', 'ps': [
             {'op': 'queueOffer', 'q': {'t': 'var', 'x': 'q'}, 'v': N1},
@@ -85,6 +91,9 @@ def main():
     v1cov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V1_OPS}
     low = {op: f for op, f in v1cov.items() if f < (V1_MIN_TIMEOUTTO if op == 'timeoutTo' else V1_MIN)}
     check(not low, f"each format v1 op in >= {V1_MIN:.0%} of {N} cases (timeoutTo {V1_MIN_TIMEOUTTO:.1%}) {low}")
+    v2cov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2_OPS}
+    low2 = {op: f for op, f in v2cov.items() if f < V2_MIN}
+    check(not low2, f"each format v2 op in >= {V2_MIN:.0%} of {N} cases {low2}")
 
     # 3 + 4. Scala runs: no generator bug, deterministic
     tcs = [gen.to_testcontrol(c, t) for c in a[:N // 2] for t in (1, 2)]

@@ -2,6 +2,7 @@ import Difftest.Closure
 import CatsEffectInLean.Model.Syntax
 import CatsEffectInLean.Model.Resource
 import CatsEffectInLean.Model.Timeout
+import CatsEffectInLean.Model.Race
 import CatsEffectInLean.Std.Queue
 
 /-!
@@ -255,6 +256,12 @@ def TrErr.toErr : TrErr → Err
   | .typeError => typeErr
   | .unsupported _ => harnessErr
 
+/-- The two source codes of a v2 combinator at `node` (`raceSrcA`, `raceSrcB`, with the
+snapshot); `Env.srcIO` rebuilds `I(a)` and `I(b)` from them. -/
+def combSrcs (node : Nat) (env : List Val) (vw : View) : Val × Val :=
+  (.nat (Clo.encode { node, lam := .raceSrcA, vals := snapVal vw :: env }),
+   .nat (Clo.encode { node, lam := .raceSrcB, vals := snapVal vw :: env }))
+
 mutual
 /-- `I(p)` with `p` at pre-order number `node`, in environment `env`. `vw` is the state that
 Scala reads when it builds the term (see "State read at construction"). `R` gives the meaning
@@ -383,6 +390,34 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     | .error _ => throw .typeError
   | .rPure _, _, _, _ | .rEval _, _, _, _ | .rMake _ _, _, _, _ | .rFlatMap _ _, _, _, _ =>
     throw .typeError -- a resource node at an `IO` position: the decoder prevents this
+  -- format v2: `I(a).<op>(I(b))` (`IO.scala:638`, `:641`, `:243`, `:228`) = the kernel default
+  -- with `IOAsync` (`Model/Race.lean`). Scala builds `I(a)` then `I(b)` now; the model builds them
+  -- in the `body` closure from the source codes `raceSrcA`/`raceSrcB`, with the snapshot.
+  | .race a b, node, env, vw => do
+    let _ ← tr R a (node + 1) env vw
+    let _ ← tr R b (node + 1 + a.size) env vw
+    let (sa, sb) := combSrcs node env vw
+    -- `.map { case Left(v) => VLeft(v); case Right(v) => VRight(v) }`
+    pure (.map (Race.raceIO sa sb) (clo node .raceK []))
+  | .raceOutcome a b, node, env, vw => do
+    let _ ← tr R a (node + 1) env vw
+    let _ ← tr R b (node + 1 + a.size) env vw
+    let (sa, sb) := combSrcs node env vw
+    -- `.flatMap { case Left(oc) => ocVal(oc).map(VLeft(_)); case Right(oc) => ... }`
+    pure (.flatMap (Race.raceOutcomeIO sa sb) (clo node .roK []))
+  | .both a b, node, env, vw => do
+    let _ ← tr R a (node + 1) env vw
+    let _ ← tr R b (node + 1 + a.size) env vw
+    let (sa, sb) := combSrcs node env vw
+    -- `.map { case (x, y) => VPair(x, y) }`
+    pure (.map (Race.bothIO sa sb) (clo node .pairK []))
+  | .bothOutcome a b, node, env, vw => do
+    let _ ← tr R a (node + 1) env vw
+    let _ ← tr R b (node + 1 + a.size) env vw
+    let (sa, sb) := combSrcs node env vw
+    -- `.flatMap { case (oa, ob) => ocVal(oa).flatMap(x => ocVal(ob).map(y => VPair(x, y))) }`
+    pure (.flatMap (Race.bothOutcomeIO sa sb) (clo node .boK []))
+
 
 /-- `I_R(r)`: the `Resource` term of a resource node (`Interp.scala` `res`). The `IO` programs
 inside are built with an empty view (the resource restriction, `Prog.resViewFree`). -/

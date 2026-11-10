@@ -1,0 +1,12 @@
+{"v":2,"id":"race-pure-never","mode":"replay","prog":{"op":"race","a":{"op":"pure","v":{"t":"nat","v":1}},"b":{"op":"never"}}}
+{"v":2,"id":"race-never-delay","mode":"replay","prog":{"op":"race","a":{"op":"never"},"b":{"op":"delay","fn":2,"arg":{"t":"nat","v":4}}}}
+{"v":2,"id":"race-canceled-pure","mode":"replay","prog":{"op":"race","a":{"op":"canceled"},"b":{"op":"pure","v":{"t":"nat","v":2}}}}
+{"v":2,"id":"race-canceled-canceled","mode":"replay","prog":{"op":"race","a":{"op":"canceled"},"b":{"op":"canceled"}}}
+{"v":2,"id":"race-error-loser-oncancel","mode":"replay","choices":[1],"prog":{"op":"race","a":{"op":"onCancel","e":{"op":"never"},"fin":{"op":"delay","fn":1},"tag":7},"b":{"op":"raise","code":5}}}
+{"v":2,"id":"raceOutcome-sleep-raise","mode":"replay","choices":[0,2,1],"prog":{"op":"raceOutcome","a":{"op":"sleep","ms":5},"b":{"op":"raise","code":3}}}
+{"v":2,"id":"both-pure-sleep","mode":"replay","prog":{"op":"both","a":{"op":"pure","v":{"t":"nat","v":1}},"b":{"op":"sleep","ms":3}}}
+{"v":2,"id":"both-error-cancels-other","mode":"replay","choices":[0,2],"prog":{"op":"both","a":{"op":"guaranteeCase","e":{"op":"never"},"x":"o","fin":{"op":"pure","v":{"t":"var","x":"o"}},"tag":1},"b":{"op":"raise","code":9}}}
+{"v":2,"id":"bothOutcome-canceled-raise","mode":"replay","prog":{"op":"bothOutcome","a":{"op":"canceled"},"b":{"op":"raise","code":2}}}
+{"v":2,"id":"bothOutcome-parent-cancels","mode":"replay","prog":{"op":"bind","x":"f","e":{"op":"start","e":{"op":"bothOutcome","a":{"op":"never"},"b":{"op":"sleep","ms":4}}},"k":{"op":"seq","ps":[{"op":"cede"},{"op":"cancel","f":{"t":"var","x":"f"}},{"op":"join","f":{"t":"var","x":"f"}}]}}}
+{"v":2,"id":"race-parent-cancels-masked-loser","mode":"replay","prog":{"op":"bind","x":"f","e":{"op":"start","e":{"op":"race","a":{"op":"uncancelable","poll":"p","body":{"op":"sleep","ms":3}},"b":{"op":"never"}}},"k":{"op":"seq","ps":[{"op":"cede"},{"op":"cancel","f":{"t":"var","x":"f"}},{"op":"join","f":{"t":"var","x":"f"}}]}}}
+{"v":2,"id":"timeout-race-inside","mode":"replay","prog":{"op":"timeout","e":{"op":"race","a":{"op":"never"},"b":{"op":"never"}},"ms":2}}

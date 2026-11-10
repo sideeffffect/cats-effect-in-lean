@@ -139,6 +139,35 @@ def runClo (R : Resource.REnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DR
     | .left (.pair oc fb) => prog (.map (ocValTerm node oc) (clo node .rpLeft [fb]))
     | .right (.pair fa oc) => prog (.map (ocValTerm node oc) (clo node .rpRight [fa]))
     | _ => DResult.harness
+  -- format v2 (track R)
+  | .raceK, .race _ _ =>
+    match arg with
+    | .left v => ret (.left v)
+    | .right v => ret (.right v)
+    | _ => DResult.harness
+  | .roK, .raceOutcome _ _ =>
+    match arg with
+    | .left oc => prog (.map (ocValTerm node oc) (clo node .mkLeft []))
+    | .right oc => prog (.map (ocValTerm node oc) (clo node .mkRight []))
+    | _ => DResult.harness
+  | .mkLeft, _ => ret (.left arg)
+  | .mkRight, _ => ret (.right arg)
+  | .pairK, .both _ _ =>
+    match arg with
+    | .pair x y => ret (.pair x y)
+    | _ => DResult.harness
+  | .boK, .bothOutcome _ _ =>
+    match arg with
+    | .pair oa ob => prog (.flatMap (ocValTerm node oa) (clo node .boK2 [ob]))
+    | _ => DResult.harness
+  | .boK2, .bothOutcome _ _ =>
+    match env with
+    | [ob] => prog (.map (ocValTerm node ob) (clo node .boK3 [arg]))
+    | _ => DResult.harness
+  | .boK3, .bothOutcome _ _ =>
+    match env with
+    | [x] => ret (.pair x arg)
+    | _ => DResult.harness
   | .rpLeft, _ =>
     match env with
     | [.fiber i] => ret (.left (.pair arg (.fiber i))) [.handle i]
@@ -286,6 +315,21 @@ def srcIO (p : Prog) (srcV : Val) : IO :=
       | .ok io => io
       | .error e => .error e.toErr
     | _ => .error harnessErr
+  -- format v2: `I(a)` / `I(b)` of a combinator node (`Translate.combSrcs`)
+  | some { node, lam := .raceSrcA, vals := snap :: env } =>
+    match (p.at? node).bind Prog.combArgs? with
+    | some (a, _) =>
+      match tr (renvOf p) a (node + 1) env (snapView snap) with
+      | .ok io => io
+      | .error e => .error e.toErr
+    | none => .error harnessErr
+  | some { node, lam := .raceSrcB, vals := snap :: env } =>
+    match (p.at? node).bind Prog.combArgs? with
+    | some (a, b) =>
+      match tr (renvOf p) b (node + 1 + a.size) env (snapView snap) with
+      | .ok io => io
+      | .error e => .error e.toErr
+    | none => .error harnessErr
   | _ => .error harnessErr
 
 /-- A library closure of the mirrors. -/
@@ -293,6 +337,7 @@ inductive LibClo where
   | queue (l : CatsEffectInLean.Std.Queue.QLam)
   | timeout (l : Timeout.TLam)
   | resource (c : Resource.Clo)
+  | race (l : Race.RLam)
 
 /-- The library closure of an id that is not a difftest closure id, if exactly one mirror
 decodes it. -/
@@ -307,6 +352,7 @@ def libClo? (id : Nat) : Option LibClo :=
           if k == CatsEffectInLean.Std.Queue.ns then
             (CatsEffectInLean.Std.Queue.QLam.ofFields tag fs).map .queue
           else if k == Timeout.ns then (Timeout.TLam.ofFields tag fs).map .timeout
+          else if k == Race.ns then (Race.RLam.ofFields tag fs).map .race
           else none
         | none => none
       match res, lib with
@@ -329,6 +375,7 @@ def dispatch (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
     | some (.queue l) => CatsEffectInLean.Std.Queue.call l arg vw
     | some (.timeout l) => Timeout.call (srcIO p) l arg vw
     | some (.resource c) => Resource.cloCall (renvOf p) c arg vw
+    | some (.race l) => Race.call (srcIO p) l arg vw
     | none => DResult.harness.toUser
 
 /-- The `Model.UserEnv` of program `p` (see module doc). -/

@@ -77,6 +77,11 @@ enum Prog:
   case QueueTake(q: Atom)
   case QueueTryTake(q: Atom)
   case AllocatedCase(r: Res)
+  // ---- format v2 (track R: race, both, raceOutcome, bothOutcome)
+  case Race(a: Prog, b: Prog)
+  case RaceOutcome(a: Prog, b: Prog)
+  case Both(a: Prog, b: Prog)
+  case BothOutcome(a: Prog, b: Prog)
 
 /** A `Resource[IO, Val]` (format v1). It occurs only under `AllocatedCase`. */
 enum Res:

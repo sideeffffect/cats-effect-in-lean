@@ -152,6 +152,28 @@ inductive Lam where
   | resAcquire
   /-- `rMake`: `a => I(rel)[x := a].void` (the `REnv.release` code). `vals = env`. -/
   | resRelease
+  -- format v2 (track R)
+  /-- `race`/`raceOutcome`/`both`/`bothOutcome`: not a lambda. The source code of `I(a)` of the
+  combinator at `node` (`Race.call` builds it with `srcIO`). `vals = snap :: env`. -/
+  | raceSrcA
+  /-- The same for `I(b)`. -/
+  | raceSrcB
+  /-- `race`: `{ case Left(v) => VLeft(v); case Right(v) => VRight(v) }`. -/
+  | raceK
+  /-- `raceOutcome`: `{ case Left(oc) => ocVal(oc).map(VLeft(_)); case Right(oc) => ... }`. -/
+  | roK
+  /-- `VLeft(_)`. -/
+  | mkLeft
+  /-- `VRight(_)`. -/
+  | mkRight
+  /-- `both`: `{ case (x, y) => VPair(x, y) }`. -/
+  | pairK
+  /-- `bothOutcome`: `{ case (oa, ob) => ocVal(oa).flatMap(x => ...) }`. -/
+  | boK
+  /-- `bothOutcome`: `x => ocVal(ob).map(y => VPair(x, y))`. `vals = [ob]`. -/
+  | boK2
+  /-- `bothOutcome`: `y => VPair(x, y)`. `vals = [x]`. -/
+  | boK3
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -162,7 +184,8 @@ def Lam.all : List Lam :=
    .rpRight, .refGetThunk, .refSetThunk, .refSetThen, .refSetEmit, .refModifyThunk, .asyncEc,
    .asyncBody, .asyncUnc, .asyncReg, .asyncSel, .asyncFinEmit, .asyncFinThen, .neverBody,
    .neverUnc, .neverSel, .refNewThunk, .refHandle, .deferredNewThunk, .deferredHandle, .dcThen,
-   .dcEmit, .queueHandle, .optEither, .allocFst, .timeoutSrc, .resBind, .resAcquire, .resRelease]
+   .dcEmit, .queueHandle, .optEither, .allocFst, .timeoutSrc, .resBind, .resAcquire, .resRelease,
+   .raceSrcA, .raceSrcB, .raceK, .roK, .mkLeft, .mkRight, .pairK, .boK, .boK2, .boK3]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?

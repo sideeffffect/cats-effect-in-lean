@@ -53,7 +53,7 @@ def sampleClos : List Clo :=
 #guard isErr (dec r#"{"op":"sleep","ms":1.5}"#)
 #guard isErr (dec r#"{"op":"sleep","ms":-1}"#)
 #guard isErr (dec r#"{"op":"async","cbs":[{"when":"sync","ok":{"t":"unit"},"err":1}]}"#)
-#guard isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"cede"}}"#)
+#guard isErr (decCase r#"{"v":3,"id":"x","mode":"replay","prog":{"op":"cede"}}"#)
 #guard isErr (decCase r#"{"v":0,"id":"x","mode":"replay","seed":1,"prog":{"op":"cede"}}"#)
 #guard isErr (decCase r#"{"v":0,"id":"x","mode":"testcontrol","choices":[],"seed":1,"prog":{"op":"cede"}}"#)
 
@@ -227,5 +227,21 @@ def vDone : View := { outcomes := [none, some (.succeeded (.nat 3))], deferreds 
 #guard rootTerm (.allocatedCase (.rPure (.lit (.nat 3)))) ==
   .ok (.map (.pure (.pair (.nat 3) (CatsEffectInLean.Model.Resource.RelFn.unit.toVal))) (clo 0 .allocFst []))
 #guard [TraceEv.refH 3, .queueH 4].all fun e => TraceEv.ofVal? e.toVal == some e
+
+-- Format v2 (track R): `race`, `raceOutcome`, `both`, `bothOutcome`. A v2 op in a v0/v1 case is a
+-- decode error; the term is the `Race` mirror plus the interpreter's `map`/`flatMap`.
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"race","a":{"op":"cede"},"b":{"op":"cede"}}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"seq","ps":[{"op":"cede"},{"op":"both","a":{"op":"cede"},"b":{"op":"cede"}}]}}"#)
+#guard (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"bothOutcome","a":{"op":"cede"},"b":{"op":"never"}}}"#).map (·.prog) ==
+  .ok (.bothOutcome .cede .never)
+#guard isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"race","a":{"op":"cede"}}}"#)
+#guard rootTerm (.race .cede .never) ==
+  .ok (.map (CatsEffectInLean.Model.Race.raceIO (combSrcs 0 [] rootView).1 (combSrcs 0 [] rootView).2) (clo 0 .raceK []))
+#guard some (srcIO (.both .cede .never) (combSrcs 0 [] rootView).2) == (tr (renvOf (.both .cede .never)) .never 2 [] rootView).toOption
+#guard unsupportedOps (.raceOutcome .cede .cede) == []
+-- A race closure id is odd and in namespace `Race.ns` (never a difftest closure).
+#guard match (CatsEffectInLean.Model.Race.RLam.sel .both 1 0).fn with
+  | .user id => id % 2 == 1 && cloOfId? id == none && (libClo? id).isSome
+  | _ => false
 
 end Difftest.Tests

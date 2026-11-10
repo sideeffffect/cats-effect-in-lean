@@ -47,3 +47,10 @@ lean_exe cediff where
 lean_lib TwinChecks where
   roots := #[`CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed,
     `CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedOld]
+
+-- Leak smoke test of track R (Phase 6): exact bounded search (`exploreP`) of `race`, `both`,
+-- `raceOutcome`, `bothOutcome` and `timeout` over a small family of sides, with the leak
+-- observation of `Model/Leak.lean`. `lake exe leaksmoke`. Test code, not part of the library.
+lean_exe leaksmoke where
+  srcDir := "tools"
+  root := `LeakSmoke.Main

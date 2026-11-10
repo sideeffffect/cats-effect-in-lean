@@ -251,6 +251,22 @@ final class Interp(h: Harness):
         case None => VLeft(VUnit)
       }
     case Prog.AllocatedCase(r) => res(r, env).allocatedCase.map(_._1)
+    // ---- format v2: the `IO#` entry points (IO.scala:638, :641, :243, :228)
+    case Prog.Race(a, b) =>
+      run(a, env).race(run(b, env)).map {
+        case Left(v) => VLeft(v)
+        case Right(v) => VRight(v)
+      }
+    case Prog.RaceOutcome(a, b) =>
+      run(a, env).raceOutcome(run(b, env)).flatMap {
+        case Left(oc) => ocVal(oc).map(VLeft(_))
+        case Right(oc) => ocVal(oc).map(VRight(_))
+      }
+    case Prog.Both(a, b) => run(a, env).both(run(b, env)).map { case (x, y) => VPair(x, y) }
+    case Prog.BothOutcome(a, b) =>
+      run(a, env).bothOutcome(run(b, env)).flatMap { case (oa, ob) =>
+        ocVal(oa).flatMap(x => ocVal(ob).map(y => VPair(x, y)))
+      }
 
   /** A `Resource[IO, Val]`. Each case is one fixed `Resource` term. */
   private def res(r: Res, env: Env): Resource[IO, Val] = r match
