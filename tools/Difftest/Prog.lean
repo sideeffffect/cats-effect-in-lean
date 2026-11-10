@@ -35,10 +35,17 @@ open CatsEffectInLean.Model
 /-! ## Errors
 
 `Err.code` encodes the Scala exception class. Codes 0 and 1 are reserved for harness errors,
-so a `UserError(c)` has code `c + 2`. -/
+so a `UserError(c)` has code `c + 2`. Code `10^6` is the model `TimeoutException`
+(`Timeout.timeoutCode`), so `UserError(c)` for `c + 2 ≥ 10^6` has code `c + 3`. (Before
+2026-11-10, `UserError(999998)` had code `10^6` and printed as `TimeoutException`: a program
+that catches a `TimeoutException` gets `nat 999998` and can raise it again as a `UserError`.)
+Both errors give the value-language code 999998 (`Interp.scala` `CodeOf`). -/
+
+/-- The code of `Model.Timeout.timeoutErr` (`Tests.lean` checks that they agree). -/
+def timeoutModelCode : Nat := 1000000
 
 /-- `UserError(c)` (`difftest/.../UserFns.scala:6`). -/
-def userErr (c : Nat) : Err := { code := c + 2 }
+def userErr (c : Nat) : Err := { code := if c + 2 < timeoutModelCode then c + 2 else c + 3 }
 
 /-- `TypeError` (`difftest/.../UserFns.scala:9`): a value of the wrong shape. -/
 def typeErr : Err := { code := 0 }
@@ -47,9 +54,12 @@ def typeErr : Err := { code := 0 }
 yet (see `wiki/methodology/difftest-program-format.md`, "Lean side"). It never occurs in Scala. -/
 def harnessErr : Err := { code := 1 }
 
-/-- The `UserError` code of an error, if it is a `UserError`. -/
+/-- The value-language code of an error (`Interp.scala` `CodeOf`): `c` for `UserError(c)`, and
+999998 for the model `TimeoutException`. -/
 def userCode? (e : Err) : Option Nat :=
-  if e.kind = .nonFatal ∧ e.code ≥ 2 then some (e.code - 2) else none
+  if e.kind = .nonFatal ∧ e.code ≥ 2 then
+    some (if e.code ≤ timeoutModelCode then e.code - 2 else e.code - 3)
+  else none
 
 /-! ## AST -/
 

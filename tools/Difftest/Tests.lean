@@ -1,4 +1,5 @@
 import Difftest.Env
+import Difftest.Replay
 
 /-!
 # Checks of the difftest decoder and translation
@@ -119,7 +120,11 @@ def snap0 : Val := snapVal rootView
       (clo 0 .reportK []))
     (clo 0 .constRaise [.err (userErr 2)]))
 #guard (callFn pGc (clo 0 .gcFinEmit [.ocCanceled]) .unit).trace == [.finGuaranteeCase 4 .ocCanceled]
-#guard outOf (callFn pGc (clo 0 .gcFinThen [.ocCanceled]) .unit) ==
+-- `o => IO.delay(emit) *> run(fin).void`: `run(fin)` is built in `gcFinK` (`*>` is by value), so
+-- `gcFinThen` captures the snapshot of that moment.
+#guard outOf (callFn pGc (clo 0 .gcFinK []) .ocCanceled) == .prog
+  (.flatMap (.delay (clo 0 .gcFinEmit [.ocCanceled])) (clo 0 .gcFinThen [snapVal {}, .ocCanceled]))
+#guard outOf (callFn pGc (clo 0 .gcFinThen [snap0, .ocCanceled]) .unit) ==
   .prog (.map (.pure .ocCanceled) (clo 0 .voidFn []))
 
 -- `onCancel e fin`: `OnCancel(I(e), Delay(emit).flatMap(_ => I(fin).void))`.
@@ -237,5 +242,13 @@ def vDone : View := { outcomes := [none, some (.succeeded (.nat 3))], deferreds 
 #guard rootTerm (.allocatedCase (.rPure (.lit (.nat 3)))) ==
   .ok (.map (.pure (.pair (.nat 3) (CatsEffectInLean.Model.Resource.RelFn.unit.toVal))) (clo 0 .allocFst []))
 #guard [TraceEv.refH 3, .queueH 4].all fun e => TraceEv.ofVal? e.toVal == some e
+-- `UserError(999998)` is not the `TimeoutException`; both have value-language code 999998.
+#guard timeoutModelCode == Timeout.timeoutCode
+#guard userErr 999998 != Timeout.timeoutErr
+#guard userCode? (userErr 999998) == some 999998
+#guard userCode? Timeout.timeoutErr == some 999998
+#guard [0, 5, 999997, 999999, 2000000].all fun c => userCode? (userErr c) == some c
+#guard errText (userErr 999998) == "UserError: UserError(999998)"
+#guard errText Timeout.timeoutErr == "TimeoutException"
 
 end Difftest.Tests

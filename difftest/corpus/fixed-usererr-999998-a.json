@@ -1,0 +1,242 @@
+{
+ "case": {
+  "id": "g106-84934",
+  "mode": "replay",
+  "prog": {
+   "e": {
+    "e": {
+     "e": {
+      "op": "never"
+     },
+     "fin": {
+      "e": {
+       "e": {
+        "op": "never"
+       },
+       "ms": 1000,
+       "op": "timeout"
+      },
+      "k": {
+       "arg": {
+        "t": "var",
+        "x": "x6"
+       },
+       "fn": 3,
+       "op": "delay"
+      },
+      "op": "handleErrorWith",
+      "x": "x6"
+     },
+     "op": "onCancel"
+    },
+    "op": "start"
+   },
+   "k": {
+    "op": "seq",
+    "ps": [
+     {
+      "op": "cede"
+     },
+     {
+      "f": {
+       "t": "var",
+       "x": "x9"
+      },
+      "op": "cancel"
+     }
+    ]
+   },
+   "op": "bind",
+   "x": "x9"
+  },
+  "v": 1
+ },
+ "expect": "agree",
+ "field": "failures",
+ "found": {
+  "date": "2026-11-10",
+  "orig_id": "g106-84934",
+  "orig_size": 46,
+  "size": 11
+ },
+ "known_bug": "",
+ "lean": {
+  "compare": [
+   "outcome",
+   "trace",
+   "steps",
+   "time",
+   "schedule",
+   "fifoFrom",
+   "fibers",
+   "pending",
+   "failures"
+  ],
+  "failures": [
+   "TimeoutException"
+  ],
+  "fibers": {
+   "0": "f0",
+   "1": "f1"
+  },
+  "fifoFrom": 0,
+  "id": "g106-84934",
+  "mode": "replay",
+  "outcome": {
+   "t": "succeeded",
+   "v": {
+    "t": "unit"
+   }
+  },
+  "pending": 0,
+  "schedule": [
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 0,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f0"
+    ],
+    "step": 1,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 2,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1"
+    ],
+    "step": 3,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f3"
+    ],
+    "step": 4,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3"
+    ],
+    "step": 5,
+    "task": "f3"
+   },
+   {
+    "advance": 1000,
+    "woken": [
+     "t0"
+    ]
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "t0"
+    ],
+    "step": 6,
+    "task": "t0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3"
+    ],
+    "step": 7,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1"
+    ],
+    "step": 8,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2"
+    ],
+    "step": 9,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1"
+    ],
+    "step": 10,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 11,
+    "task": "f0"
+   }
+  ],
+  "steps": 12,
+  "time": 1000,
+  "trace": [
+   {
+    "ev": "fin",
+    "op": "onCancel",
+    "tag": 0
+   },
+   {
+    "arg": {
+     "t": "nat",
+     "v": 999998
+    },
+    "ev": "call",
+    "fn": 3
+   }
+  ],
+  "v": 1
+ },
+ "note": "UserError(999998) had Lean code 10^6, the code of the model TimeoutException, so reportFailure printed TimeoutException. A program can catch a TimeoutException (nat 999998) and raise it again as a UserError. Fixed: userErr skips code 10^6.",
+ "scala": {
+  "outcome": {
+   "t": "succeeded",
+   "v": {
+    "t": "unit"
+   }
+  },
+  "trace": [
+   {
+    "ev": "fin",
+    "op": "onCancel",
+    "tag": 0
+   },
+   {
+    "arg": {
+     "t": "nat",
+     "v": 999998
+    },
+    "ev": "call",
+    "fn": 3
+   }
+  ]
+ },
+ "triage": "harness-bug"
+}

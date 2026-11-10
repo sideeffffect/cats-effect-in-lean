@@ -119,16 +119,22 @@ def runClo (R : Resource.REnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DR
     | _ => DResult.harness
   | .succFn, _ => ret (.ocSucceeded arg)
   | .gcFinK, .guaranteeCase _ _ _ =>
-    prog (.flatMap (.delay (clo node .gcFinEmit (arg :: env))) (clo node .gcFinThen (arg :: env)))
+    -- `o => IO.delay(emit) *> run(fin).void`: `*>` takes `that` by value (`IO.scala:138-139`),
+    -- so Scala builds `run(fin)` now, in this closure. `gcFinThen` captures the snapshot.
+    prog (.flatMap (.delay (clo node .gcFinEmit (arg :: env)))
+      (clo node .gcFinThen (snapVal vw :: arg :: env)))
   | .gcFinEmit, .guaranteeCase _ _ tag =>
     match env with
     | o :: _ => ret .unit [.finGuaranteeCase tag o]
     | [] => DResult.harness
   | .gcFinThen, .guaranteeCase e fin _ =>
-    -- Scala builds `run(fin)` in `o => IO.delay(emit) *> run(fin).void`, one run-loop iteration
-    -- before this closure runs (`FlatMap` over `Delay`, `IOFiber.scala:420-437`); nothing else
-    -- runs in between, so the current view is the same.
-    ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr R fin (node + 1 + e.size) env vw)
+    -- `run(fin)` was built in `gcFinK`: use the captured snapshot. (Before 2026-11-10 this used
+    -- the current view. An auto-yield between the two closures let another fiber complete, so
+    -- `fib.cancel` read a different `_cancel`: found with small `runtime` thresholds.)
+    match env with
+    | snap :: env0 =>
+      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr R fin (node + 1 + e.size) env0 (snapView snap))
+    | [] => DResult.harness
   | .fiberHandle, _ =>
     match arg with
     | .fiber i => ret (.fiber i) [.handle i]

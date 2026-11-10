@@ -1,0 +1,816 @@
+{
+ "case": {
+  "choices": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   3
+  ],
+  "id": "g103-31325",
+  "mode": "replay",
+  "prog": {
+   "body": {
+    "e": {
+     "e": {
+      "body": {
+       "e": {
+        "e": {
+         "e": {
+          "e": {
+           "e": {
+            "op": "pure",
+            "v": {
+             "t": "unit"
+            }
+           },
+           "k": {
+            "e": {
+             "op": "cede"
+            },
+            "op": "poll",
+            "poll": "p1"
+           },
+           "op": "bind",
+           "x": "x3"
+          },
+          "k": {
+           "op": "seq",
+           "ps": [
+            {
+             "op": "cede"
+            },
+            {
+             "op": "cede"
+            },
+            {
+             "op": "cede"
+            }
+           ]
+          },
+          "op": "bind",
+          "x": "x4"
+         },
+         "op": "poll",
+         "poll": "p1"
+        },
+        "op": "poll",
+        "poll": "p2"
+       },
+       "op": "start"
+      },
+      "op": "uncancelable",
+      "poll": "p2"
+     },
+     "k": {
+      "e": {
+       "e": {
+        "op": "canceled"
+       },
+       "fin": {
+        "f": {
+         "t": "var",
+         "x": "x5"
+        },
+        "op": "join"
+       },
+       "op": "guaranteeCase",
+       "x": "x6"
+      },
+      "ms": 10,
+      "op": "timeout"
+     },
+     "op": "bind",
+     "x": "x5"
+    },
+    "fin": {
+     "op": "cede"
+    },
+    "op": "onCancel"
+   },
+   "op": "uncancelable",
+   "poll": "p1"
+  },
+  "runtime": {
+   "autoYieldThreshold": 2,
+   "cancelationCheckThreshold": 1
+  },
+  "v": 1
+ },
+ "expect": "agree",
+ "field": "steps",
+ "found": {
+  "date": "2026-11-10",
+  "orig_id": "g103-31325",
+  "orig_size": 26,
+  "size": 21
+ },
+ "known_bug": "",
+ "lean": {
+  "compare": [
+   "outcome",
+   "trace",
+   "steps",
+   "time",
+   "schedule",
+   "fifoFrom",
+   "fibers",
+   "pending",
+   "failures"
+  ],
+  "failures": [],
+  "fibers": {
+   "0": "f0",
+   "1": "f1"
+  },
+  "fifoFrom": 7,
+  "id": "g103-31325",
+  "mode": "replay",
+  "outcome": {
+   "t": "blocked"
+  },
+  "pending": 0,
+  "schedule": [
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 0,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 1,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 2,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 3,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 4,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 5,
+    "task": "f0"
+   },
+   {
+    "pick": 1,
+    "ready": [
+     "f1",
+     "f0"
+    ],
+    "step": 6,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f0"
+    ],
+    "step": 7,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f1"
+    ],
+    "step": 8,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f0"
+    ],
+    "step": 9,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f1"
+    ],
+    "step": 10,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f0"
+    ],
+    "step": 11,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f1"
+    ],
+    "step": 12,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f0"
+    ],
+    "step": 13,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f1"
+    ],
+    "step": 14,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f0"
+    ],
+    "step": 15,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f1"
+    ],
+    "step": 16,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f0"
+    ],
+    "step": 17,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f1"
+    ],
+    "step": 18,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2",
+     "f3",
+     "f0"
+    ],
+    "step": 19,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f3",
+     "f0",
+     "f1"
+    ],
+    "step": 20,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3",
+     "f0",
+     "f1",
+     "f2"
+    ],
+    "step": 21,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f1",
+     "f2",
+     "f3"
+    ],
+    "step": 22,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2",
+     "f3",
+     "f0"
+    ],
+    "step": 23,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f3",
+     "f0",
+     "f1"
+    ],
+    "step": 24,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3",
+     "f0",
+     "f1",
+     "f2"
+    ],
+    "step": 25,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f1",
+     "f2",
+     "f3"
+    ],
+    "step": 26,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2",
+     "f3",
+     "f0"
+    ],
+    "step": 27,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f3",
+     "f0",
+     "f1"
+    ],
+    "step": 28,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3",
+     "f0",
+     "f1",
+     "f2"
+    ],
+    "step": 29,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f1",
+     "f2",
+     "f3"
+    ],
+    "step": 30,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2",
+     "f3"
+    ],
+    "step": 31,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f3",
+     "f1"
+    ],
+    "step": 32,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3",
+     "f1",
+     "f2"
+    ],
+    "step": 33,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2",
+     "f3"
+    ],
+    "step": 34,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f3",
+     "f1"
+    ],
+    "step": 35,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3",
+     "f1",
+     "f2"
+    ],
+    "step": 36,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2",
+     "f3"
+    ],
+    "step": 37,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f3",
+     "f1"
+    ],
+    "step": 38,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3",
+     "f1",
+     "f2"
+    ],
+    "step": 39,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2",
+     "f3"
+    ],
+    "step": 40,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f3",
+     "f1"
+    ],
+    "step": 41,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3",
+     "f1",
+     "f2"
+    ],
+    "step": 42,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2"
+    ],
+    "step": 43,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f1"
+    ],
+    "step": 44,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2"
+    ],
+    "step": 45,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f1"
+    ],
+    "step": 46,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2"
+    ],
+    "step": 47,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2"
+    ],
+    "step": 48,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2"
+    ],
+    "step": 49,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2"
+    ],
+    "step": 50,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2"
+    ],
+    "step": 51,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 52,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 53,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 54,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 55,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 56,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3",
+     "f0"
+    ],
+    "step": 57,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f3"
+    ],
+    "step": 58,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3"
+    ],
+    "step": 59,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3"
+    ],
+    "step": 60,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3"
+    ],
+    "step": 61,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 62,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 63,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 64,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 65,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 66,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 67,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 68,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 69,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 70,
+    "task": "f0"
+   }
+  ],
+  "steps": 71,
+  "time": 0,
+  "trace": [
+   {
+    "ev": "fin",
+    "oc": {
+     "t": "canceled"
+    },
+    "op": "guaranteeCase",
+    "tag": 0
+   }
+  ],
+  "v": 1
+ },
+ "note": "Same cause as fixed-gcfin-snapshot-a.",
+ "scala": {
+  "outcome": {
+   "t": "blocked"
+  },
+  "trace": [
+   {
+    "ev": "fin",
+    "oc": {
+     "t": "canceled"
+    },
+    "op": "guaranteeCase",
+    "tag": 0
+   }
+  ]
+ },
+ "triage": "harness-bug"
+}
