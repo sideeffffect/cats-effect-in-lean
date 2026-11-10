@@ -114,3 +114,7 @@
 
 ## [2026-11-10] ingest | Review batch 2 (Phase 5 gate failed); decisions 35-39
 - Updated: Agent workflow (review log, fixed-twin rule), Project plan
+
+## [2026-11-10] ingest | Review-2 fixes: EqvP, fixed twins, opaque polls, CE-0004
+- Updated: Outcome sets and Eqv (EqvP, WellFormed opaque polls), Resource model, SyncIO and syncStep model, Queue model, Bug history (CE-0004)
+- Updated: Project plan (decisions 40–43)

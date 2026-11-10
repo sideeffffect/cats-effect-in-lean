@@ -69,3 +69,10 @@ Decisions after review batch 2 (`review/2026-11-10-review-batch-2.md`; Phase 5 g
 37. `WellFormed`: poll values are opaque to user code (user code can only apply them), and user programs cannot build `UnmaskRunLoop _ 0 _`.
 38. The fatal-`raiseError` difference between the `IO` run loop (`IOFiber.scala:265-269`) and the `SyncIO` run loop (`SyncIO.scala:257-259`) is its own bug candidate (next id CE-0004). CE-0001 is stated for non-fatal errors only, and the ordinary-input rule then holds.
 39. New rule for every refutation: a "fixed twin" check. Mirror the upstream fix (or the `possible_fix`) as a twin and show, on a bounded domain, that the fixed twin satisfies the property. A refutation that the fixed twin also fails is HOLLOW.
+
+Decisions after the review-2 fixes:
+
+40. CE-0004 (fatal `raiseError`: `IO` run loop checks, `SyncIO` run loop does not) stays a low-priority bug candidate with `maybe_intended: partly`. Not a user question: the record states both readings.
+41. The cancelable direction of CE-0002 ("a cancelable `fa` stays cancelable") becomes a separate property in Phase 6 (Resource), not part of the calibration row.
+42. Cost watch: full `lake build` now ~4 min and up to 13 GB peak with parallel jobs; `lake check` ~10 min. The `EnumP` proofs are split one declaration per program and side to stay under 8 GB per process. If CI runs out of memory, split further; never drop a proof.
+43. Next: review batch 3 of all entries. Gate passes only when CE-0001, CE-0002, CE-0003 are FAITHFUL.
