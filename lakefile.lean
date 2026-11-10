@@ -29,7 +29,7 @@ lean_exe audit_fixture where
   root := `AuditFixtures.Main
 
 -- Difftest harness, Lean side (test code, not part of the library): decoder of the
--- JSON program format v0, translation into `Model.IO`, and `lake exe cediff`.
+-- JSON program format (v1; v0 accepted), translation into `Model.IO`, and `lake exe cediff`.
 -- See wiki/methodology/difftest-program-format.md ("Lean side").
 lean_lib Difftest where
   srcDir := "tools"

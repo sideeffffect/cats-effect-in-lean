@@ -6,8 +6,8 @@ Rules: wiki/methodology/differential-testing.md ("Driver", "Triage bins", "Corpu
 Subcommands:
   run          generate cases, run Scala (replay + testcontrol), optionally Lean; sort into bins
                (also per seed); shrink mismatches and save them to the corpus. A mismatch of a
-               case that matches a KNOWN_MODEL_BUGS predicate is bin `known-model-bug` (it does
-               not fail the run; it is printed and counted).
+               case that matches a KNOWN_MODEL_BUGS predicate is bin `known-model-bug`. It fails
+               the run unless --allow-known-model-bugs is given. It is always printed and counted.
   check        Fixed case files: Scala and Lean; fails unless each case agrees or is unsupported.
   scala-check  Scala alone: replay determinism, testcontrol determinism, testcontrol outcome in
                the replay outcome set, coverage histogram, timing.
@@ -422,7 +422,8 @@ def cmd_run(a):
     if a.json:
         Path(a.json).write_text(json.dumps({'bins': bins, 'cases': len(cases), 'per_seed': per_seed}, indent=1))
     bad = bins['generator-bug'] + bins['harness'] + bins['hang']
-    return 1 if bad or (a.lean and bins['mismatch']) else 0
+    known = 0 if a.allow_known_model_bugs else bins['known-model-bug']
+    return 1 if bad or (a.lean and (bins['mismatch'] or known)) else 0
 
 
 def cmd_shrink(a):
@@ -713,8 +714,9 @@ def main(argv=None):
     r.add_argument('--lean', help='Lean command, for example "lake exe cediff"')
     r.add_argument('--shrink', action='store_true', help='shrink mismatches and save them to the corpus')
     r.add_argument('--max-shrink', type=int, default=5)
-    r.add_argument('--corpus-dir', default=str(CORPUS_DIR))
     r.add_argument('--json')
+    r.add_argument('--allow-known-model-bugs', action='store_true',
+                   help='do not fail on the bin known-model-bug (it is still printed); CI does not use it')
 
     c = sub.add_parser('scala-check')
     c.add_argument('--seeds', type=int, nargs='+', default=[1, 2, 3])

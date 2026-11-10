@@ -1082,7 +1082,7 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
     t = g.pick([(3, NAT), (2, UNIT), (1, BOOL), (1, either(NAT, NAT)), (1, outcome(NAT)), (1, pair(NAT, BOOL))])
     if rng.random() < g.c['p_syncstep']:
         # format v1: `syncStep(prog, limit)` at the root (it runs before the runtime starts)
-        limit = g.pick([(1, 0), (2, 1), (2, 2), (2, 3), (1, 5), (1, 10), (5, MAX_LIMIT)])
+        limit = g.pick([(2, 0), (3, 1), (3, 2), (3, 3), (2, 5), (1, 10), (4, MAX_LIMIT)])
         prog = {'op': 'syncStep', 'e': g.prog(t, {}, size, {'root_path': True}), 'limit': limit}
     elif size >= 4 and rng.random() < g.c['p_scenario_root']:
         prog = g.tpl_scenario(t, {}, size, {'root_path': True}, root_first=True)
