@@ -36,3 +36,5 @@
 ## [2026-11-10] ingest | Lean v4.35.0 toolchain facts (lake check bwrap/AppArmor diagnosis)
 
 ## [2026-11-10] lint | 0 issues found, 0 auto-fixed
+
+## [2026-11-10] ingest | Lean v4.35.0 toolchain facts (bwrap AppArmor setup script)

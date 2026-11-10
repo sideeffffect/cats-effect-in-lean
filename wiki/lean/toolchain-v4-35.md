@@ -29,7 +29,7 @@ The project uses `leanprover/lean4:v4.35.0` (latest stable, 2026-10-12; v4.36.0-
 - `lean`/`lake` are only in `~/.elan/bin`, not on PATH in non-login bash.
 - `lake check` fails with `bwrap: setting up uid map: Permission denied`. Cause: Ubuntu's `kernel.apparmor_restrict_unprivileged_userns=1` gives a new user namespace no capabilities unless an AppArmor profile grants `userns`; `/usr/bin/bwrap` is not setuid and has no such profile. `unshare -Ur id` fails the same way.
 - Why it matters: `lake check` builds the project inside a bwrap sandbox (read-only `/`, home hidden, only `.lake` writable, no network during build). Lean runs arbitrary code at build time (macros, `#eval`, `initialize`), so without the sandbox, agent-written code could tamper with the check. `--inadvisably-no-sandbox` works but "can compromise the result fully".
-- Fixes (need sudo, none applied): an AppArmor profile granting `userns` to bwrap (narrowest); setuid bwrap; disable the sysctl globally (least preferred); or run `lake check` in CI/a VM where user namespaces work. GitHub ubuntu-24.04 runners: unverified.
+- Fixes (need sudo): an AppArmor profile granting `userns` to bwrap (narrowest; script `sudo scripts/setup-bwrap-apparmor.sh`, undo with `--remove`; profile syntax checked with `apparmor_parser -Q -K`, not yet run); setuid bwrap; disable the sysctl globally (least preferred); or run `lake check` in CI/a VM where user namespaces work. GitHub ubuntu-24.04 runners: unverified.
 
 ## Pitfalls
 
