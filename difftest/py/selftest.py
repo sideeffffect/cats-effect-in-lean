@@ -9,6 +9,9 @@ Checks:
 4. Scala replay and testcontrol runs are deterministic (each case twice, same line).
 5. Driver with a fake Lean side (mock_lean.py): bins, shrinking, corpus save and rerun.
 6. The regression corpus (difftest/corpus/) still gives the stored Scala results.
+7. Run-event coverage (coverage.py, decision 17): each key event in at least COV_MIN of
+   COV_N cases (the 3 x 10,000 target is 5 %; a small sample needs a margin), and blocked
+   plus fuel outcomes below COV_MAX_STUCK.
 """
 
 import json
@@ -19,12 +22,16 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import coverage  # noqa: E402
 import drive  # noqa: E402
 import gen  # noqa: E402
 from typecheck import TypeErr, check_prog, well_typed  # noqa: E402
 
 N = 400
 SEED = 20261110
+COV_N = 600
+COV_MIN = 0.035
+COV_MAX_STUCK = 0.25
 
 
 def check(cond, msg):
@@ -99,6 +106,15 @@ def main():
 
     # 6. regression corpus
     check(drive.main(['corpus']) == 0, "regression corpus gives the stored Scala results")
+
+    # 7. run-event coverage
+    cov = coverage.run([SEED], COV_N, gen, verbose=False)
+    check(not cov['problems'] and cov['prefix_violations'] == 0,
+          f"coverage run: {cov['prefix_runs']} prefix runs, no problem, no prefix violation")
+    low = {k: cov['events'][k] for k in coverage.KEY_EVENTS if cov['events'][k] < COV_MIN * cov['cases']}
+    check(not low, f"each key run event in >= {COV_MIN:.1%} of {cov['cases']} cases {low}")
+    stuck = (cov['outcomes']['blocked'] + cov['outcomes']['fuel']) / cov['cases']
+    check(stuck < COV_MAX_STUCK, f"blocked + fuel outcomes {stuck:.1%} < {COV_MAX_STUCK:.0%}")
     dt = time.time() - t0
     check(dt < 60, f"self-test time {dt:.1f} s")
 
