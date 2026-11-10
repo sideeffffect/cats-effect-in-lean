@@ -198,6 +198,7 @@ def EffectsOK (lib : Nat → Bool) (out : UserOut) :
     (∀ h ∈ x.handles, R h) ∧ EffectsOK lib out (fun h => R h ∨ h = .ref nr) (nr + 1) nd es
   | R, nr, nd, .allocDeferred :: es =>
     EffectsOK lib out (fun h => R h ∨ h = .deferred nd) nr (nd + 1) es
+  | R, nr, nd, .report _ :: es => EffectsOK lib out R nr nd es
 
 /-- Clause 5 for one call result in view `v`. -/
 def ResultOK (lib : Nat → Bool) (R : Handle → Prop) (v : View) (r : UserResult) : Prop :=
@@ -287,6 +288,7 @@ def rnEffect (σ : PollRen) : UserEffect → UserEffect
   | .emit x => .emit (rnVal σ x)
   | .allocRef x => .allocRef (rnVal σ x)
   | .allocDeferred => .allocDeferred
+  | .report e => .report e
 
 /-- Rename the `Poll` handles of a call result. -/
 def rnResult (σ : PollRen) (r : UserResult) : UserResult :=

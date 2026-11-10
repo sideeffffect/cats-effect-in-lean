@@ -279,6 +279,11 @@ inductive UserEffect where
   `core/shared/src/main/scala/cats/effect/IO.scala:1824`). Its id is the length of the
   `Deferred` list before this effect (`View.deferreds`). -/
   | allocDeferred
+  /-- `ec.reportFailure(e)` on the fiber's `ExecutionContext` (Phase 6, track G). Library code
+  calls it in the thunk of `reportError`: `IO(ec.reportFailure(t))`
+  (`core/shared/src/main/scala/cats/effect/IO.scala:967-972`). It adds the same event as a
+  runtime report (`TraceEv.reportFailure`), so `Obs.reports` sees it. -/
+  | report (e : Err)
   deriving DecidableEq, Repr
 
 /-- The result of a user function call. There is no "always succeeds" case: `throw` is

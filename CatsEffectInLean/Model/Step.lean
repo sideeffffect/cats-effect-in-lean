@@ -555,6 +555,7 @@ def applyEffects : List UserEffect → Exec M → Exec M
     applyEffects es { x with heap := { x.heap with out := v :: x.heap.out } }
   | .invokeCb s r :: es, x => applyEffects es (contCallback mm s r x)
   | .deferCb s r :: es, x => applyEffects es (x.enqueue (.cb s r))
+  | .report e :: es, x => applyEffects es (x.log (.reportFailure e))
 
 /-- Call a function with no `try` around it: effects first, then the output. User code sees
 `Exec.view`. -/
