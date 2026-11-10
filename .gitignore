@@ -3,3 +3,9 @@
 .bsp/
 __pycache__/
 !inventory/*.csv
+difftest/target/
+difftest/project/target/
+difftest/project/project/
+.metals/
+.bloop/
+metals.sbt
