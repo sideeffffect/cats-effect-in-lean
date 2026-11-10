@@ -94,7 +94,7 @@ def T (k : Nat) (c a : Val) : UserResult :=
 v3.7.1 model never builds a twin closure, so it sees only `T`. -/
 def famEnv : UserEnv :=
   fixEnv
-    { call := fun id arg refs =>
+    { call := fun id arg _ =>
         match (cloOfId id).bind ofCloVal with
         | some (k, tag, [c]) => if id % 2 == 0 && k == famNs then T tag c arg else ill
         | _ => ill
