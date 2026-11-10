@@ -1,7 +1,7 @@
 # race, both, raceOutcome, bothOutcome and fiber leaks
 
 > Sources: Cats Effect v3.7.1 (`IO.scala:228-244`, `:638-642`, `:1729-1733`, `:1788-1789`, `:1996-2170`; `GenSpawn.scala:354-500`; `GenSpawnLaws.scala:121-122`); cats-core 2.13.0; own Phase 6 track R work, 2026-11-10
-> Raw: [Track R notes](../../raw/cats-effect/2026-11-10-race-both-track-r-notes.md)
+> Raw: [Track R notes](../../raw/cats-effect/2026-11-10-race-both-track-r-notes.md); [Track P invariant notes](../../raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md)
 
 ## Overview
 
@@ -47,7 +47,8 @@ Phase 6 batch 6.1, track R. Mirror of the four `GenSpawn` combinators for `IO`, 
 
 - Smoke evidence: `leaksmoke` 140,400 random runs, 0 violations; real CE 7,038 completed runs, 0 violations.
 - Wrong-function test: a `race` without `f.cancel` leaks on `race(pure 1, never)` in every completed run.
-- Why open: a proof for all sides needs an invariant over `Step`/`SchedP`: a racing fiber gets past its combinator only after both children are done. Exact search does not scale: the law's left side has more than 994 states (3 fibers, preemption at every iteration); `decide +kernel` of `checkEqvP` timed out after 8 min.
+- Why open: a proof for all sides needs an invariant over `Step`/`SchedP`: a racing fiber gets past its combinator only after both children are done. Exact search does not scale: the law's left side has 4,441 states (closed; 3 fibers, preemption at every iteration); `decide +kernel` of `checkEqvP` timed out after 8 min.
+- Track P (2026-11-10): no statement found false. Invariant design and the proven frame lemmas F1/F2 (`Proofs/Lemmas/Frame.lean`): [Race no-leak invariant](../semantics/race-invariant.md). All five entries stay `open`; the registry notes name the gap (S, F3, F4, P1/P2, H, C(r)).
 
 ## Difftest
 
@@ -56,6 +57,8 @@ Format v2 ([program format](../methodology/difftest-program-format.md)): 225,000
 Side effects on shared difftest code: `gen.py` weights for the v2 productions (default about 5–7 % of cases per op; `selftest.py` checks ≥ 5 %); the shrinker measure (`drive.measure`) counts `never` nodes before the JSON length, so a `never` can become `canceled` (the new generator mix made the selftest's mock shrink stop at size 8; now 3).
 
 ## See Also
+
+- [Race no-leak invariant and frame lemmas](../semantics/race-invariant.md)
 
 - [Kernel typeclasses model](kernel-typeclasses-model.md)
 - [Scheduler model](scheduler-model.md)
