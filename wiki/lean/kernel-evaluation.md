@@ -53,8 +53,11 @@ Unbounded properties (all schedules, all depths, liveness) still need proofs by 
 
 - `decide_cbv` memory grows with state size (7 GB at 48,000 three-fiber states). Large real states may need a compact state encoding or symmetry reduction.
 - `lake check` replays the kernel check; `decide_cbv` proofs are large terms. Measure `lake check` time on Phase 2 proofs.
+- Measured on the Phase 2 model (2026-11-10): a 2-fiber run of about 40 steps costs 45 ms under `decide +kernel`. The plain enumerator (`Model/Enum.lean`) reaches depth 5 (364 runs) in 16 s with `decide +kernel` and depth 6 (1,093 runs) in 14 s / 2 GB with `decide_cbv`. It does not share run prefixes; a state-level DFS would. Proofs with free `env`: `rfl` evaluates runs that never call user code ([Outcome sets and `Eqv`](../semantics/outcome-equivalence.md)).
 
 ## See Also
+
+- [Outcome sets, `Eqv` and the IO laws](../semantics/outcome-equivalence.md)
 
 - [Lean v4.35.0 toolchain](toolchain-v4-35.md)
 - [Proof hygiene and agent tooling](proof-hygiene-and-agent-tooling.md)

@@ -22,7 +22,7 @@ The normative semantics of CE3 lives in three places: kernel scaladoc, the law f
 ## Laws
 
 - Files: MonadCancel, GenSpawn, GenTemporal, Sync, Async, Clock, Unique. **No GenConcurrent laws** — `Ref`/`Deferred` are tested only by unit specs.
-- `onCancelAssociatesOverUncancelableBoundary` is commented "effectively in violation of the monad laws" — deliberate (#1744). **Do not report it as a bug.**
+- `onCancelAssociatesOverUncancelableBoundary` is commented "effectively in violation of the monad laws" — deliberate (#1744). **Do not report it as a bug.** The law itself holds for `IO`: the CE suite checks it, and the model's bounded checks agree. What it breaks is the monad laws (finalizers associate over `uncancelable` but not over `flatMap`). See [Outcome sets and `Eqv`](../semantics/outcome-equivalence.md).
 - Laws needing nondeterministic substitutability are commented out; two race laws are deprecated since 3.5.0.
 - Some MonadCancel laws apply only to Cancelable root scope, some only to Uncancelable (SyncIO).
 
@@ -48,6 +48,8 @@ The normative semantics of CE3 lives in three places: kernel scaladoc, the law f
 - #4488 behaviour.
 
 ## See Also
+
+- [Outcome sets, `Eqv` and the IO laws](../semantics/outcome-equivalence.md)
 
 - [Modeling approaches for CE3 in Lean](../semantics/modeling-approaches.md)
 - [Source layout](source-layout.md)
