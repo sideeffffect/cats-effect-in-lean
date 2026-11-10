@@ -40,7 +40,8 @@ def DResult.toUser (r : DResult) : UserResult :=
 
 /-- Run closure `c` (made by node `n` of the program) on `arg` with view `vw`. `R`: the meaning
 of the resource codes of the program (`renvOf`). -/
-def runClo (R : Resource.REnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
+def runClo (U : ResourceUse.UEnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
+  let R := U.rx
   let refs := vw.refs
   let node := c.node
   let env := c.vals
@@ -357,6 +358,19 @@ def runClo (R : Resource.REnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DR
     match Memoize.Eff.ofVal? arg with
     | some (.get r _ _) => ret arg [.memoH r]
     | _ => DResult.harness
+  -- format v2 (track Res; `Model/ResourceUse.lean` runs the library lambdas)
+  -- `x => I(k)` of `rUse`
+  | .ruUse, .rUse r k => ofTr (tr R k (node + 1 + r.size) (arg :: env) vw)
+  -- `{ case (x, rel) => I(k).flatMap(b => rel.as(b)) }` of `rAllocated`
+  | .raK, .rAllocated r k =>
+    match arg with
+    | .pair a rel => ofTr ((fun io => IO.flatMap io (clo node .raRelAs [rel])) <$> tr R k (node + 1 + r.size) (a :: env) vw)
+    | _ => DResult.harness
+  -- `b => rel.as(b)`; `as(b)` = `map(_ => b)` (`IO.scala:182-183`); `rel` is a `USrc` code
+  | .raRelAs, _ =>
+    match env with
+    | [rel] => prog (.map (ResourceUse.srcU U rel) (clo node .constVal [arg]))
+    | _ => DResult.harness
   | _, _ => DResult.harness
 
 /-- The difftest closures of program `p`, with trace and failure lists. -/
@@ -365,7 +379,7 @@ def denv (p : Prog) (id : Nat) (arg : Val) (vw : View) : DResult :=
   | none => DResult.harness
   | some c => match p.at? c.node with
     | none => DResult.harness
-    | some n => runClo (renvOf p) c n arg vw
+    | some n => runClo (uenvOf p) c n arg vw
 
 /-- The source builder of `Timeout.call`: `src` is the code of a `timeoutSrc` closure value
 (the result is `I(e)` of that `timeout` or `timeoutTo` node) or of a `timeoutFb` closure value
@@ -404,7 +418,8 @@ def srcIO (p : Prog) (srcV : Val) : IO :=
       | .ok io => io
       | .error e => .error e.toErr
     | none => .error harnessErr
-  | _ => .error harnessErr
+  -- track Res: a source code of the `Resource` mirror (`ResourceUse.USrc`)
+  | _ => if (ResourceUse.USrc.ofVal srcV).isSome then ResourceUse.srcU (uenvOf p) srcV else .error harnessErr
 
 /-- The external sources of `Bracket.call` (format v2): `I(e)` and the finalizer of
 `guarantee`, `I(acq)` of `bracket`/`bracketCase`, each built with the snapshot of the op. -/
@@ -424,7 +439,8 @@ def bracketSrcIO (p : Prog) (srcV : Val) : IO :=
     match res with
     | .ok io => io
     | .error e => .error e.toErr
-  | _ => .error harnessErr
+  -- track Res: a source code of the `Resource` mirror (`ResourceUse.USrc`)
+  | _ => if (ResourceUse.USrc.ofVal srcV).isSome then ResourceUse.srcU (uenvOf p) srcV else .error harnessErr
 
 /-- A library closure of the mirrors. -/
 inductive LibClo where
@@ -434,6 +450,7 @@ inductive LibClo where
   | race (l : Race.RLam)
   | bracket (l : Bracket.BLam)
   | memoize (l : Memoize.MLam)
+  | ures (l : ResourceUse.ULam)
 
 /-- The library closure of an id that is not a difftest closure id, if exactly one mirror
 decodes it. -/
@@ -451,6 +468,7 @@ def libClo? (id : Nat) : Option LibClo :=
           else if k == Race.ns then (Race.RLam.ofFields tag fs).map .race
           else if k == Bracket.ns then (Bracket.BLam.ofFields tag fs).map .bracket
           else if k == Memoize.ns then (Memoize.MLam.ofFields tag fs).map .memoize
+          else if k == ResourceUse.ns then (ResourceUse.ULam.ofFields tag fs).map .ures
           else none
         | none => none
       match res, lib with
@@ -466,9 +484,16 @@ def dispatchDt (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
   match cloOfId? id with
   | some c =>
     match p.at? c.node with
-    | some n => (runClo (renvOf p) c n arg vw).toUser
+    | some n => (runClo (uenvOf p) c n arg vw).toUser
     | none => DResult.harness.toUser
   | none => DResult.harness.toUser
+
+/-- The difftest closures and the `ResourceUse` lambdas of program `p` (the functions that the
+`Bracket` mirror calls: `IO.bracketFull` of `Resource#fold`, track Res). -/
+def dispatchRes (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
+  match ResourceUse.ULam.ofId? id with
+  | some l => ResourceUse.callU (uenvOf p) (dispatchDt p) l arg vw
+  | none => dispatchDt p id arg vw
 
 /-- All closures of program `p`: difftest closures (with trace and failures) and library
 closures (module doc). -/
@@ -481,7 +506,9 @@ def dispatch (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
     | some (.timeout l) => Timeout.call (srcIO p) l arg vw
     | some (.resource c) => Resource.cloCall (renvOf p) c arg vw
     | some (.race l) => Race.call (srcIO p) l arg vw
-    | some (.bracket l) => Bracket.call (dispatchDt p) (bracketSrcIO p) l arg vw
+    -- `Bracket` calls its user functions: difftest closures, or `ResourceUse` lambdas (track Res)
+    | some (.bracket l) => Bracket.call (dispatchRes p) (bracketSrcIO p) l arg vw
+    | some (.ures l) => ResourceUse.callU (uenvOf p) (dispatchDt p) l arg vw
     | some (.memoize l) => Memoize.call (srcIO p) l arg vw
     | none => DResult.harness.toUser
 

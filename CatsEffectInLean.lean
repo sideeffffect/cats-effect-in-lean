@@ -61,3 +61,7 @@ import CatsEffectInLean.Proofs.Lemmas.Frame
 import CatsEffectInLean.Model.Memoize
 import CatsEffectInLean.Props.Phase6.Memoize
 import CatsEffectInLean.Proofs.Phase6.MemoizeStuck
+import CatsEffectInLean.Model.ResourceUse
+import CatsEffectInLean.Model.ResourceUseExamples
+import CatsEffectInLean.Props.Phase6.Resource
+import CatsEffectInLean.Proofs.Phase6.ResourceBoth

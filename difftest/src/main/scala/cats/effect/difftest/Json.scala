@@ -99,11 +99,11 @@ object Json:
   val V1Ops: Set[String] =
     Set("syncStep", "timeout", "timeoutTo", "queueNew", "queueOffer", "queueTake", "queueTryTake",
       "allocatedCase", "rPure", "rEval", "rMake", "rFlatMap")
-  private val ResOps = Set("rPure", "rEval", "rMake", "rFlatMap")
+  private val ResOps = Set("rPure", "rEval", "rMake", "rFlatMap", "rBoth")
 
   /** Ops of format v2 (a decode error in a v0 or v1 case). */
   val V2Ops: Set[String] = Set("race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket", "bracketCase",
-    "bracketFull", "memoize", "memoGet")
+    "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth")
 
   /** Reject a v2 op anywhere in `j` (a case of format v0 or v1). */
   private def checkNoV2(j: Value): Unit = j match
@@ -151,7 +151,8 @@ object Json:
       case "rFlatMap" =>
         only("res", "x", "k"); val x = s("x")
         Res.RFlatMap(res(field(o, "res", ctx), scope, v1), x, res(field(o, "k", ctx), scope + (x -> Kind.V), v1))
-      case _ => fail(s"$ctx: not a resource op (expected rPure, rEval, rMake or rFlatMap)")
+      case "rBoth" => only("a", "b"); Res.RBoth(res(field(o, "a", ctx), scope, v1), res(field(o, "b", ctx), scope, v1))
+      case _ => fail(s"$ctx: not a resource op (expected rPure, rEval, rMake, rFlatMap or rBoth)")
 
   private def prog(j: Value, scope: Scope, v1: Long): Prog =
     val (o, op) = opOf(j, v1)
@@ -250,6 +251,12 @@ object Json:
       // ---- format v2 (track M)
       case "memoize" => only("e"); Prog.Memoize(p("e"))
       case "memoGet" => only("m"); Prog.MemoGet(a("m"))
+      case "rUse" =>
+        only("res", "x", "k"); val x = s("x")
+        Prog.RUse(res(field(o, "res", ctx), scope, v1), x, p("k", scope + (x -> Kind.V)))
+      case "rAllocated" =>
+        only("res", "x", "k"); val x = s("x")
+        Prog.RAllocated(res(field(o, "res", ctx), scope, v1), x, p("k", scope + (x -> Kind.V)))
       case "syncStep" => fail(s"$ctx: only at the root of a program")
       case r if ResOps.contains(r) => fail(s"$ctx: a resource op outside a resource position")
       case _ => fail(s"unknown op '$op'")
