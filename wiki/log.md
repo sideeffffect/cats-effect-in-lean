@@ -128,3 +128,6 @@
 
 ## [2026-11-10] ingest | User approves the Phase 5 gate
 - Updated: Phase 5 gate report (approved), Project plan (status: Phase 6 next)
+
+## [2026-11-10] ingest | Phase 6 start: batches and decisions 47-52
+- Updated: Project plan (status)
