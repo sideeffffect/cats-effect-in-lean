@@ -96,6 +96,7 @@ def main():
     v2cov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2_OPS}
     low2 = {op: f for op, f in v2cov.items() if f < V2_MIN}
     check(not low2, f"each format v2 op in >= {V2_MIN:.0%} of {N} cases {low2}")
+    rt = sum(1 for c in a if 'runtime' in c) / N
     check(rt >= RUNTIME_MIN, f"small runtime thresholds in {rt:.0%} >= {RUNTIME_MIN:.0%} of {N} cases")
 
     # 3 + 4. Scala runs: no generator bug, deterministic
