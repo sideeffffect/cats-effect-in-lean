@@ -141,6 +141,17 @@ For an excluded row, check that the reason truly applies.
 - All bug records stay in this repository.
 - Read-only `gh` commands on other repositories (`gh search`, `gh issue view`, `gh api` GET) are allowed. Record your duplicate searches.
 
+## Checks before you push
+
+Run what CI runs, in this order. Do not push if one fails.
+
+1. `lake build --wfail`
+2. `python3 scripts/check_forbidden.py`
+3. `python3 scripts/check_wiki.py`
+4. `lake check` (needs `sudo scripts/setup-bwrap-apparmor.sh` once per machine)
+
+Never weaken a CI gate, an allowlist, or a forbidden pattern to make a check pass. Only the user can change them.
+
 ## Git
 
 - Commit and push all changes immediately to `origin/main`, unless the user explicitly tells you to do something different.

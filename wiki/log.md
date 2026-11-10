@@ -40,3 +40,7 @@
 ## [2026-11-10] ingest | Lean v4.35.0 toolchain facts (bwrap AppArmor setup script)
 
 ## [2026-11-10] ingest | Lean v4.35.0 toolchain facts (lake check works after AppArmor fix)
+
+## [2026-11-10] ingest | Proof hygiene and agent tooling for Lean (this repo's CI setup)
+
+## [2026-11-10] lint | 0 issues found, 0 auto-fixed

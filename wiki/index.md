@@ -36,7 +36,7 @@ Lean 4 toolchain facts and proof hygiene.
 | Article | Summary | Updated |
 |---------|---------|---------|
 | [Lean v4.35.0 toolchain](lean/toolchain-v4-35.md) | lake check (+ bwrap/AppArmor failure), vcgen, native_decide axioms, recursion styles | 2026-11-10 |
-| [Proof hygiene and agent tooling](lean/proof-hygiene-and-agent-tooling.md) | Forbidden tactics, axiom audit, CI gates, lean-lsp-mcp, lean4-skills, Plausible | 2026-11-10 |
+| [Proof hygiene and agent tooling](lean/proof-hygiene-and-agent-tooling.md) | Forbidden tactics, axiom audit, CI gates (incl. this repo's CI), lean-lsp-mcp, lean4-skills, Plausible | 2026-11-10 |
 
 ## precedents
 

@@ -33,9 +33,22 @@ Cats Effect is a concurrent runtime. That is new compared to these projects. The
 | `wiki/` | Knowledge wiki: compiled articles ([index](wiki/index.md), [log](wiki/log.md)) |
 | `raw/` | Source material for the wiki (unchanged copies of papers, docs, posts) |
 | `CatsEffectInLean/` | Lean library (scaffold only for now) |
+| `scripts/` | Check scripts and machine setup |
+| `.github/` | CI workflows and Dependabot |
 
-## Build
+## Build and checks
 
 ```sh
-lake build
+lake build --wfail                    # build; warnings are errors
+lake check                            # sandboxed build, kernel replay, axiom check
+python3 scripts/check_forbidden.py    # no sorry, native_decide, axiom, implemented_by, ...
+python3 scripts/check_wiki.py         # wiki links and index
 ```
+
+`lake check` needs bubblewrap with user namespaces. On Ubuntu 23.10 or later, run `sudo scripts/setup-bwrap-apparmor.sh` once.
+
+## CI
+
+- `.github/workflows/ci.yml` (each push to `main` and each PR): `lake build --wfail`, leanchecker, axiom audit, `lake check`, forbidden-construct check, wiki lint.
+- `.github/workflows/paranoid.yml` (weekly and on demand): nanoda (no `sorry`) and `lake check --paranoid` (all bundled independent kernels).
+- Dependabot keeps the pinned GitHub Actions up to date.

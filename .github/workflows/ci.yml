@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lean:
+    name: Lean build and proof checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Installs the toolchain from lean-toolchain, caches .lake, then:
+      # - lake build --wfail      (warnings are errors)
+      # - lake test               (only when a test driver exists)
+      # - leanchecker             (re-checks the environment with the kernel)
+      # - axiom-audit             (only propext, Classical.choice, Quot.sound)
+      - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          build-args: "--wfail"
+          leanchecker: "true"
+          axiom-audit: "true"
+          axiom-audit-allow: "propext,Classical.choice,Quot.sound"
+
+      # `lake check` builds in a bwrap sandbox. Ubuntu restricts the user
+      # namespaces that bwrap needs, so grant them to bwrap only.
+      - name: Allow bwrap user namespaces
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          sudo scripts/setup-bwrap-apparmor.sh
+
+      - name: lake check (sandboxed build + kernel replay + axiom check)
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          lake check
+
+  forbidden:
+    name: Forbidden proof escapes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 scripts/check_forbidden.py
+
+  wiki:
+    name: Wiki lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 scripts/check_wiki.py

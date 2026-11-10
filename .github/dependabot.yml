@@ -1,0 +1,7 @@
+version: 2
+updates:
+  # Lean changes fast; old versions of lean-action can break.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

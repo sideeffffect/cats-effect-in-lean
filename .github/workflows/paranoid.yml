@@ -1,0 +1,38 @@
+name: Paranoid kernel check
+
+# Slow (more than 2 minutes even on the empty scaffold), so it runs weekly
+# and on demand, not on every push.
+on:
+  schedule:
+    - cron: "17 3 * * 1" # Mondays 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paranoid:
+    name: Independent kernels
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # nanoda: an independent type checker written in Rust. No sorry allowed.
+      - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          nanoda: "true"
+          nanoda-allow-sorry: "false"
+
+      - name: Allow bwrap user namespaces
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          sudo scripts/setup-bwrap-apparmor.sh
+
+      # Replays the build through all bundled kernels
+      # (lean4lean, nanoda, con-leche, con-ron, leanchecker-paranoid).
+      - name: lake check --paranoid
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          lake check --paranoid
