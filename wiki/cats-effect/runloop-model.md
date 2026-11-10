@@ -66,6 +66,7 @@ The rows with real CE claims (`map` vs `flatMap`, escaped `poll`, 512/513) were 
 ## See Also
 
 - [IO ADT and fiber state](io-adt-and-fiber-state.md)
+- [SyncIO and syncStep model](syncio-and-syncstep-model.md)
 - [Scheduler model (multi-fiber, replay)](scheduler-model.md)
 - [Semantics of CE3](semantics.md)
 - [Fairness and liveness](../semantics/fairness-and-liveness.md)

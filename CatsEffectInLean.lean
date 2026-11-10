@@ -13,6 +13,9 @@ import CatsEffectInLean.Model.StepExamples
 import CatsEffectInLean.Model.Sched
 import CatsEffectInLean.Model.SchedExamples
 import CatsEffectInLean.Model.RaceSleepExamples
+import CatsEffectInLean.Model.SyncIO
+import CatsEffectInLean.Model.SyncStep
+import CatsEffectInLean.Model.SyncStepExamples
 import CatsEffectInLean.Kernel.MonadCancel
 import CatsEffectInLean.Kernel.GenSpawn
 import CatsEffectInLean.Props.Kernel.MonadCancelLaws
@@ -24,3 +27,5 @@ import CatsEffectInLean.Model.IOInstance
 import CatsEffectInLean.Model.EnumExamples
 import CatsEffectInLean.Props.IO.MonadCancelLaws
 import CatsEffectInLean.Proofs.IO.MonadCancelLaws
+import CatsEffectInLean.Props.Calibration.SyncStep
+import CatsEffectInLean.Proofs.Calibration.SyncStep

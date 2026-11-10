@@ -36,6 +36,13 @@ object Repro {
   def onCancelCase(flag: Ref[IO, Boolean]): IO[Unit] =
     IO.never[Unit].onCancel(flag.set(true))
 
+  // Case 4: `IO.canceled` inside an uncancelable region is a no-op, so the region runs to its end.
+  // No external cancel is needed: the remainder of `syncStep` cancels itself.
+  // This is the counterexample of the Lean refutation `syncStepIdentitySyncIO_refuted`
+  // (CatsEffectInLean/Proofs/Calibration/SyncStep.lean).
+  def selfCancelCase(flag: Ref[IO, Boolean]): IO[Unit] =
+    IO.uncancelable(_ => IO.canceled *> flag.set(true))
+
   // The SyncIO prefix only touches the program structure; the program itself allocates nothing
   // before its first async boundary except the Ref, which we make outside.
   def stepped(io: IO[Unit]): IO[Unit] =
@@ -60,7 +67,8 @@ object Repro {
     val cases = List(
       "Resource.use release runs on cancel" -> resourceCase,
       "uncancelable body completes before cancel" -> maskCase,
-      "onCancel finalizer runs on cancel" -> onCancelCase
+      "onCancel finalizer runs on cancel" -> onCancelCase,
+      "canceled inside uncancelable is a no-op" -> selfCancelCase
     )
     var bad = 0
     cases.foreach { case (name, mk) =>
