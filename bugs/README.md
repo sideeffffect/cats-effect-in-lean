@@ -27,3 +27,16 @@ Rules: `AGENTS.md`, section "Bug records and triage". Never open bugs outside th
 | `possible_fix` | A fix that we propose. Do not apply it to the model. |
 | `duplicates` | Existing issues, and the search queries that you used. |
 | `lean` | `property` (prop name) and `theorem` (`*_refuted` name). |
+
+## Ids
+
+- Format: `CE-NNNN`, four digits, starting at `CE-0001`. Give the next free number. Never reuse a number.
+- The id is the file name (`bugs/CE-0001.yaml`) and the reproducer directory (`reproducers/CE-0001/Repro.scala`).
+- An id is for one defect in Cats Effect, also when the defect is already known upstream. The upstream issue goes into `duplicates`.
+- `CE-0001` to `CE-0003` are the Phase 5 calibration bugs (upstream #4687, #4627, #4571).
+
+## Extra fields
+
+- `status`: `draft` until the Lean refutation exists and a reviewer accepted the record.
+- `output` also has a `series/3.7.x` key (fixes land there first).
+- `lean.theorem: open` means that the refutation is not done yet.

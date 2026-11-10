@@ -1,0 +1,86 @@
+id: CE-0003
+title: "Queue.take.timeout loses an element when the fiber that runs it is canceled (racePair drops a completed child outcome)"
+status: draft  # calibration bug; known upstream; Lean refutation not done yet
+priority: high
+kind: safety
+area: core
+files:
+  - core/shared/src/main/scala/cats/effect/IOFiber.scala:908   # RacePair run-loop branch (case 18)
+  - core/shared/src/main/scala/cats/effect/IOFiber.scala:934   # fiberA/fiberB callbacks call cb
+  - core/shared/src/main/scala/cats/effect/IOFiber.scala:940   # cancel finalizer of the async: cancels both children
+  - core/shared/src/main/scala/cats/effect/IO.scala:818        # IO#timeout
+  - core/shared/src/main/scala/cats/effect/IO.scala:850        # IO#timeoutTo: poll(racePair(IO.sleep(d)))
+  - std/shared/src/main/scala/cats/effect/std/Queue.scala:365  # taker-cancelation atomicity comment
+functions:
+  - IO#timeout
+  - IO#timeoutTo
+  - IO.racePair / IO.race
+  - Queue#take (any Queue implementation; the cause is not Queue)
+summary: >
+  IO#timeout runs the source in a child fiber of racePair. The parent waits in an IO.async whose
+  cancel finalizer cancels both children. If the child completes (for example, take removed an
+  element from the queue) and the parent is canceled before it resumes with the child outcome,
+  the parent runs the finalizer, cancels the already-completed child (no effect), and ends as
+  Canceled. The child outcome (the element) is dropped. The element is no longer in the queue and
+  no caller gets it.
+likelihood: >
+  Medium. Needs a cancel of the fiber that runs take.timeout (external cancel, or an outer
+  timeout/race) in the short window after the child completes and before the parent resumes.
+  The upstream report hit it in a real consumer loop. Under TestControl, 328 of 500 seeds lose
+  the element in the external-cancel program and 37 of 500 in the nested-timeout program.
+maybe_intended: >
+  Partly. Maintainers (durban, djspiewak) say it is how racePair and cancelation work in general
+  ("ioa.start.flatMap(inner => inner.join.onCancel(inner.cancel))" has the same gap), and a
+  general fix needs a new primitive (draft PR #4710 "Lossless cancelation", issue #4620
+  Fiber#joinOrCancel). They accept the issue as a bug (label bug, open). It is not documented
+  as a known limitation in the Scaladoc of timeout or Queue.
+reproducer: reproducers/CE-0003/Repro.scala
+output:
+  v3.7.1: |
+    A: take.timeout canceled from outside: element lost in 328 / 500 seeds, first seed 1
+    B: take.timeout.timeout (issue form): element lost in 37 / 500 seeds, first seed 9
+    REPRODUCED CE-0003
+  # series/3.x = 3.7.1-89-de84c01 (origin/series/3.x de84c01f76), publishLocal, 2026-11-10
+  series/3.x: |
+    A: take.timeout canceled from outside: element lost in 328 / 500 seeds, first seed 1
+    B: take.timeout.timeout (issue form): element lost in 37 / 500 seeds, first seed 9
+    REPRODUCED CE-0003
+  # series/3.7.x = 3.7.1-15-2f94201 (origin/series/3.7.x 2f9420145f), publishLocal, 2026-11-10
+  series/3.7.x: |
+    A: take.timeout canceled from outside: element lost in 328 / 500 seeds, first seed 1
+    B: take.timeout.timeout (issue form): element lost in 37 / 500 seeds, first seed 9
+    REPRODUCED CE-0003
+expected: |
+  0 / 500 lost seeds in both programs, so the last line is NOT REPRODUCED CE-0003.
+promised_by:
+  - "Undisputed invariant (AGENTS.md section 3b, 'no lost element'): an element that take removed from the queue is returned to a caller, or it stays in the queue."
+  - "Scaladoc of IO#timeout, core/shared/src/main/scala/cats/effect/IO.scala:800-802: 'The resulting effect will always wait for the source effect to complete (and to complete its finalizers), and will return the source's outcome over raising a `TimeoutException`.'"
+  - "Design comment in Queue, std/shared/src/main/scala/cats/effect/std/Queue.scala:365-366: 'The taker starts out *without* a value, so it's the taker-cancelation situation where we must take extra care to ensure atomicity.' (internal comment, not Scaladoc)"
+cause: >
+  IOFiber.scala:908-951 (RacePair). The parent registers `cancel` (cancel fiberA and fiberB) as
+  the async finalizer. A child completion calls cb, but if the parent is already canceled the
+  callback has no effect and the finalizer runs instead. Cancel and Cont return Unit, so the
+  finalizer cannot see that a child already has a Succeeded outcome. timeoutTo (IO.scala:850)
+  wraps racePair in poll, so the parent is cancelable while it waits.
+possible_fix: >
+  No simple local fix. Options discussed upstream: a lossless-cancel primitive or
+  Fiber#joinOrCancel (draft PR #4710, issue #4620) that returns a completed child outcome
+  instead of Canceled; or detect the late callback in the async finalizer and hand the outcome
+  to the caller. Workaround for users: run take.timeout inside uncancelable with poll only
+  around the wait, or use tryTake with a sleep loop.
+duplicates:
+  upstream:
+    - "typelevel/cats-effect#4571 (open, bug) - this defect"
+    - "typelevel/cats-effect#4641 (closed unmerged PR, Lossless cancelation and joinOrCancel)"
+    - "typelevel/cats-effect#4710 (open draft PR, Lossless cancelation)"
+  related:
+    - "typelevel/cats-effect#4620 (open, Add Fiber#joinOrCancel)"
+    - "typelevel/cats-effect#4483 (open, Queue#mapK atomicity; different defect)"
+  queries:
+    - "gh search issues 'Queue take timeout' -R typelevel/cats-effect (2026-11-10)"
+    - "gh search issues 'racePair lost' -R typelevel/cats-effect (2026-11-10)"
+    - "gh search issues 'lossless cancelation' -R typelevel/cats-effect (2026-11-10)"
+    - "gh search issues 'timeout loses' -R typelevel/cats-effect (2026-11-10)"
+lean:
+  property: queue_take_timeout_no_lost_element   # planned name; core form: racePair_no_lost_outcome
+  theorem: open                                  # queue_take_timeout_no_lost_element_refuted

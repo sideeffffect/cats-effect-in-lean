@@ -1,0 +1,84 @@
+id: CE-0002
+title: "Resource.eval adds a cancelation point after fa, so an uncancelable fa is canceled"
+status: draft  # calibration bug; known upstream; Lean refutation not done yet
+priority: medium
+kind: doc-mismatch
+area: kernel
+files:
+  - kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:992   # Resource.eval = Eval(fa)
+  - kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:464   # allocatedCase
+  - kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:485   # case Allocate: own F.uncancelable
+  - kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:508   # poll(continue(head(b), tail, rel2))
+  - kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:526   # case Eval: fa.flatMap(...) outside any mask
+  - kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:320   # Resource#race uses allocatedCase in racePair
+  - kernel/shared/src/main/scala/cats/effect/kernel/GenTemporal.scala:99 # timeoutTo via racePair
+functions:
+  - Resource.eval
+  - Resource#allocatedCase
+  - Resource#allocated
+  - Resource#timeout (GenTemporal[Resource[F, *]].timeout)
+  - Resource#race
+summary: >
+  allocatedCase interprets Eval(fa) as fa.flatMap(a => continue(...)) with no mask around it.
+  After an uncancelable fa completes, the run loop sees the pending cancel at the next step and
+  the allocation ends as Canceled, although fa itself was uncancelable. Resource.make(fa)(noop)
+  does not have this gap, because Allocate runs under F.uncancelable. Visible results:
+  Resource.eval(IO.uncancelable(_ => IO.sleep(100 ms))).timeout(10 ms).use_ raises
+  TimeoutException; and inside a flatMap chain under poll, the continuation after
+  allocatedCase is skipped (fiber outcome Canceled).
+likelihood: >
+  Medium. Resource.eval is very common. The gap matters only when a cancel arrives while an
+  uncancelable fa runs and the Resource is allocated through allocatedCase (allocated, race,
+  timeout, both, start). Plain use (fold) has the same Eval shape (Resource.scala:192), but there
+  the extra boundary is in the user's own cancelable region.
+maybe_intended: >
+  Partly. The obvious fix broke law tests at first (issue text). But maintainers merged fix
+  PR #4630 into series/3.7.x (commit 2f94201, 2026-10-12), so the behavior is treated as a bug.
+  The fix is not on series/3.x and not in a release yet.
+reproducer: reproducers/CE-0002/Repro.scala
+output:
+  v3.7.1: |
+    A: eval(uncancelable sleep).timeout: eval ok=false, make ok=true (eval violates the promise)
+    B: allocatedCase continuation: eval ok=false, make ok=true (eval violates the promise)
+    cases that fail with Resource.eval: 2 / 2
+    REPRODUCED CE-0002
+  # series/3.x = 3.7.1-89-de84c01 (origin/series/3.x de84c01f76), publishLocal, 2026-11-10
+  series/3.x: |
+    A: eval(uncancelable sleep).timeout: eval ok=false, make ok=true (eval violates the promise)
+    B: allocatedCase continuation: eval ok=false, make ok=true (eval violates the promise)
+    cases that fail with Resource.eval: 2 / 2
+    REPRODUCED CE-0002
+  # series/3.7.x = 3.7.1-15-2f94201 (origin/series/3.7.x 2f9420145f, contains fix PR #4630), publishLocal, 2026-11-10
+  series/3.7.x: |
+    A: eval(uncancelable sleep).timeout: eval ok=true, make ok=true
+    B: allocatedCase continuation: eval ok=true, make ok=true
+    cases that fail with Resource.eval: 0 / 2
+    NOT REPRODUCED CE-0002
+expected: |
+  Both cases: eval ok=true (same as the Resource.make twin), so the last line is
+  NOT REPRODUCED CE-0002.
+promised_by:
+  - "Scaladoc of Resource.eval, kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:986-987: 'Lifts an applicative into a resource. The resource has a no-op release. Preserves interruptibility of `fa`.'"
+  - "Scaladoc of IO#timeout, core/shared/src/main/scala/cats/effect/IO.scala:807: 'If the source effect is uncancelable, a `TimeoutException` will never be raised.' (case A; the GenTemporal doc says the same)"
+cause: >
+  Resource.scala:526-527: `case Eval(fa) => fa.flatMap(a => continue(Resource.pure(a), stack,
+  release))` runs outside any F.uncancelable, so the flatMap after fa is a cancelation point.
+  In the Allocate case (:485) the whole step is masked and the continuation is wrapped in
+  poll(...) (:508), which gives the same kind of gap when an Eval follows an Allocate.
+possible_fix: >
+  Upstream PR #4630 (series/3.7.x): put the whole allocatedCase loop under one
+  F.uncancelable { poll => ... }; interpret Eval as poll(fa).flatMap(...); replace
+  poll(continue(...)) by (poll(F.unit) >> continue(...)).
+duplicates:
+  upstream:
+    - "typelevel/cats-effect#4627 (open, bug) - this defect"
+    - "typelevel/cats-effect#4630 (merged into series/3.7.x only, fix)"
+  related:
+    - "typelevel/keypool#708, #709 (same pattern, fixed in keypool)"
+    - "typelevel/cats-effect#4697 (open, Resource timeout reportFailure; different defect)"
+  queries:
+    - "gh search issues 'Resource.eval cancel' -R typelevel/cats-effect (2026-11-10)"
+    - "gh search issues 'Resource eval' -R typelevel/cats-effect (2026-11-10)"
+lean:
+  property: resource_eval_preserves_uncancelable   # planned name
+  theorem: open                                    # resource_eval_preserves_uncancelable_refuted
