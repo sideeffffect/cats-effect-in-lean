@@ -53,7 +53,7 @@ def sampleClos : List Clo :=
 #guard isErr (dec r#"{"op":"sleep","ms":1.5}"#)
 #guard isErr (dec r#"{"op":"sleep","ms":-1}"#)
 #guard isErr (dec r#"{"op":"async","cbs":[{"when":"sync","ok":{"t":"unit"},"err":1}]}"#)
-#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"cede"}}"#)
+#guard isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"cede"}}"#)
 #guard isErr (decCase r#"{"v":0,"id":"x","mode":"replay","seed":1,"prog":{"op":"cede"}}"#)
 #guard isErr (decCase r#"{"v":0,"id":"x","mode":"testcontrol","choices":[],"seed":1,"prog":{"op":"cede"}}"#)
 
@@ -166,13 +166,16 @@ def pRace : Prog := .racePair .cede .never
 
 -- `join`/`cancel` read the fiber outcome of the view when the term is built (`IO.joinOf`,
 -- `IO.cancelOf`); `deferred.get` reads the cell (`IO.deferredGetOf`).
+/-- An `REnv` for terms without resource nodes. -/
+def R0 : CatsEffectInLean.Model.Resource.REnv := renvOf .cede
+
 def vDone : View := { outcomes := [none, some (.succeeded (.nat 3))], deferreds := [some (.nat 7), none] }
-#guard tr (.join (.lit (.fiber 1))) 0 [] rootView == .ok (.flatMap (.ioCont (.rt (.join 1))) (clo 0 .ocValK []))
-#guard tr (.join (.lit (.fiber 1))) 0 [] vDone == .ok (.flatMap (.pure (.ocSucceeded (.nat 3))) (clo 0 .ocValK []))
-#guard tr (.cancel (.lit (.fiber 1))) 0 [] rootView == .ok (.map (.uncancelable (.rt (.cancel 1))) (clo 0 .asUnit []))
-#guard tr (.cancel (.lit (.fiber 1))) 0 [] vDone == .ok (.map (.pure .unit) (clo 0 .asUnit []))
-#guard tr (.deferredGet (.lit (.deferred 0))) 0 [] vDone == .ok (.pure (.nat 7))
-#guard tr (.deferredGet (.lit (.deferred 1))) 0 [] vDone ==
+#guard tr R0 (.join (.lit (.fiber 1))) 0 [] rootView == .ok (.flatMap (.ioCont (.rt (.join 1))) (clo 0 .ocValK []))
+#guard tr R0 (.join (.lit (.fiber 1))) 0 [] vDone == .ok (.flatMap (.pure (.ocSucceeded (.nat 3))) (clo 0 .ocValK []))
+#guard tr R0 (.cancel (.lit (.fiber 1))) 0 [] rootView == .ok (.map (.uncancelable (.rt (.cancel 1))) (clo 0 .asUnit []))
+#guard tr R0 (.cancel (.lit (.fiber 1))) 0 [] vDone == .ok (.map (.pure .unit) (clo 0 .asUnit []))
+#guard tr R0 (.deferredGet (.lit (.deferred 0))) 0 [] vDone == .ok (.pure (.nat 7))
+#guard tr R0 (.deferredGet (.lit (.deferred 1))) 0 [] vDone ==
   .ok (.flatMap (.delay (.rt (.deferredDefer 1))) (.rt (.deferredFlatten 1)))
 -- The snapshot keeps what the view shows when the outer term is built.
 #guard snapView (snapVal vDone) == { vDone with refs := [] }
@@ -192,5 +195,37 @@ def vDone : View := { outcomes := [none, some (.succeeded (.nat 3))], deferreds 
 -- Every op of format v0 runs on the model (no unsupported op left).
 #guard unsupportedOps (.seq (.sleep 1) (.racePair .cede .cede)) == []
 #guard rootTerm (.join (.lit .unit)) == .error .typeError
+
+/-! ## Format v1 -/
+
+#guard !isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"syncStep","limit":3,"e":{"op":"cede"}}}"#)
+#guard isErr (decCase r#"{"v":0,"id":"x","mode":"replay","prog":{"op":"syncStep","limit":3,"e":{"op":"cede"}}}"#)
+#guard isErr (decCase r#"{"v":0,"id":"x","mode":"replay","prog":{"op":"queueNew"}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"seq","ps":[{"op":"syncStep","limit":3,"e":{"op":"cede"}}]}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"syncStep","limit":2147483648,"e":{"op":"cede"}}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"rPure","v":{"t":"unit"}}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"allocatedCase","res":{"op":"cede"}}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"pure","v":{"t":"queue","id":0}}}"#)
+#guard (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"allocatedCase","res":{"op":"rFlatMap","res":{"op":"rMake","acq":{"op":"pure","v":{"t":"nat","v":1}},"x":"a","rel":{"op":"pure","v":{"t":"var","x":"a"}}},"x":"b","k":{"op":"rPure","v":{"t":"var","x":"b"}}}}}"#).map (·.prog) ==
+  .ok (.allocatedCase (.rFlatMap (.rMake (.pure (.lit (.nat 1))) (.pure (.var 0))) (.rPure (.var 0))))
+
+-- A difftest closure id is even and in namespace 3 (never a `Resource` or queue/timeout id).
+#guard sampleClos.all fun c => match c.fn with
+  | .user id => id % 2 == 0 && cloOfId? id == some c
+  | _ => false
+-- The `IdPoll` of `syncStep` (mask id 0) is the identity; a real poll is `UnmaskRunLoop`.
+#guard pollTerm .cede 0 0 == .cede
+#guard pollTerm .cede 1 0 == .unmaskRunLoop .cede 1 0
+-- `timeoutTo` is not mirrored; a resource node that reads state is outside the restriction.
+#guard unsupportedOps (.timeoutTo .cede .cede 1) == ["timeoutTo"]
+#guard unsupportedOps (.allocatedCase (.rEval (.join (.lit (.fiber 1))))) == ["resource-reads-state"]
+#guard unsupportedOps (.allocatedCase (.rEval (.bind .cede (.join (.lit (.fiber 1)))))) == []
+-- The queue: `Map(newIO, handle)`; the handle emits `queueH` with the buffer cell.
+#guard rootTerm .queueNew == .ok (.map CatsEffectInLean.Std.Queue.newIO (clo 0 .queueHandle []))
+#guard (callFn .queueNew (clo 0 .queueHandle []) (.ref 2)).trace == [.queueH 2]
+-- `allocatedCase (rPure 3)`: `loop` gives `pure((3, F.unit release))`, then `_._1`.
+#guard rootTerm (.allocatedCase (.rPure (.lit (.nat 3)))) ==
+  .ok (.map (.pure (.pair (.nat 3) (CatsEffectInLean.Model.Resource.RelFn.unit.toVal))) (clo 0 .allocFst []))
+#guard [TraceEv.refH 3, .queueH 4].all fun e => TraceEv.ofVal? e.toVal == some e
 
 end Difftest.Tests

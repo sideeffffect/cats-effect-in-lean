@@ -68,7 +68,11 @@ class CasesSuite extends munit.FunSuite:
         """{"v":0,"id":"b","mode":"replay","prog":{"op":"pure","v":{"t":"unit"},"extra":1}}""",
         """{"v":0,"id":"c","mode":"replay","prog":{"op":"pure","v":{"t":"fiber","id":0}}}""",
         """{"v":0,"id":"d","mode":"replay","prog":{"op":"poll","poll":"p","e":{"op":"cede"}}}""",
-        """{"v":1,"id":"e","mode":"replay","prog":{"op":"cede"}}"""
+        """{"v":2,"id":"e","mode":"replay","prog":{"op":"cede"}}""",
+        """{"v":0,"id":"f","mode":"replay","prog":{"op":"queueNew"}}""",
+        """{"v":1,"id":"g","mode":"replay","prog":{"op":"seq","ps":[{"op":"syncStep","limit":1,"e":{"op":"cede"}}]}}""",
+        """{"v":1,"id":"h","mode":"replay","prog":{"op":"rPure","v":{"t":"unit"}}}""",
+        """{"v":1,"id":"i","mode":"replay","prog":{"op":"pure","v":{"t":"queue","id":0}}}"""
       )
     do assert(ujson.read(Main.runLine(bad)).obj.contains("error"), bad)
   }

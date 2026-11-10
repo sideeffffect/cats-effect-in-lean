@@ -2,11 +2,16 @@ package cats.effect.difftest
 
 import ujson.Value
 
-/** JSON codec for format v0. The decoder is strict: unknown keys, unknown ops, handle literals
-  * in the input, unbound variables and poll misuse are all decode errors.
+/** JSON codec for format v1 (v0 is the subset without the v1 ops). The decoder is strict:
+  * unknown keys, unknown ops, handle literals in the input, unbound variables, poll misuse, a v1
+  * op in a v0 case, a resource op outside a resource position, and `syncStep` below the root are
+  * all decode errors.
   */
 object Json:
-  val FormatVersion = 0
+  val FormatVersion = 1
+  val Versions = Set(0L, 1L)
+  /** `Int.MaxValue`: the largest `syncStep` limit. */
+  val MaxLimit = 2147483647L
   val DefaultMaxSteps = 10000
 
   private def fail(msg: String): Nothing = throw DecodeError(msg)
@@ -50,7 +55,7 @@ object Json:
       case "succeeded" => only("v"); Val.VSucceeded(decodeVal(field(o, "v", t)))
       case "errored" => only("code"); Val.VErrored(Err.User(nat(field(o, "code", t), "errored.code")))
       case "canceled" => only(); Val.VCanceled
-      case "fiber" | "ref" | "deferred" => fail(s"value '$t': handles cannot be literals")
+      case "fiber" | "ref" | "deferred" | "queue" => fail(s"value '$t': handles cannot be literals")
       case _ => fail(s"unknown value tag '$t'")
 
   def encodeErr(e: Err): ujson.Obj = e match
@@ -70,6 +75,7 @@ object Json:
     case Val.VFiber(i) => ujson.Obj("t" -> "fiber", "id" -> i)
     case Val.VRef(i) => ujson.Obj("t" -> "ref", "id" -> i)
     case Val.VDeferred(i) => ujson.Obj("t" -> "deferred", "id" -> i)
+    case Val.VQueue(i) => ujson.Obj("t" -> "queue", "id" -> i)
 
   // --------------------------------------------------------------- programs
 
@@ -88,14 +94,52 @@ object Json:
         case None => fail(s"$ctx: unbound variable '$x'")
     case _ => Atom.Lit(decodeVal(j))
 
-  def decodeProg(j: Value): Prog = prog(j, Map.empty)
+  /** Ops of format v1 (a decode error in a v0 case). */
+  val V1Ops: Set[String] =
+    Set("syncStep", "timeout", "timeoutTo", "queueNew", "queueOffer", "queueTake", "queueTryTake",
+      "allocatedCase", "rPure", "rEval", "rMake", "rFlatMap")
+  private val ResOps = Set("rPure", "rEval", "rMake", "rFlatMap")
 
-  private def prog(j: Value, scope: Scope): Prog =
+  /** Decode a closed program. `syncStep` is allowed only here, at the root. */
+  def decodeProg(j: Value, version: Long = FormatVersion): Prog =
+    val v1 = version >= 1
+    obj(j, "prog").get("op") match
+      case Some(ujson.Str("syncStep")) if v1 =>
+        val o = obj(j, "prog")
+        keys(o, Set("op", "e", "limit"), "op 'syncStep'")
+        val limit = nat(field(o, "limit", "op 'syncStep'"), "op 'syncStep'.limit")
+        if limit > MaxLimit then fail(s"op 'syncStep'.limit: more than Int.MaxValue: $limit")
+        Prog.SyncStep(prog(field(o, "e", "op 'syncStep'"), Map.empty, v1), limit.toInt)
+      case _ => prog(j, Map.empty, v1)
+
+  private def opOf(j: Value, v1: Boolean): (collection.Map[String, Value], String) =
     val o = obj(j, "prog")
     val op = str(field(o, "op", "prog"), "prog.op")
+    if !v1 && V1Ops.contains(op) then fail(s"op '$op': not in format v0 (use \"v\":1)")
+    (o, op)
+
+  /** A resource position (format v1). */
+  private def res(j: Value, scope: Scope, v1: Boolean): Res =
+    val (o, op) = opOf(j, v1)
     val ctx = s"op '$op'"
     def only(ks: String*) = keys(o, Set("op") ++ ks, ctx)
-    def p(k: String, s: Scope = scope) = prog(field(o, k, ctx), s)
+    def s(k: String) = str(field(o, k, ctx), s"$ctx.$k")
+    op match
+      case "rPure" => only("v"); Res.RPure(atom(field(o, "v", ctx), scope, s"$ctx.v"))
+      case "rEval" => only("e"); Res.REval(prog(field(o, "e", ctx), scope, v1))
+      case "rMake" =>
+        only("acq", "x", "rel"); val x = s("x")
+        Res.RMake(prog(field(o, "acq", ctx), scope, v1), x, prog(field(o, "rel", ctx), scope + (x -> Kind.V), v1))
+      case "rFlatMap" =>
+        only("res", "x", "k"); val x = s("x")
+        Res.RFlatMap(res(field(o, "res", ctx), scope, v1), x, res(field(o, "k", ctx), scope + (x -> Kind.V), v1))
+      case _ => fail(s"$ctx: not a resource op (expected rPure, rEval, rMake or rFlatMap)")
+
+  private def prog(j: Value, scope: Scope, v1: Boolean): Prog =
+    val (o, op) = opOf(j, v1)
+    val ctx = s"op '$op'"
+    def only(ks: String*) = keys(o, Set("op") ++ ks, ctx)
+    def p(k: String, s: Scope = scope) = prog(field(o, k, ctx), s, v1)
     def a(k: String) = atom(field(o, k, ctx), scope, s"$ctx.$k")
     def n(k: String) = nat(field(o, k, ctx), s"$ctx.$k")
     def s(k: String) = str(field(o, k, ctx), s"$ctx.$k")
@@ -116,7 +160,7 @@ object Json:
       case "seq" =>
         only("ps")
         field(o, "ps", ctx) match
-          case ujson.Arr(ps) if ps.nonEmpty => Prog.Seq(ps.toList.map(prog(_, scope)))
+          case ujson.Arr(ps) if ps.nonEmpty => Prog.Seq(ps.toList.map(prog(_, scope, v1)))
           case x => fail(s"$ctx.ps: expected a non-empty array, got $x")
       case "map" => only("e", "fn"); Prog.Map(p("e"), fn("fn"))
       case "handleErrorWith" =>
@@ -154,13 +198,22 @@ object Json:
         val cbs = field(o, "cbs", ctx) match
           case ujson.Arr(cs) => cs.toList.map(cb)
           case x => fail(s"$ctx.cbs: expected an array, got $x")
-        Prog.Async(cbs, o.get("fin").map(prog(_, scope)), tag)
+        Prog.Async(cbs, o.get("fin").map(prog(_, scope, v1)), tag)
       case "case" =>
         only("on", "l", "lk", "r", "rk"); val l = s("l"); val r = s("r")
         Prog.Case(a("on"), l, p("lk", scope + (l -> Kind.V)), r, p("rk", scope + (r -> Kind.V)))
       case "split" =>
         only("on", "a", "b", "k"); val x = s("a"); val y = s("b")
         Prog.Split(a("on"), x, y, p("k", scope + (x -> Kind.V) + (y -> Kind.V)))
+      case "timeout" => only("e", "ms"); Prog.Timeout(p("e"), n("ms"))
+      case "timeoutTo" => only("e", "ms", "fb"); Prog.TimeoutTo(p("e"), n("ms"), p("fb"))
+      case "queueNew" => only(); Prog.QueueNew
+      case "queueOffer" => only("q", "v"); Prog.QueueOffer(a("q"), a("v"))
+      case "queueTake" => only("q"); Prog.QueueTake(a("q"))
+      case "queueTryTake" => only("q"); Prog.QueueTryTake(a("q"))
+      case "allocatedCase" => only("res"); Prog.AllocatedCase(res(field(o, "res", ctx), scope, v1))
+      case "syncStep" => fail(s"$ctx: only at the root of a program")
+      case r if ResOps.contains(r) => fail(s"$ctx: a resource op outside a resource position")
       case _ => fail(s"unknown op '$op'")
 
   private def cb(j: Value): CbCall =
@@ -181,7 +234,7 @@ object Json:
     val o = obj(j, "case")
     keys(o, Set("v", "id", "mode", "choices", "seed", "maxSteps", "prog"), "case")
     val v = nat(field(o, "v", "case"), "case.v")
-    if v != FormatVersion then fail(s"case.v: unsupported format version $v")
+    if !Versions.contains(v) then fail(s"case.v: unsupported format version $v")
     val id = str(field(o, "id", "case"), "case.id")
     val mode = str(field(o, "mode", "case"), "case.mode") match
       case "replay" =>
@@ -196,7 +249,7 @@ object Json:
         Mode.TestControlSeed(nat(field(o, "seed", "case"), "case.seed"))
       case m => fail(s"case.mode: unknown mode '$m'")
     val max = o.get("maxSteps").map(nat(_, "case.maxSteps").toInt).getOrElse(DefaultMaxSteps)
-    TestCase(id, mode, decodeProg(field(o, "prog", "case")), max)
+    TestCase(id, mode, decodeProg(field(o, "prog", "case"), v), max, v.toInt)
 
   private def choice(j: Value): Choice = j match
     case ujson.Num(_) => Choice.Pick(nat(j, "choice").toInt)

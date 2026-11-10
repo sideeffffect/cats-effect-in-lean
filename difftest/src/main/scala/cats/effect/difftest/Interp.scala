@@ -1,9 +1,13 @@
 package cats.effect.difftest
 
-import cats.effect.{Deferred, Fiber, IO, Outcome, Poll, Ref}
+import cats.effect.{Deferred, Fiber, IO, Outcome, Poll, Ref, Resource}
+import cats.effect.std.Queue
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.*
+import scala.util.control.NonFatal
+
+import java.util.concurrent.TimeoutException
 
 import Val.*
 
@@ -51,7 +55,22 @@ final class Harness:
 
   def newRef(r: Ref[IO, Val]): Int = synchronized { refs += r; refs.size - 1 }
   def newDeferred(d: Deferred[IO, Val]): Int = synchronized { deferreds += d; deferreds.size - 1 }
+  val queues = ArrayBuffer.empty[Queue[IO, Val]]
+  def newQueue(q: Queue[IO, Val]): Int = synchronized { queues += q; queues.size - 1 }
   def newAsync(): Int = synchronized { asyncs += 1; asyncs - 1 }
+
+/** The error code of `java.util.concurrent.TimeoutException` (format v1). The value language has
+  * no other way to see it. Lean: `Model.Timeout.timeoutCode` (10^6) minus the user-code offset 2.
+  * Generated programs never raise this code.
+  */
+val TimeoutCode: Long = 999998L
+
+/** The error code of a `Throwable` in the value language, if it has one. */
+object CodeOf:
+  def unapply(t: Throwable): Option[Long] = t match
+    case UserError(c) => Some(c)
+    case _: TimeoutException => Some(TimeoutCode)
+    case _ => None
 
 /** Interpreter: Prog => IO[Val]. Each case is one fixed IO term; the Lean model mirrors these
   * terms one to one (see the spec table in wiki/methodology/difftest-program-format.md).
@@ -64,6 +83,19 @@ final class Interp(h: Harness):
   private type Env = Map[String, Bound]
 
   def apply(p: Prog): IO[Val] = run(p, Map.empty)
+
+  /** The root program. A root `syncStep` runs here, on the caller thread, before the runtime
+    * runs anything: `e.syncStep(limit).unsafeRunSync()`, then `Left(io) => io`,
+    * `Right(a) => IO.pure(a)` (AsyncLaws.scala:84-88); a throw gives `IO.raiseError(t)`.
+    */
+  def root(p: Prog): IO[Val] = p match
+    case Prog.SyncStep(e, limit) =>
+      try
+        run(e, Map.empty).syncStep(limit).unsafeRunSync() match
+          case Left(io) => io
+          case Right(a) => IO.pure(a)
+      catch case NonFatal(t) => IO.raiseError(t)
+    case _ => apply(p)
 
   private def atom(a: Atom, env: Env): Val = a match
     case Atom.Lit(v) => v
@@ -80,7 +112,7 @@ final class Interp(h: Harness):
     UserFns(fn, v)
 
   private def errOf(t: Throwable): Err = t match
-    case UserError(c) => Err.User(c)
+    case CodeOf(c) => Err.User(c)
     case other => Err.Foreign(s"${other.getClass.getSimpleName}: ${other.getMessage}")
 
   private def ocVal(oc: Outcome[IO, Throwable, Val]): IO[Val] = oc match
@@ -96,6 +128,10 @@ final class Interp(h: Harness):
     case VRef(i) => (i, h.refs(i))
     case _ => throw TypeError(s"not a ref handle: $v")
 
+  private def queueOf(v: Val): Queue[IO, Val] = v match
+    case VQueue(i) => h.queues(i)
+    case _ => throw TypeError(s"not a queue handle: $v")
+
   private def deferredOf(v: Val): (Int, Deferred[IO, Val]) = v match
     case VDeferred(i) => (i, h.deferreds(i))
     case _ => throw TypeError(s"not a deferred handle: $v")
@@ -109,13 +145,13 @@ final class Interp(h: Harness):
     case Prog.Map(e, fn) => run(e, env).map(v => call(fn, v))
     case Prog.HandleErrorWith(e, x, k) =>
       run(e, env).handleErrorWith {
-        case UserError(c) => run(k, env + (x -> Bound.V(VNat(c))))
+        case CodeOf(c) => run(k, env + (x -> Bound.V(VNat(c))))
         case t => IO.raiseError(t)
       }
     case Prog.Attempt(e) =>
       run(e, env).attempt.map {
         case Right(v) => VRight(v)
-        case Left(UserError(c)) => VLeft(VNat(c))
+        case Left(CodeOf(c)) => VLeft(VNat(c))
         case Left(t) => throw t
       }
     case Prog.Uncancelable(q, body) => IO.uncancelable(poll => run(body, env + (q -> Bound.P(poll))))
@@ -202,3 +238,23 @@ final class Interp(h: Harness):
           case VPair(x, y) => run(k, env + (a -> Bound.V(x)) + (b -> Bound.V(y)))
           case other => IO.raiseError(TypeError(s"split: not a pair: $other"))
       }
+    // ---- format v1
+    case Prog.SyncStep(_, _) => IO.raiseError(TypeError("syncStep below the root")) // the decoder prevents this
+    case Prog.Timeout(e, ms) => run(e, env).timeout(ms.millis)
+    case Prog.TimeoutTo(e, ms, fb) => run(e, env).timeoutTo(ms.millis, run(fb, env))
+    case Prog.QueueNew => Queue.unbounded[IO, Val].map(q => VQueue(h.newQueue(q)))
+    case Prog.QueueOffer(q, a) => queueOf(atom(q, env)).offer(atom(a, env)).as(VUnit)
+    case Prog.QueueTake(q) => queueOf(atom(q, env)).take
+    case Prog.QueueTryTake(q) =>
+      queueOf(atom(q, env)).tryTake.map {
+        case Some(v) => VRight(v)
+        case None => VLeft(VUnit)
+      }
+    case Prog.AllocatedCase(r) => res(r, env).allocatedCase.map(_._1)
+
+  /** A `Resource[IO, Val]`. Each case is one fixed `Resource` term. */
+  private def res(r: Res, env: Env): Resource[IO, Val] = r match
+    case Res.RPure(a) => Resource.pure[IO, Val](atom(a, env))
+    case Res.REval(e) => Resource.eval(run(e, env))
+    case Res.RMake(acq, x, rel) => Resource.make(run(acq, env))(a => run(rel, env + (x -> Bound.V(a))).void)
+    case Res.RFlatMap(r0, x, k) => res(r0, env).flatMap(v => res(k, env + (x -> Bound.V(v))))

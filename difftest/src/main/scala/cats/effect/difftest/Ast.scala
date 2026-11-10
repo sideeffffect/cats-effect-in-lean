@@ -1,6 +1,6 @@
 package cats.effect.difftest
 
-// Program language, format v0. Spec: wiki/methodology/difftest-program-format.md
+// Program language, format v1 (v0 is a subset). Spec: wiki/methodology/difftest-program-format.md
 
 /** An error value. `User(code)` is the error that the program raises. `Foreign` is any
   * other Throwable (a harness or CE internal error); a generated program must not produce it.
@@ -23,6 +23,7 @@ enum Val:
   case VFiber(id: Int)
   case VRef(id: Int)
   case VDeferred(id: Int)
+  case VQueue(id: Int) // v1
 
 /** An argument position: a literal value or a bound variable. */
 enum Atom:
@@ -66,6 +67,23 @@ enum Prog:
   case Never
   case Case(on: Atom, l: String, lk: Prog, r: String, rk: Prog)
   case Split(on: Atom, a: String, b: String, k: Prog)
+  // ---- format v1
+  /** Root only: `e.syncStep(limit).unsafeRunSync()` before the run, then the selected `IO`. */
+  case SyncStep(e: Prog, limit: Int)
+  case Timeout(e: Prog, ms: Long)
+  case TimeoutTo(e: Prog, ms: Long, fb: Prog)
+  case QueueNew
+  case QueueOffer(q: Atom, a: Atom)
+  case QueueTake(q: Atom)
+  case QueueTryTake(q: Atom)
+  case AllocatedCase(r: Res)
+
+/** A `Resource[IO, Val]` (format v1). It occurs only under `AllocatedCase`. */
+enum Res:
+  case RPure(a: Atom)
+  case REval(e: Prog)
+  case RMake(acq: Prog, x: String, rel: Prog)
+  case RFlatMap(r: Res, x: String, k: Res)
 
 /** One entry of a replay choice list. */
 enum Choice:
@@ -76,6 +94,6 @@ enum Mode:
   case Replay(choices: List[Choice])
   case TestControlSeed(seed: Long)
 
-final case class TestCase(id: String, mode: Mode, prog: Prog, maxSteps: Int)
+final case class TestCase(id: String, mode: Mode, prog: Prog, maxSteps: Int, version: Int = Json.FormatVersion)
 
 final class DecodeError(msg: String) extends Exception(msg)

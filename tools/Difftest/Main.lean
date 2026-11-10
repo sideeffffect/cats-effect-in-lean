@@ -5,8 +5,8 @@ import Difftest.Replay
 
 Usage: `lake exe cediff [FILE.jsonl …]` (no file: read stdin).
 
-For each input line (a test case, format v0) it decodes the case, translates the program into
-the root `Model.IO` term, and prints one JSON line:
+For each input line (a test case, format v0 or v1) it decodes the case, translates the program
+into the root `Model.IO` term, and prints one JSON line (`v` is the version of the input line):
 
 * Replay mode, all ops supported: the model runs the case (`Difftest.Replay`) and the line has
   the fields of the Scala replay output (`outcome`, `trace`, `steps`, `time`, `schedule`,
@@ -14,7 +14,9 @@ the root `Model.IO` term, and prints one JSON line:
   compares.
 * `{"v":0,"id":…,"mode":…,"outcome":"unsupported","size":n,"unsupported":[…]}`: the case is
   accepted, but the model cannot run it: an op that the step function does not mirror
-  (`unsupportedReason`), or testcontrol mode (`mode:testcontrol`, decision 15).
+  (`unsupportedReason`), the resource restriction (`resource-reads-state`), or testcontrol
+  mode (`mode:testcontrol`, decision 15).
+* A root `syncStep e limit` runs `SyncStep.steppedRest` first (`Difftest.syncStepInit`).
 * `{"v":0,"id":…,"error":"decode: …"}` or `"error":"translate: …"`: the case is rejected.
 
 Exit code 0 if all cases are accepted, 1 otherwise. A summary goes to stderr.
@@ -46,7 +48,7 @@ def processLine (line : String) : Json × Bool × Bool :=
       let mode : String := match tc.mode with | .replay _ => "replay" | .testcontrol _ => "testcontrol"
       let uns := unsupportedOps tc.prog
       let unsJ := kv "unsupported" (Json.arr (uns.map Json.str).toArray)
-      let base := [kv "v" 0, kv "id" (.str tc.id), kv "mode" (.str mode)]
+      let base := [kv "v" (Lean.toJson tc.version), kv "id" (.str tc.id), kv "mode" (.str mode)]
       match rootTerm tc.prog with
       | .error .typeError =>
         (Json.mkObj (base ++ [kv "error" (.str "translate: TypeError while building the root term")]),
@@ -57,7 +59,16 @@ def processLine (line : String) : Json × Bool × Bool :=
       | .ok io =>
         match tc.mode, uns with
         | .replay choices, [] =>
-          (Json.mkObj (base ++ replayFields tc.prog choices tc.maxSteps io), true, true)
+          match tc.prog with
+          | .syncStep _ limit =>
+            match syncStepInit tc.prog io limit with
+            | .ok s0 => (Json.mkObj (base ++ replayFields tc.prog choices tc.maxSteps s0), true, true)
+            | .error sm =>
+              (Json.mkObj (base ++ [kv "outcome" (Json.mkObj [kv "t" (.str s!"model:syncStep:{(repr sm).pretty}")]),
+                kv "compare" (Json.arr #[.str "outcome"])]), true, true)
+          | _ =>
+            (Json.mkObj (base ++ replayFields tc.prog choices tc.maxSteps
+              (CatsEffectInLean.Model.Sched.init CatsEffectInLean.Model.counterMaskModel io)), true, true)
         | .testcontrol _, [] =>
           (Json.mkObj (base ++ [kv "outcome" (.str "unsupported"), kv "size" (ioSize io),
             kv "unsupported" (Json.arr #[.str "mode:testcontrol"])]), true, false)
