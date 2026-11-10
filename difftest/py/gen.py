@@ -35,7 +35,7 @@ MAX_LIMIT = 2**31 - 1  # Int.MaxValue: the largest syncStep limit
 # They only add `call` trace events. coverage.py reads them to see what ran (decision 17).
 MARK_BASE = 7_700_000_000
 MARK_KIND = 1_000_000
-MARK_UNC, MARK_FIN, MARK_ESC_POLL_FIN, MARK_JOIN = 1, 2, 3, 4
+MARK_UNC, MARK_FIN, MARK_ESC_POLL_FIN, MARK_JOIN, MARK_REL = 1, 2, 3, 4, 5
 
 UNIT, BOOL, NAT = ('unit',), ('bool',), ('nat',)
 
@@ -80,7 +80,7 @@ WEIGHTS = {
     'fn_raise': 0.4,  # relative weight of user function 3 (raise) in delay/map; others 1
     # format v1 (decision 30)
     'timeout': 1.2, 'timeoutTo': 0.35, 'allocatedCase': 2.2,
-    'queueNew': 2, 'queueOffer': 3, 'queueTake': 3, 'queueTryTake': 6, 'tpl_queue': 2.2,
+    'queueNew': 2, 'queueOffer': 3, 'queueTake': 3, 'queueTryTake': 6, 'tpl_queue': 2.2, 'tpl_resource': 1,
     'res_pure': 2.5, 'res_eval': 2.5, 'res_make': 3.5, 'res_flatMap': 12,
 }
 
@@ -504,11 +504,11 @@ class Gen:
             opts.append((w['split'], g_split))
 
         # ---- format v1
-        opts.append((w['timeout'], lambda: {'op': 'timeout', 'e': self.prog(t, env, size - 1, cc), 'ms': self.timeout_ms()}))
+        opts.append((w['timeout'], lambda: {'op': 'timeout', 'e': self.timeout_source(t, env, size - 1, cc), 'ms': self.timeout_ms()}))
         if size >= 3:
             def g_timeout_to():
                 se, sf = self.split_size(size, 2)
-                return {'op': 'timeoutTo', 'e': self.prog(t, env, se, cc), 'ms': self.timeout_ms(),
+                return {'op': 'timeoutTo', 'e': self.timeout_source(t, env, se, cc), 'ms': self.timeout_ms(),
                         'fb': self.prog(t, env, sf, cc)}
             opts.append((w['timeoutTo'], g_timeout_to))
         if self.res_ok(t):
@@ -528,9 +528,23 @@ class Gen:
             opts.append((w['tpl_scenario'], lambda: self.tpl_scenario(t, env, size, ctx)))
         if size >= 4:
             opts.append((w['tpl_queue'], lambda: self.tpl_queue(t, env, size, ctx)))
+        if size >= 4 and self.res_ok(t):
+            opts.append((w['tpl_resource'], lambda: self.tpl_resource(t, env, size, cc)))
         return opts
 
     # ------------------------------------------------------- format v1
+
+    def timeout_source(self, t, env, size, ctx):
+        """The source of a `timeout`: often it first waits (sleep, cede or never), so the timeout
+        can fire."""
+        e = self.prog(t, env, size, ctx)
+        k = self.pick([(5, 'plain'), (4, 'sleep'), (1, 'cede'), (0.6, 'never')])
+        if k == 'never':
+            return {'op': 'never'}
+        if k == 'plain':
+            return e
+        w = {'op': 'cede'} if k == 'cede' else {'op': 'sleep', 'ms': self.pick([(2, 1), (3, 10), (2, 100), (1, 2000)])}
+        return {'op': 'seq', 'ps': [w, e]}
 
     def timeout_ms(self):
         return self.pick([(2, 0), (3, 1), (3, 10), (1, 100), (1, 1000)])
@@ -555,21 +569,49 @@ class Gen:
             opts.append((w['res_pure'], lambda: {'op': 'rPure', 'v': self.atom(t, env)}))
         opts.append((w['res_eval'], lambda: {'op': 'rEval', 'e': self.prog(t, env, max(1, size - 1), ctx)}))
 
-        def g_make():
-            sa, sr = self.split_size(max(size, 3), 2)
-            x = self.fresh('x', env)
-            return {'op': 'rMake', 'acq': self.prog(t, env, sa, ctx), 'x': x,
-                    'rel': self.prog(self.small_type(), {**env, x: ('val', t)}, sr, self.fin_ctx(ctx))}
-        opts.append((w['res_make'], g_make))
+        opts.append((w['res_make'], lambda: self.res_make(t, env, size, ctx)))
         if size >= 2:
             def g_flat():
                 s = self.small_type()
                 sa, sk = self.split_size(size, 2)
                 x = self.fresh('x', env)
-                return {'op': 'rFlatMap', 'res': self.g_res(s, env, sa, ctx), 'x': x,
-                        'k': self.g_res(t, {**env, x: ('val', s)}, sk, ctx)}
+                kenv = {**env, x: ('val', s)}
+                k = self.g_res(t, kenv, sk, ctx)
+                f = self.pick([(3, 'plain'), (2, 'raise'), (1, 'canceled')])
+                if f != 'plain':
+                    # the rest fails or is canceled: the release of the earlier resources runs
+                    stop = {'op': 'raise', 'code': self.code()} if f == 'raise' else {'op': 'canceled'}
+                    k = {'op': 'rFlatMap', 'res': {'op': 'rEval', 'e': stop if f == 'raise' else
+                                                   {'op': 'seq', 'ps': [stop, {'op': 'pure', 'v': {'t': 'unit'}}]}},
+                         'x': self.fresh('x', kenv), 'k': k}
+                # often a `make` first: its release runs when the rest fails
+                first = self.res_make(s, env, sa, ctx) if self.r.random() < 0.5 else self.g_res(s, env, sa, ctx)
+                return {'op': 'rFlatMap', 'res': first, 'x': x, 'k': k}
             opts.append((w['res_flatMap'], g_flat))
         return self.pick(opts)()
+
+    def res_make(self, t, env, size, ctx):
+        """`rMake(acq, x, rel)` of value type t. `env` is a resource scope (`res_env`)."""
+        sa, sr = self.split_size(max(size, 3), 2)
+        x = self.fresh('x', env)
+        rel = self.prog(self.small_type(), {**env, x: ('val', t)}, sr, self.fin_ctx(ctx))
+        if self.r.random() < 0.8:  # a marker: the trace shows that the release ran
+            self.rids += 1
+            rel = {'op': 'seq', 'ps': [self.mark(MARK_REL, self.rids), rel]}
+        return {'op': 'rMake', 'acq': self.prog(t, self.res_env(env), sa, ctx), 'x': x, 'rel': rel}
+
+    def tpl_resource(self, t, env, size, ctx):
+        """allocatedCase(rFlatMap(rMake(acq, x, rel), y, rest)): the rest often waits, fails or is
+        canceled, so the release `rel(ExitCase)` runs (`Resource.scala:507-510`)."""
+        renv = self.res_env(env)
+        s = self.small_type()
+        sm, sk = self.split_size(size - 1, 2)
+        y = self.fresh('x', renv)
+        kenv = {**renv, y: ('val', s)}
+        stop = self.pick([(3, {'op': 'raise', 'code': self.code()}), (2, {'op': 'canceled'}), (2, {'op': 'cede'}),
+                          (1, {'op': 'sleep', 'ms': 1}), (1, {'op': 'never'})])
+        rest = {'op': 'rEval', 'e': {'op': 'seq', 'ps': [stop, self.prog(t, kenv, max(1, sk - 2), ctx)]}}
+        return {'op': 'allocatedCase', 'res': {'op': 'rFlatMap', 'res': self.res_make(s, renv, sm, ctx), 'x': y, 'k': rest}}
 
     def tpl_queue(self, t, env, size, ctx):
         """bind q = queueNew in a producer/consumer scenario: consumers `take` (often with

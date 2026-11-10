@@ -4,8 +4,10 @@
 Rules: wiki/methodology/differential-testing.md ("Driver", "Triage bins", "Corpus").
 
 Subcommands:
-  run          generate cases, run Scala (replay + testcontrol), optionally Lean; sort into bins;
-               shrink mismatches and save them to the corpus.
+  run          generate cases, run Scala (replay + testcontrol), optionally Lean; sort into bins
+               (also per seed); shrink mismatches and save them to the corpus. A mismatch of a
+               case that matches a KNOWN_MODEL_BUGS predicate is bin `known-model-bug` (it does
+               not fail the run; it is printed and counted).
   check        Fixed case files: Scala and Lean; fails unless each case agrees or is unsupported.
   scala-check  Scala alone: replay determinism, testcontrol determinism, testcontrol outcome in
                the replay outcome set, coverage histogram, timing.
@@ -379,6 +381,7 @@ def cmd_run(a):
     t3 = time.time()
     bins = collections.Counter()
     by_bin = collections.defaultdict(list)
+    per_seed = collections.defaultdict(collections.Counter)
     for c in cases:
         if a.lean:
             b, d = compare(c, s.get(c['id']), lo.get(c['id']))
@@ -387,9 +390,13 @@ def cmd_run(a):
             b, d = p if p else ('scala-only', '')
         bins[b] += 1
         by_bin[b].append((c, d))
+        per_seed[c['id'].split('-', 1)[0][1:]][b] += 1
     print(f"cases {len(cases)}  gen {t1 - t0:.1f}s  scala {t2 - t1:.1f}s  lean {t3 - t2:.1f}s")
     for b, k in sorted(bins.items(), key=lambda x: -x[1]):
         print(f"  {b:15} {k}")
+    if len(per_seed) > 1:
+        for sd, cnt in per_seed.items():
+            print(f"  seed {sd}: " + "  ".join(f"{b} {k}" for b, k in sorted(cnt.items())))
     for b in ('generator-bug', 'harness', 'hang'):
         for c, d in by_bin[b][:5]:
             print(f"  {b}: {c['id']}: {d}")
@@ -413,7 +420,7 @@ def cmd_run(a):
             path = save_corpus(sc, s1, l1, field, meta, Path(a.corpus_dir))
             print(f"  saved {path}")
     if a.json:
-        Path(a.json).write_text(json.dumps({'bins': bins, 'cases': len(cases)}, indent=1))
+        Path(a.json).write_text(json.dumps({'bins': bins, 'cases': len(cases), 'per_seed': per_seed}, indent=1))
     bad = bins['generator-bug'] + bins['harness'] + bins['hang']
     return 1 if bad or (a.lean and bins['mismatch']) else 0
 

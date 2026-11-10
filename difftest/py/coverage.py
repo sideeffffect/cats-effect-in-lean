@@ -20,7 +20,7 @@ Cancel requests on a fiber L at trace position P:
 
 Region markers (from the generator, see gen.MARK_*): `delay fn1 arg nat M`, where M encodes a
 kind, a region id, and enter/exit. Kinds: uncancelable body, finalizer body, escaped poll
-inside a finalizer, join result follows.
+inside a finalizer, join result follows, `Resource` release body (format v1).
 
 Usage:
   coverage.py --seeds 1 2 3 --n 10000 [--gen PATH/TO/gen.py] [--json FILE]
@@ -53,6 +53,12 @@ KEY_EVENTS = [
     'callback after owner canceled',
     'join on canceled fiber',
     'cancel of nested parent (has started a fiber)',
+]
+
+# Format v1 run events (reported, no minimum yet).
+V1_EVENTS = [
+    'v1: TimeoutException seen',
+    'v1: resource release ran',
 ]
 
 
@@ -200,6 +206,8 @@ def analyse(case, o, prefix):
             nxt = trace[i + 1] if i + 1 < len(trace) else None
             if nxt and nxt['ev'] == 'call' and nxt['fn'] == 1 and nxt.get('arg') == {'t': 'canceled'}:
                 ev.add('join on canceled fiber')
+        elif kind == gen_default.MARK_REL:
+            ev.add('v1: resource release ran')
         elif not is_exit:
             open_[(kind, rid, ev_owner[i])] = i
         else:
@@ -264,6 +272,10 @@ def run(seeds, n, gen_mod, max_size=40, verbose=True):
                 if q is not None:
                     prefix[k] = q
             ev, viol = analyse(c, o, prefix)
+            # `TimeoutException` is error code 999998 in the value language (format v1)
+            if '999998' in json.dumps([o.get('outcome'), o.get('trace')]) or \
+                    any(f.startswith('TimeoutException') for f in o.get('failures', [])):
+                ev.add('v1: TimeoutException seen')
             res['prefix_violations'] += viol
             res['events'].update(ev)
             res['outcomes'][o['outcome']['t']] += 1
@@ -280,6 +292,9 @@ def print_report(res):
           f"prefix violations {res['prefix_violations']}; problems (TypeError, decode, hang) {len(res['problems'])}")
     print("-- key run events (% of cases)")
     for k in KEY_EVENTS:
+        print(f"  {100.0 * res['events'][k] / tot:6.2f}%  {res['events'][k]:7}  {k}")
+    print("-- format v1 run events (% of cases)")
+    for k in V1_EVENTS:
         print(f"  {100.0 * res['events'][k] / tot:6.2f}%  {res['events'][k]:7}  {k}")
     print("-- outcomes")
     for k, v in res['outcomes'].most_common():
