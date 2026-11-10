@@ -247,9 +247,117 @@ theorem env_calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
           exact call_ok p arg v
       · exact bad _ (fun w => by simp [Props.Calibration.QueueTimeout.dispatch, hc, ho, hlib, hk])
 
+/-! ### Clause 6: user code treats `Poll` values as opaque -/
+
+theorem rnVal_natsV (σ : WF.PollRen) (xs : List Nat) : WF.rnVal σ (natsV xs) = natsV xs := by
+  induction xs <;> simp_all [natsV, listV, WF.rnVal]
+
+theorem hasPoll_natsV (xs : List Nat) : WF.hasPoll (natsV xs) = false := by
+  induction xs <;> simp_all [natsV, listV, WF.hasPoll]
+
+theorem plam_hasPoll (p : PLam) : WF.hasPoll p.toVal = false := by
+  cases p <;> simp [PLam.toVal, cloVal, listV, WF.hasPoll, hasPoll_natsV]
+
+theorem rnView_outcome (σ : WF.PollRen) (v : View) (t : Nat) :
+    (WF.rnView σ v).outcome t = (v.outcome t).map (WF.rnOutcome σ) := by
+  simp only [View.outcome, WF.rnView, List.getElem?_map]
+  cases v.outcomes[t]? with
+  | none => rfl
+  | some o => cases o <;> rfl
+
+theorem rnVal_toVal (σ : WF.PollRen) (oc : Outcome) :
+    WF.rnVal σ oc.toVal = (WF.rnOutcome σ oc).toVal := by
+  cases oc <;> rfl
+
+theorem rnIO_drain (σ : WF.PollRen) (q : Nat) : ∀ n, WF.rnIO σ (drain q n) = drain q n
+  | 0 => rfl
+  | n + 1 => by
+    simp [drain, WF.rnIO, Std.Queue.tryTakeIO, Std.Queue.QLam.fn, PLam.fn,
+      Std.Queue.QLam.toVal, PLam.toVal, cloVal, listV, WF.rnVal]
+
+/-- A program closure commutes with a `Poll` renaming. -/
+theorem call_rn (σ : WF.PollRen) (p : PLam) (arg : Val) (v : View) :
+    call p (WF.rnVal σ arg) (WF.rnView σ v) = WF.rnResult σ (call p arg v) := by
+  cases p with
+  | afterQueue xs d s =>
+    cases arg <;> simp [call, prog, illTyped, WF.rnResult, WF.rnVal, WF.rnIO,
+      Timeout.timeoutIO, Timeout.TLam.fn, PLam.fn, Timeout.TLam.toVal, PLam.toVal, cloVal, listV,
+      rnVal_natsV]
+  | afterStart q xs s =>
+    cases arg <;> simp [call, prog, illTyped, WF.rnResult, WF.rnVal, WF.rnIO, PLam.fn,
+      PLam.toVal, cloVal, listV, rnVal_natsV]
+  | offerNext q c n xs =>
+    cases xs with
+    | cons x rest =>
+      simp [call, prog, WF.rnResult, WF.rnVal, WF.rnIO, PLam.fn, PLam.toVal, cloVal, listV,
+        rnVal_natsV, Std.Queue.offerIO, Std.Queue.QLam.fn, Std.Queue.QLam.toVal]
+    | nil =>
+      cases ho : v.outcome c <;>
+        simp [call, prog, ho, rnView_outcome, IO.cancelOf, WF.rnResult, WF.rnIO,
+          PLam.fn, PLam.toVal, cloVal, listV, WF.rnVal] <;> rfl
+  | afterCancel q c n =>
+    cases ho : v.outcome c <;>
+      simp [call, prog, ho, rnView_outcome, IO.joinOf, WF.rnResult, WF.rnIO,
+        PLam.fn, PLam.toVal, cloVal, listV, WF.rnVal, rnVal_toVal] <;> rfl
+  | afterJoin q n =>
+    simp [call, prog, WF.rnResult, WF.rnEffect, rnIO_drain]
+  | afterTryTake q k =>
+    simp [call, prog, WF.rnResult, WF.rnEffect, rnIO_drain]
+
+/-- An even id whose closure value holds a `Poll` is not a program closure. -/
+theorem dispatch_poll (id : Nat) (hlib : isLibId id = false) (c : Val)
+    (hc : cloOfId id = some c) (hp : WF.hasPoll c = true) (arg : Val) (v : View) :
+    Props.Calibration.QueueTimeout.dispatch id arg v = illTyped := by
+  cases ho : ofCloVal c with
+  | none => simp [Props.Calibration.QueueTimeout.dispatch, hc, ho]
+  | some t =>
+    obtain ⟨k, tag, fs⟩ := t
+    by_cases hk : k = ns
+    · subst hk
+      cases hpl : PLam.ofFields tag fs with
+      | none => simp [Props.Calibration.QueueTimeout.dispatch, hc, ho, hlib, hpl]
+      | some p =>
+        have hcv : c = p.toVal := (cloVal_of_ofCloVal ho).trans (plam_ofFields_inv hpl)
+        rw [hcv, plam_hasPoll] at hp
+        cases hp
+    · simp [Props.Calibration.QueueTimeout.dispatch, hc, ho, hlib, hk]
+
+/-- User code of `env` (even ids) treats `Poll` values as opaque. -/
+theorem env_opaque : WF.PollOpaque env := by
+  intro σ _ id hid arg v
+  show Props.Calibration.QueueTimeout.dispatch (WF.rnId σ id) (WF.rnVal σ arg) (WF.rnView σ v) = WF.rnResult σ (Props.Calibration.QueueTimeout.dispatch id arg v)
+  have hlib : isLibId id = false := by simp [isLibId]; omega
+  have hlib' : isLibId (WF.rnId σ id) = false := by
+    have := WF.rnId_mod_two σ id
+    simp [isLibId]; omega
+  cases hc : cloOfId id with
+  | none =>
+    rw [WF.rnId_of_noPoll σ id (by simp [hc])]
+    simp [Props.Calibration.QueueTimeout.dispatch, hc, illTyped, WF.rnResult]
+  | some c =>
+    by_cases hp : WF.hasPoll c = true
+    · have hc' : cloOfId (WF.rnId σ id) = some (WF.rnVal σ c) := by
+        rw [WF.cloOfId_rnId, hc]; rfl
+      rw [dispatch_poll _ hlib' _ hc' (by simpa using hp), dispatch_poll _ hlib _ hc hp]
+      rfl
+    · rw [WF.rnId_of_noPoll σ id (by intro c' h; rw [hc] at h; cases h; simpa using hp)]
+      cases ho : ofCloVal c with
+      | none => simp [Props.Calibration.QueueTimeout.dispatch, hc, ho, illTyped, WF.rnResult]
+      | some t =>
+        obtain ⟨k, tag, fs⟩ := t
+        by_cases hk : k = ns
+        · subst hk
+          cases hpl : PLam.ofFields tag fs with
+          | none => simp [Props.Calibration.QueueTimeout.dispatch, hc, ho, hlib, hpl, illTyped, WF.rnResult]
+          | some p =>
+            simp only [Props.Calibration.QueueTimeout.dispatch, hc, ho, hlib, hpl, Option.bind_some, beq_self_eq_true,
+              ite_true, Bool.false_eq_true, ite_false]
+            exact call_rn σ p arg v
+        · simp [Props.Calibration.QueueTimeout.dispatch, hc, ho, hlib, hk, illTyped, WF.rnResult]
+
 /-- The witness program (one element `42`, timeout `1000`, sleep `1`) is well-formed. -/
 theorem cx_wellFormed : WellFormed isLib [] env (progA [42] 1000 1) :=
-  ⟨by decide +kernel, fun id hid arg v => env_calls id hid arg v⟩
+  ⟨by decide +kernel, fun id hid arg v => env_calls id hid arg v, env_opaque⟩
 
 /-- CE-0003: `Queue.take.timeout` in a canceled fiber loses an element. -/
 theorem takeTimeoutNoLostElement_refuted : ¬ takeTimeoutNoLostElement := by

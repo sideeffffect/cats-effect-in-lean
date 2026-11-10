@@ -186,8 +186,20 @@ theorem cx_calls (id : Nat) (arg : Val) (v : View) :
         Val.handles]
     exact WF.reach_of_mem (by simp [refHandles, cxRefs])
 
+/-- User code of `cxEnv` treats `Poll` values as opaque (clause 6): it ignores its argument and
+its view, and no result holds a `Poll`. -/
+theorem cx_opaque : WF.PollOpaque cxEnv := by
+  refine WF.pollOpaque_of_const cxEnv (fun id => cxEnv.call id .unit []) [0, 2, 4]
+    { out := .ret .unit } (fun id _ _ _ => by rcases id with _ | _ | _ | _ | _ | id <;> rfl)
+    (by decide +kernel) (fun id _ h => by rcases id with _ | _ | _ | _ | _ | id <;> simp_all <;> rfl)
+    (fun σ _ k hk => ?_) (fun _ _ => rfl)
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+  rcases hk with rfl | rfl | rfl <;>
+    simp [cxEnv, WF.rnResult, WF.rnIO, WF.rnFn, WF.rnEffect, WF.rnVal,
+      WF.rnId_of_all σ 2 (by decide +kernel), WF.rnId_of_all σ 4 (by decide +kernel)]
+
 theorem cx_wellFormed : WellFormed (fun _ => false) (refHandles cxRefs) cxEnv cxFa :=
-  ⟨cx_prog, fun id _ arg v => cx_calls id arg v⟩
+  ⟨cx_prog, fun id _ arg v => cx_calls id arg v, cx_opaque⟩
 
 /-- CE-0001: `syncStepIdentity` fails for `IO#syncStep` with `G = SyncIO`. -/
 theorem syncStepIdentitySyncIO_refuted : ¬ syncStepIdentitySyncIO := by
