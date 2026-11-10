@@ -57,7 +57,7 @@ When `fa` cancels itself, the memo becomes `Finished(Right(canceled *> never))`.
 
 Ops `memoize`, `memoGet` ([format](../methodology/difftest-program-format.md)). Fixed cases `memoize.jsonl`: 150 agree, 3 of them `blocked` in both runners (CE-0030 in replay). Generated: see the counts below. The mirror makes model `Deferred` cells, so the replay glue now renumbers `Deferred` handles (`deferredH`) and memo handles (`memoH`).
 
-Depth run (`opcount.py`, seeds 1-3, 36,000 cases each, `tpl_memo` boosted): RESULT_PLACEHOLDER
+Depth run (`opcount.py`, seeds 1-3, 36,000 cases each, `tpl_memo` boosted): 108,000 cases, all agree; cases with `memoize` (and `memoGet`): 54,404 (seed 1: 18,141, seed 2: 18,165, seed 3: 18,098). Command: `opcount.py --seeds 1 2 3 --n 36000 --chunk 6000 --ops memoize memoGet --boost tpl_memo=100` (base weight now 0.4; the run used base 1.0 × 40, the same weights). Model bugs found by the difftest: none (the mirror agreed from the first run; the replay glue needed `Deferred` and memo handle renumbering).
 
 ## See Also
 
