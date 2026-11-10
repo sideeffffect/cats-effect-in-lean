@@ -46,3 +46,12 @@ Decisions after the racePair/sleep, enumerator/laws and syncStep reports:
 23. A property may use the single-fiber driver when the behaviour it states is single-fiber (for example `syncStep`). The statement must say so. The reviewer judges it.
 24. Phase 8 twin candidate: a failed `racePair` loser is never sent to `reportFailure`, but a failed unjoined `start` fiber is.
 25. Merged check: 3 seeds x 10,000 replay cases, 30,000 agree, 0 mismatch, 0 unsupported (all ops supported).
+
+Decisions after review batch 1 (`review/2026-11-10-review-batch-1.md`) and the CE-0002/CE-0003 refutations:
+
+26. CE-0001 property: remove external cancel from its schedules (the reviewer showed that a correct `syncStep` also refutes it). Cut its rows to those the witness uses.
+27. All properties quantify over programs Scala can express: a `WellFormed` predicate (received fiber handles only, no forged poll/cont/closure ids, only even user-function ids) or quantification through `Translate.tr` of difftest programs. This is a type invariant, so it is an allowed hypothesis.
+28. A row becomes `modelled` only through a proven or refuted entry. Open entries do not mark rows. The audit gets this extra check (a stricter gate).
+29. Auto-yield position (iteration counts) is not a CE promise. Default for law `Eqv`: allow a preemption at any run-loop iteration, which matches the multi-threaded runtime. Q3 in `QUESTIONS.md` records this.
+30. Mirrors of `syncStep`/SyncIO, `Resource` and `Queue` need difftest support before their rows pass review (method rule: difftest before properties).
+31. The two closure codecs (`Model/Codec.lean`, `Model/ValCodec.lean`) must become one. The merge put `ValCodec` in its own namespace as a stop-gap.

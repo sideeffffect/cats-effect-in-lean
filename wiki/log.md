@@ -100,3 +100,9 @@
 - Created: Outcome sets, Eqv and the IO laws; Updated: Kernel typeclasses model
 - Created: SyncIO and syncStep model; Updated: Bug history (CE-0001 refuted in Lean)
 - Updated: Project plan (status, decisions 22–25)
+
+## [2026-11-10] ingest | Review batch 1; Resource (CE-0002) and Queue/timeout (CE-0003) refuted in Lean
+- Updated: Agent workflow (review log)
+- Created: Resource model and CE-0002; Created: Queue and timeout model
+- Updated: Bug history (all 3 calibration bugs refuted in Lean)
+- Updated: Project plan (status, decisions 26–31)

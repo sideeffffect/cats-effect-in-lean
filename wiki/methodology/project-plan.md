@@ -47,6 +47,8 @@ Confidence in the phase order: 0.75 (same as the [lessons](lessons-for-cats-effe
 - Phase 4 started: 2 IO laws proven, 2 open (see Q3 in `QUESTIONS.md`).
 - Phase 5: CE-0001 refuted in Lean ([SyncIO and syncStep model](../cats-effect/syncio-and-syncstep-model.md)); CE-0002, CE-0003 next.
 - Decisions 22–25 (laws judged in isolation by default; single-fiber driver allowed when stated; `racePair` loser report twin is a Phase 8 candidate).
+- Phase 5: all 3 calibration bugs refuted in Lean and reproduced on v3.7.1 ([Resource model](../cats-effect/resource-model.md), [Queue model](../cats-effect/queue-model.md)).
+- Review batch 1: 3 FAITHFUL, 2 HOLLOW (CE-0001 property, `uncancelablePollIsIdentity` statement). Gate not passed yet. Fixes: decisions 26–31.
 - Phase 3 steps 1–2 (Scala runner) done: [Difftest program format v0](difftest-program-format.md). sbt is not in CI yet.
 - Later decisions: generator programs are well-typed (a `TypeError` is a generator bug); `Val` and `IO` stay separate until a combinator needs `IO` in a value.
 

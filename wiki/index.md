@@ -30,6 +30,8 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [Scheduler model (multi-fiber, replay)](cats-effect/scheduler-model.md) | Task-level replay scheduler: ready-list order, IOCont/Get/Cede/Start, _cancel/_join closures, callback race; 15 difftest cases agree with Scala | 2026-11-10 |
 | [Kernel typeclasses model](cats-effect/kernel-typeclasses-model.md) | MonadCancel/GenSpawn ops over abstract F; default-body mirrors; 33 laws as Props with Eqv parameter; IO twin table; unregistered default-instance lemmas | 2026-11-10 |
 | [SyncIO and syncStep model](cats-effect/syncio-and-syncstep-model.md) | SyncIO run loop and SyncStep.interpret (G = SyncIO) mirror; syncStepIdentitySyncIO refuted (CE-0001, reproducer case 4) | 2026-11-10 |
+| [Resource model and CE-0002](cats-effect/resource-model.md) | Resource ADT + allocatedCase mirror (F = IO), closure-id codec; resourceEvalPreservesUncancelable refuted (CE-0002, reproducer case C) | 2026-11-10 |
+| [Queue and timeout model](cats-effect/queue-model.md) | UnboundedAsyncQueue + IO#timeout/timeoutTo/never mirror; takeTimeoutNoLostElement refuted by the FIFO schedule (CE-0003) | 2026-11-10 |
 
 ## semantics
 
