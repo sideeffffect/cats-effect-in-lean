@@ -67,6 +67,7 @@ expect_fail missing_bug       "refuted, but no bug record is given"
 expect_fail missing_bug_file  "bug record \`bugs/no-such-file.yaml\` does not exist"
 expect_fail missing_row       "inventory row \`core.Fx.noSuchRow\` does not exist"
 expect_fail unnamed_modelled  "inventory row core.Fx.unnamed: status modelled, but no registry entry is named"
+expect_fail open_modelled     "inventory row core.Fx.addComm: status modelled, but no named registry entry is proven or refuted"
 expect_fail duplicate_id      "duplicate entry id fx.addZero"
 
 if [ "$fails" -ne 0 ]; then

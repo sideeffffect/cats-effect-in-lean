@@ -56,6 +56,9 @@ def cases : List (String × Audit.Config) := [
   ("missing_bug_file", config [addZero, { subAddCancel with bug := "bugs/no-such-file.yaml" }, addComm]),
   ("missing_row", config [{ addZero with rows := ["core.Fx.noSuchRow"] }, subAddCancel, addComm]),
   ("unnamed_modelled", config [addZero, subAddCancel, addComm] (csv := dir / "inventory-unnamed.csv")),
+  -- a `modelled` row that only an `open` entry names (decision 28)
+  ("open_modelled", config [addZero, subAddCancel, addComm]
+    (csv := dir / "inventory-open-modelled.csv")),
   ("duplicate_id", config [addZero, subAddCancel, addComm, addZero])
 ]
 

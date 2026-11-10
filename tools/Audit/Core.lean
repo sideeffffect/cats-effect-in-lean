@@ -145,7 +145,8 @@ def checkEntry (cfg : Config) (env : Environment) (e : Entry) : IO (List String)
         errs := errs ++ [s!"{who}: bug record `{b}` does not exist"]
   return errs
 
-/-- Cross-check registry entries and inventory rows. -/
+/-- Cross-check registry entries and inventory rows. A `modelled` row must name at least one
+entry that is `proven` or `refuted` (decision 28); `open` entries can name `todo` rows. -/
 def checkInventory (reg : List Entry) (rows : List Row) : List String := Id.run do
   let mut errs : List String := []
   let ids := rows.map (·.id)
@@ -156,6 +157,15 @@ def checkInventory (reg : List Entry) (rows : List Row) : List String := Id.run 
   for r in rows do
     if r.status == "modelled" && r.entries.isEmpty then
       errs := errs ++ [s!"inventory row {r.id}: status modelled, but no registry entry is named"]
+    -- Decision 28: only a settled (proven or refuted) entry makes a row `modelled`.
+    -- An `open` entry may name a `todo` row, but it does not count as progress.
+    let settled := r.entries.any fun name =>
+      match reg.find? (·.id == name) with
+      | some e => e.status == .proven || e.status == .refuted
+      | none => false
+    if r.status == "modelled" && !r.entries.isEmpty && !settled then
+      errs := errs ++ [s!"inventory row {r.id}: status modelled, but no named registry entry " ++
+        "is proven or refuted"]
     for name in r.entries do
       match reg.find? (·.id == name) with
       | none => errs := errs ++ [s!"inventory row {r.id}: registry entry `{name}` does not exist"]

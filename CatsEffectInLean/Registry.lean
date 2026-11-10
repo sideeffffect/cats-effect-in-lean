@@ -19,7 +19,9 @@ each entry mechanically:
 - for `refuted`, the type of `thm` is exactly `¬ prop`, and `bug` names an existing file;
 - `prop` and `thm` use only the axioms `propext`, `Classical.choice`, `Quot.sound`;
 - each row in `rows` is an id in `inventory/inventory.csv`, and each `modelled`
-  row there names an entry that lists it.
+  row there names an entry that lists it;
+- a `modelled` row names at least one `proven` or `refuted` entry (decision 28). An
+  `open` entry lists its rows, but they stay `todo`.
 
 Write names with double backticks (``` ``CatsEffectInLean.Props.foo ```).
 Lean then rejects a name that does not exist when this file compiles.

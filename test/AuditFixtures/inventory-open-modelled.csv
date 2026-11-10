@@ -1,0 +1,4 @@
+id,area,kind,file,line,status,reason,registry
+core.Fx.addZero,core,method,fixture/Fx.scala,1,modelled,,fx.addZero
+core.Fx.subAddCancel,core,method,fixture/Fx.scala,2,modelled,,fx.subAddCancel
+core.Fx.addComm,core,method,fixture/Fx.scala,3,modelled,,fx.addComm
