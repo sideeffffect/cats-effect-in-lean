@@ -111,3 +111,6 @@
 - Updated: Outcome sets and Eqv (WellFormed), SyncIO and syncStep model, Resource model, Queue model, Registry and audit
 - Updated: Difftest program format (v1), Differential testing (status, idpoll)
 - Updated: Project plan (status, decisions 32–34)
+
+## [2026-11-10] ingest | Review batch 2 (Phase 5 gate failed); decisions 35-39
+- Updated: Agent workflow (review log, fixed-twin rule), Project plan

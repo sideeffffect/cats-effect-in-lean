@@ -48,6 +48,10 @@ Subagents in git worktrees (`worktree-agent-<hex>`), one module each; merge gate
 - 2026-11-10, batch 1 ([review](../../review/2026-11-10-review-batch-1.md), [notes](../../raw/project-decisions/2026-11-10-review-batch-1-notes.md)): 5 registry entries. FAITHFUL: the two proven `MonadCancel` laws (low strength), `onCancelAssociatesOverUncancelableBoundary` (open, as a statement). HOLLOW: `uncancelablePollIsIdentity` (open; forged ids and iteration-count sensitivity of `Eqv`) and CE-0001 `syncStepIdentitySyncIO` (external cancel in the schedule makes `¬P` true for a correct `syncStep`; the bug itself is real).
 - 2026-11-10, batch 2 ([review](../../review/2026-11-10-review-batch-2.md), [notes](../../raw/project-decisions/2026-11-10-review-batch-2-notes.md)): 7 registry entries. FAITHFUL: the two proven laws (low strength), `onCancelAssociatesOverUncancelableBoundary` (open, statement), CE-0003 `takeTimeoutNoLostElement`. HOLLOW: `uncancelablePollIsIdentity` (open; `Eqv` sees iteration counts), CE-0001 (a fixed `syncStep` still refutes it: poll ids are observable in `WellFormed`, and `raiseError(fatal)` differs between `IO` and `SyncIO`), CE-0002 (the two sides differ by one iteration, so `¬P` holds for every implementation, also fix PR #4630). Phase 5 gate: FAIL.
 
+## Fixed-twin check for refutations (added 2026-11-10)
+
+A refutation is HOLLOW when a correct implementation also refutes the statement (review batch 2 found this twice: a model artifact made `¬P` true for every implementation). For each refutation, mirror the upstream fix or the `possible_fix` as a twin, and show on a bounded domain that the twin satisfies the property.
+
 ## See Also
 
 - [python-formalization](../precedents/python-formalization.md)

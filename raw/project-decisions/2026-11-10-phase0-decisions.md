@@ -61,3 +61,11 @@ Decisions after the review-1 fixes and difftest v1:
 32. A known model bug keeps CI red until the mirror is fixed. CI never passes `--allow-known-model-bugs` (that would weaken a gate). The idpoll bug was fixed the same day (`IO.applyPoll`).
 33. `Eqv` keeps the cut at root completion (as `IOApp` and CE's law-test `Eq[IO]`). Effects of child fibers after the root ends are not observed; leak and liveness properties state them separately.
 34. Next gate step: review batch 2 of all registry entries after the fixes. The Phase 5 gate passes only when the 3 calibration refutations are FAITHFUL.
+
+Decisions after review batch 2 (`review/2026-11-10-review-batch-2.md`; Phase 5 gate FAILED: CE-0001 and CE-0002 HOLLOW, CE-0003 FAITHFUL):
+
+35. A failed gate means: do not start Phase 6. Fixing the gate's rows is still Phase 5 work, so agents continue with the fixes.
+36. Do decision 29 now: `Eqv` gets a preemption choice at any run-loop iteration. Re-prove CE-0002 under it.
+37. `WellFormed`: poll values are opaque to user code (user code can only apply them), and user programs cannot build `UnmaskRunLoop _ 0 _`.
+38. The fatal-`raiseError` difference between the `IO` run loop (`IOFiber.scala:265-269`) and the `SyncIO` run loop (`SyncIO.scala:257-259`) is its own bug candidate (next id CE-0004). CE-0001 is stated for non-fatal errors only, and the ordinary-input rule then holds.
+39. New rule for every refutation: a "fixed twin" check. Mirror the upstream fix (or the `possible_fix`) as a twin and show, on a bounded domain, that the fixed twin satisfies the property. A refutation that the fixed twin also fails is HOLLOW.
