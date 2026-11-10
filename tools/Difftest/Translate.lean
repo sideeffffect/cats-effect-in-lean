@@ -4,6 +4,7 @@ import CatsEffectInLean.Model.Resource
 import CatsEffectInLean.Model.Timeout
 import CatsEffectInLean.Model.Race
 import CatsEffectInLean.Model.Bracket
+import CatsEffectInLean.Model.Memoize
 import CatsEffectInLean.Std.Queue
 
 /-!
@@ -92,6 +93,11 @@ inductive TraceEv where
   /-- Format v2: a `guarantee` (`op = 0`), `bracket` (1), `bracketCase` (2) or `bracketFull` (3)
   finalizer starts; `oc` for the last two. -/
   | finV2 (op : Nat) (tag : Nat) (oc : Option Val)
+  /-- Internal (not printed): `h.newDeferred` gives the `Deferred` with model cell id `d` its
+  handle (format v2: the `memoize` mirror makes model `Deferred` cells too). -/
+  | deferredH (d : Nat)
+  /-- Internal (not printed): `h.newMemo` gives the memo with state cell `r` its handle. -/
+  | memoH (r : Nat)
   deriving DecidableEq, Repr
 
 /-- A trace event as a model value, for `UserEffect.emit`. Tag first. -/
@@ -111,6 +117,8 @@ def TraceEv.toVal : TraceEv → Val
   | .queueH b => .pair (.nat 12) (.nat b)
   | .finV2 op tag oc => .pair (.nat 13) (.pair (.nat op) (.pair (.nat tag)
       (match oc with | some o => .some o | none => .none)))
+  | .deferredH d => .pair (.nat 14) (.nat d)
+  | .memoH r => .pair (.nat 15) (.nat r)
 
 /-- The inverse of `TraceEv.toVal`. -/
 def TraceEv.ofVal? : Val → Option TraceEv
@@ -129,6 +137,8 @@ def TraceEv.ofVal? : Val → Option TraceEv
   | .pair (.nat 12) (.nat b) => some (.queueH b)
   | .pair (.nat 13) (.pair (.nat op) (.pair (.nat tag) .none)) => some (.finV2 op tag none)
   | .pair (.nat 13) (.pair (.nat op) (.pair (.nat tag) (.some o))) => some (.finV2 op tag (some o))
+  | .pair (.nat 14) (.nat d) => some (.deferredH d)
+  | .pair (.nat 15) (.nat r) => some (.memoH r)
   | _ => none
 
 /-! ## Construction-time snapshot
@@ -455,6 +465,18 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
   | .bracketFull _ _ _ _, node, env, _ =>
     -- `IO.bracketFull(acquire)(use)(release)` (`IO.scala:1826-1830`)
     pure (Bracket.bracketFullIO (cloId node .bfAcq env) (cloId node .brUse env) (cloId node .brcRel env))
+  -- format v2 (track M): the mirror `Model/Memoize.lean`
+  | .memoize e, node, env, vw => do
+    -- `run(e).memoize.map(get => VMemo(h.newMemo(get)))` (`IO.scala:944-945`): `run(e)` is built
+    -- now; the source code captures the snapshot (`Env.srcIO` rebuilds it)
+    let _ ← tr R e (node + 1) env vw
+    pure (.map (Memoize.memoizeIO (.nat (Clo.encode { node, lam := .memoSrc, vals := snapVal vw :: env })))
+      (clo node .memoHandle []))
+  | .memoGet m, _, env, _ => do
+    -- `memoOf(⟦m⟧)`: the `get` itself
+    match Memoize.getOfVal? (← atomVal env m) with
+    | some io => pure io
+    | none => throw .typeError
 
 
 /-- `I_R(r)`: the `Resource` term of a resource node (`Interp.scala` `res`). The `IO` programs

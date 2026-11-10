@@ -147,3 +147,8 @@
 
 ## [2026-11-10] ingest | Track G merged with tracks R and D
 - Updated: guarantee and bracket model (merged difftest counts, weights, TwinChecks), Difftest program format (one format v2 section; 999998 fix of track D kept, track G Scala text fix dropped)
+
+## [2026-11-10] ingest | Phase 6 track M: memoize, CE-0030
+- Created: memoize model and CE-0030
+- Updated: Bug history (CE-0030, memoize issue history), Difftest program format (ops `memoize`, `memoGet`; `Deferred` and memo handle renumbering)
+- Raw: raw/cats-effect/2026-11-10-memoize-track-m-notes.md

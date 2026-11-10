@@ -57,6 +57,8 @@ final class Harness:
   def newDeferred(d: Deferred[IO, Val]): Int = synchronized { deferreds += d; deferreds.size - 1 }
   val queues = ArrayBuffer.empty[Queue[IO, Val]]
   def newQueue(q: Queue[IO, Val]): Int = synchronized { queues += q; queues.size - 1 }
+  val memos = ArrayBuffer.empty[IO[Val]]
+  def newMemo(g: IO[Val]): Int = synchronized { memos += g; memos.size - 1 }
   def newAsync(): Int = synchronized { asyncs += 1; asyncs - 1 }
 
 /** The error code of `java.util.concurrent.TimeoutException` (format v1). The value language has
@@ -131,6 +133,10 @@ final class Interp(h: Harness):
   private def queueOf(v: Val): Queue[IO, Val] = v match
     case VQueue(i) => h.queues(i)
     case _ => throw TypeError(s"not a queue handle: $v")
+
+  private def memoOf(v: Val): IO[Val] = v match
+    case VMemo(i) => h.memos(i)
+    case _ => throw TypeError(s"not a memo handle: $v")
 
   private def deferredOf(v: Val): (Int, Deferred[IO, Val]) = v match
     case VDeferred(i) => (i, h.deferreds(i))
@@ -279,6 +285,10 @@ final class Interp(h: Harness):
     case Prog.BracketFull(q, acq, x, use, y, rel, tag) =>
       IO.bracketFull[Val, Val](poll => run(acq, env + (q -> Bound.P(poll))))(a => run(use, env + (x -> Bound.V(a))))(
         caseRelease("bracketFull", x, y, rel, tag, env))
+
+    // ---- format v2 (Phase 6, track M): `IO#memoize` (IO.scala:944-945)
+    case Prog.Memoize(e) => run(e, env).memoize.map(get => VMemo(h.newMemo(get)))
+    case Prog.MemoGet(m) => memoOf(atom(m, env))
 
   /** `(a, oc) => ocVal(oc).flatMap(o => IO.delay(emit fin) *> run(rel, env + x + y).void)` (format v2). */
   private def caseRelease(op: String, x: String, y: String, rel: Prog, tag: Long, env: Env)

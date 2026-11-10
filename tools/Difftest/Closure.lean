@@ -207,6 +207,11 @@ inductive Lam where
   | brcFinThen
   /-- `bracketFull`: `poll => I(acq)`. -/
   | bfAcq
+  -- format v2 (track M): `memoize`
+  /-- `memoize`: source code of `I(e)` (built with the op). `vals = snap :: env`. -/
+  | memoSrc
+  /-- `memoize`: `get => VMemo(h.newMemo(get))`. -/
+  | memoHandle
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -221,7 +226,8 @@ def Lam.all : List Lam :=
    .raceSrcA, .raceSrcB, .raceK, .roK, .mkLeft, .mkRight, .pairK, .boK, .boK2, .boK3,
    .timeoutFb,
    .gSrcE, .gSrcFin, .gFinEmit, .gFinThen, .brAcqSrc, .brUse, .brRel, .brFinEmit, .brRelThen,
-   .brcRel, .brcFinK, .brcFinEmit, .brcFinThen, .bfAcq]
+   .brcRel, .brcFinK, .brcFinEmit, .brcFinThen, .bfAcq,
+   .memoSrc, .memoHandle]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?

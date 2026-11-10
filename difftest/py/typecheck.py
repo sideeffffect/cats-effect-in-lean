@@ -280,6 +280,13 @@ class Checker:
                 renv[p['y']] = ('val', ('outcome', t))
             self.prog(p['rel'], renv)
             return t
+        # ---- format v2 (track M)
+        if op == 'memoize':
+            return ('memo', self.prog(p['e'], env))
+        if op == 'memoGet':
+            a = f()
+            u(self.atom(p['m'], env), ('memo', a), "memoGet")
+            return a
         if op == 'syncStep':
             raise TypeErr("syncStep below the root")
         if op in RES_OPS:

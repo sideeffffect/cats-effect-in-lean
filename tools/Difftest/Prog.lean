@@ -163,6 +163,11 @@ inductive Prog where
   | bracketCase (acq use rel : Prog) (tag : Nat)
   /-- `IO.bracketFull(poll => I(acq))(x => I(use))((x, oc) => …)`; `acq` binds the poll. -/
   | bracketFull (acq use rel : Prog) (tag : Nat)
+  -- format v2 (Phase 6, track M)
+  /-- `I(e).memoize.map(get => VMemo(h.newMemo(get)))`. -/
+  | memoize (e : Prog)
+  /-- The `get` of a memo handle. -/
+  | memoGet (m : Atom)
   deriving DecidableEq, Repr
 
 /-- Number of nodes. Nodes are numbered in pre-order from 0; the children of a node with
@@ -172,7 +177,7 @@ def Prog.size : Prog → Nat
   | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k
   | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => 1 + e.size + k.size
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
-  | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => 1 + e.size
+  | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e => 1 + e.size
   | .guarantee e k _ => 1 + e.size + k.size
   | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => 1 + a.size + u.size + r.size
   | _ => 1
@@ -187,7 +192,7 @@ def Prog.at? : Prog → Nat → Option Prog
     | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k =>
       if i < e.size then e.at? i else k.at? (i - e.size)
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
-    | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => e.at? i
+    | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e => e.at? i
     | .guarantee e k _ => if i < e.size then e.at? i else k.at? (i - e.size)
     | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
       if i < a.size then a.at? i
@@ -215,6 +220,7 @@ def Prog.opName : Prog → String
   | .bothOutcome .. => "bothOutcome"
   | .guarantee .. => "guarantee" | .bracket .. => "bracket" | .bracketCase .. => "bracketCase"
   | .bracketFull .. => "bracketFull"
+  | .memoize .. => "memoize" | .memoGet .. => "memoGet"
 
 /-- The two sub-programs of a v2 combinator (`race`, `raceOutcome`, `both`, `bothOutcome`). -/
 def Prog.combArgs? : Prog → Option (Prog × Prog)
@@ -228,7 +234,7 @@ def Prog.ops (p : Prog) : List String :=
     | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k
     | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => e.ops ++ k.ops
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
-    | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => e.ops
+    | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e => e.ops
     | .guarantee e k _ => e.ops ++ k.ops
     | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => a.ops ++ u.ops ++ r.ops
     | _ => []
@@ -248,6 +254,8 @@ def Prog.eagerReads : Prog → Bool
   -- format v2: `guarantee` builds `e` and `fin` at once; `bracket`/`bracketCase` build `acq`
   | .guarantee e k _ => e.eagerReads || k.eagerReads
   | .bracket a _ _ _ | .bracketCase a _ _ _ => a.eagerReads
+  -- format v2 (track M): `memoize` builds `e` at once
+  | .memoize e => e.eagerReads
   | _ => false
 
 /-- The resource restriction: no `IO` program inside a resource node reads state when it is
@@ -260,7 +268,7 @@ def Prog.resViewFree : Prog → Bool
   | .racePair e k | .case _ e k | .timeoutTo e k _ | .rFlatMap e k => e.resViewFree && k.resViewFree
   | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => e.resViewFree && k.resViewFree
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
-  | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e => e.resViewFree
+  | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .memoize e => e.resViewFree
   | .guarantee e k _ => e.resViewFree && k.resViewFree
   | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
     a.resViewFree && u.resViewFree && r.resViewFree
@@ -304,7 +312,7 @@ def v1Ops : List String :=
    "allocatedCase", "rPure", "rEval", "rMake", "rFlatMap"]
 /-- Ops of format v2 (`Json.V2Ops`): a decode error in a v0 or v1 case. -/
 def v2Ops : List String := ["race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket",
-  "bracketCase", "bracketFull"]
+  "bracketCase", "bracketFull", "memoize", "memoGet"]
 /-- The resource ops. -/
 def resOps : List String := ["rPure", "rEval", "rMake", "rFlatMap"]
 /-- `Json.DefaultMaxSteps` in `Json.scala`. -/
@@ -371,7 +379,7 @@ partial def decodeVal (j : Json) : D Val := do
   | "succeeded" => only ["v"]; pure (.ocSucceeded (← decodeVal (← field o "v" t)))
   | "errored" => only ["code"]; pure (.ocErrored (userErr (← nat (← field o "code" t) "errored.code")))
   | "canceled" => only []; pure .ocCanceled
-  | "fiber" | "ref" | "deferred" | "queue" => fail s!"value '{t}': handles cannot be literals"
+  | "fiber" | "ref" | "deferred" | "queue" | "memo" => fail s!"value '{t}': handles cannot be literals"
   | _ => fail s!"unknown value tag '{t}'"
 
 /-- The kind of a bound name. -/
@@ -549,6 +557,9 @@ partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .i
     only ["poll", "acq", "x", "use", "y", "rel", "tag"]; let q ← s "poll"; let x ← s "x"; let y ← s "y"
     pure (.bracketFull (← p "acq" ((q, .p) :: scope)) (← p "use" ((x, .v) :: scope))
       (← p "rel" ((y, .v) :: (x, .v) :: scope)) (← tag))
+  -- format v2 (track M)
+  | "memoize" => only ["e"]; pure (.memoize (← p "e"))
+  | "memoGet" => only ["m"]; .memoGet <$> a "m"
   | _ => fail s!"unknown op '{op}'"
 
 /-- Reject a v2 op anywhere in `j` (a case of format v0 or v1; `Json.checkNoV2`). -/

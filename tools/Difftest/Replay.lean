@@ -76,6 +76,10 @@ structure RS where
   refOf : Std.HashMap Nat Nat := {}
   /-- Model buffer cell id → Scala queue handle. -/
   qOf : Std.HashMap Nat Nat := {}
+  /-- Model `Deferred` cell id → Scala `Deferred` handle (format v2). -/
+  dOf : Std.HashMap Nat Nat := {}
+  /-- Model memo state cell id → Scala memo handle (format v2). -/
+  mOf : Std.HashMap Nat Nat := {}
   /-- `ContState` id → async id. -/
   asyncIds : Std.HashMap Nat Nat := {}
   /-- `ContState` id → indices of `later` callbacks not yet in the ready list. -/
@@ -127,6 +131,10 @@ def absorb (r : RS) : RS := Id.run do
       if !r.refOf.contains i then r := { r with refOf := r.refOf.insert i r.refOf.size }
     | some (.queueH b) =>
       if !r.qOf.contains b then r := { r with qOf := r.qOf.insert b r.qOf.size }
+    | some (.deferredH d) =>
+      if !r.dOf.contains d then r := { r with dOf := r.dOf.insert d r.dOf.size }
+    | some (.memoH m) =>
+      if !r.mOf.contains m then r := { r with mOf := r.mOf.insert m r.mOf.size }
     | some e => r := { r with trace := r.trace.push e }
     | none => r := r.setErr s!"unknown emitted value {repr v}"
   r := { r with outLen := n }
@@ -237,6 +245,8 @@ structure Ren where
   hOf : Std.HashMap Nat Nat
   refOf : Std.HashMap Nat Nat := {}
   qOf : Std.HashMap Nat Nat := {}
+  dOf : Std.HashMap Nat Nat := {}
+  mOf : Std.HashMap Nat Nat := {}
 
 instance : Coe (Std.HashMap Nat Nat) Ren := ⟨fun h => { hOf := h }⟩
 
@@ -245,7 +255,11 @@ def valJson (hOf : Ren) : Val → Json
   | .unit => Json.mkObj [("t", "unit")]
   | .bool b => Json.mkObj [("t", "bool"), ("v", .bool b)]
   | .nat n => Json.mkObj [("t", "nat"), ("v", toJson n)]
-  | .pair a b => Json.mkObj [("t", "pair"), ("a", valJson hOf a), ("b", valJson hOf b)]
+  | .pair a b =>
+    -- a memo handle is the `get` code of the mirror (`Memoize.Eff.get`)
+    match CatsEffectInLean.Model.Memoize.Eff.ofVal? (.pair a b) with
+    | some (.get m _ _) => Json.mkObj [("t", "memo"), ("id", toJson (hOf.mOf.getD m (1000000 + m)))]
+    | _ => Json.mkObj [("t", "pair"), ("a", valJson hOf a), ("b", valJson hOf b)]
   | .left v => Json.mkObj [("t", "left"), ("v", valJson hOf v)]
   | .right v => Json.mkObj [("t", "right"), ("v", valJson hOf v)]
   | .ocSucceeded v => Json.mkObj [("t", "succeeded"), ("v", valJson hOf v)]
@@ -256,7 +270,7 @@ def valJson (hOf : Ren) : Val → Json
     match hOf.qOf.get? i with
     | some q => Json.mkObj [("t", "queue"), ("id", toJson q)]
     | none => Json.mkObj [("t", "ref"), ("id", toJson (hOf.refOf.getD i (1000000 + i)))]
-  | .deferred i => Json.mkObj [("t", "deferred"), ("id", toJson i)]
+  | .deferred i => Json.mkObj [("t", "deferred"), ("id", toJson (hOf.dOf.getD i (1000000 + i)))]
   | v => Json.mkObj [("t", .str s!"model:{(repr v).pretty}")]
 
 /-- The `op` of a format v2 `fin` event. -/
@@ -273,7 +287,8 @@ def evJson (hOf : Ren) : TraceEv → Json
   | .set ref v =>
     Json.mkObj [("ev", "set"), ("ref", toJson (hOf.refOf.getD ref (1000000 + ref))), ("v", valJson hOf v)]
   | .complete d v ok =>
-    Json.mkObj [("ev", "complete"), ("deferred", toJson d), ("v", valJson hOf v), ("ok", .bool ok)]
+    Json.mkObj [("ev", "complete"), ("deferred", toJson (hOf.dOf.getD d (1000000 + d))), ("v", valJson hOf v),
+      ("ok", .bool ok)]
   | .asyncReg a => Json.mkObj [("ev", "asyncReg"), ("async", toJson a)]
   | .cb a i => Json.mkObj [("ev", "cb"), ("async", toJson a), ("i", toJson i)]
   | .finV2 op tag none =>
@@ -323,7 +338,7 @@ def replayFields (cfg : Config) (p : Prog) (choices : List Choice) (maxSteps : N
   let env := userEnv p
   let r0 : RS := { s := s0, cs := choices }
   let r := RS.run cfg env maxSteps (replayFuel cfg maxSteps) r0.absorb
-  let hOf : Ren := { hOf := r.hOf, refOf := r.refOf, qOf := r.qOf }
+  let hOf : Ren := { hOf := r.hOf, refOf := r.refOf, qOf := r.qOf, dOf := r.dOf, mOf := r.mOf }
   let outcome := match r.glueErr with
     | some m => Json.mkObj [("t", .str s!"glue:{m}")]
     | none => summaryJson hOf r.s.summary

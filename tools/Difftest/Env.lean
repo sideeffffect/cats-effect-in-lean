@@ -274,7 +274,11 @@ def runClo (R : Resource.REnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DR
     | _ => DResult.harness
   | .deferredNewThunk, _ =>
     { base := { effects := [.allocDeferred], out := .ret (.deferred vw.deferreds.length) } }
-  | .deferredHandle, _ => ret arg
+  -- `h.newDeferred(d)` counts `Deferred`s in creation order (the `memoize` mirror makes cells too)
+  | .deferredHandle, _ =>
+    match arg with
+    | .deferred i => ret arg [.deferredH i]
+    | _ => DResult.harness
   | .dcThen, .deferredComplete _ _ => prog (.delay (clo node .dcEmit (arg :: env)))
   | .dcEmit, .deferredComplete d v =>
     match env with
@@ -348,6 +352,11 @@ def runClo (R : Resource.REnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DR
       ofTr ((fun io => IO.map io (clo node .voidFn [])) <$>
         tr R rel (node + 1 + acq.size + use.size) env0 (snapView snap))
     | [] => DResult.harness
+  -- format v2 (track M): `get => VMemo(h.newMemo(get))`
+  | .memoHandle, _ =>
+    match Memoize.Eff.ofVal? arg with
+    | some (.get r _ _) => ret arg [.memoH r]
+    | _ => DResult.harness
   | _, _ => DResult.harness
 
 /-- The difftest closures of program `p`, with trace and failure lists. -/
@@ -383,6 +392,11 @@ def srcIO (p : Prog) (srcV : Val) : IO :=
       | .ok io => io
       | .error e => .error e.toErr
     | none => .error harnessErr
+  -- format v2 (track M): `I(e)` of a `memoize` node
+  | some { node, lam := .memoSrc, vals := snap :: env } =>
+    match p.at? node with
+    | some (.memoize e) => build e (node + 1) env snap
+    | _ => .error harnessErr
   | some { node, lam := .raceSrcB, vals := snap :: env } =>
     match (p.at? node).bind Prog.combArgs? with
     | some (a, b) =>
@@ -419,6 +433,7 @@ inductive LibClo where
   | resource (c : Resource.Clo)
   | race (l : Race.RLam)
   | bracket (l : Bracket.BLam)
+  | memoize (l : Memoize.MLam)
 
 /-- The library closure of an id that is not a difftest closure id, if exactly one mirror
 decodes it. -/
@@ -435,6 +450,7 @@ def libClo? (id : Nat) : Option LibClo :=
           else if k == Timeout.ns then (Timeout.TLam.ofFields tag fs).map .timeout
           else if k == Race.ns then (Race.RLam.ofFields tag fs).map .race
           else if k == Bracket.ns then (Bracket.BLam.ofFields tag fs).map .bracket
+          else if k == Memoize.ns then (Memoize.MLam.ofFields tag fs).map .memoize
           else none
         | none => none
       match res, lib with
@@ -466,6 +482,7 @@ def dispatch (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
     | some (.resource c) => Resource.cloCall (renvOf p) c arg vw
     | some (.race l) => Race.call (srcIO p) l arg vw
     | some (.bracket l) => Bracket.call (dispatchDt p) (bracketSrcIO p) l arg vw
+    | some (.memoize l) => Memoize.call (srcIO p) l arg vw
     | none => DResult.harness.toUser
 
 /-- The `Model.UserEnv` of program `p` (see module doc). -/

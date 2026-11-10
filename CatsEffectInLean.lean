@@ -57,3 +57,6 @@ import CatsEffectInLean.Model.Bracket
 import CatsEffectInLean.Model.BracketExamples
 import CatsEffectInLean.Props.Phase6.Bracket
 import CatsEffectInLean.Proofs.Phase6.BracketFullTwin
+import CatsEffectInLean.Model.Memoize
+import CatsEffectInLean.Props.Phase6.Memoize
+import CatsEffectInLean.Proofs.Phase6.MemoizeStuck
