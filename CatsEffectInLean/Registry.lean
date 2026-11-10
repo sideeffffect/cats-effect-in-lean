@@ -109,8 +109,11 @@ def registry : List Entry := [
     bug := some "bugs/CE-0002.yaml"
     note := "Scaladoc Resource.scala:986-987 'Preserves interruptibility of fa': for \
       fa = IO.uncancelable(_ => g), Resource.eval(fa).allocatedCase <-> \
-      IO.uncancelable(_ => Resource.eval(fa).allocatedCase) (Eqv, F = IO). Counterexample \
-      g = IO.canceled: Canceled vs Succeeded = case C of reproducers/CE-0002." },
+      IO.uncancelable(_ => Resource.eval(fa).allocatedCase) (EqvP: all schedules with a \
+      preemption at any run-loop iteration, F = IO). Counterexample g = IO.canceled: exact \
+      outcome sets {Canceled} vs {Succeeded} = case C of reproducers/CE-0002. Fixed twin \
+      (PR #4630, allocatedCaseFixed) satisfies the equation for a family of g, also with \
+      child fibers (decision 39)." },
   { id := "std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement"
     rows := ["std.Queue.unbounded", "std.Queue.UnboundedAsyncQueue.unsafeOffer",
       "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.take",

@@ -91,10 +91,18 @@ lean:
   statement: >
     For all user code and all g, with fa = IO.uncancelable(_ => g):
     Resource.eval(fa).allocatedCase <-> IO.uncancelable(_ => Resource.eval(fa).allocatedCase)
-    (Eqv: same observations over all fuel values and all pick schedules; F = IO).
+    (EqvP: same observations over all fuel values and all schedules of the preemptive
+    scheduler, which can preempt a fiber between any two run-loop iterations, decisions 29
+    and 36; F = IO).
   counterexample: >
-    g = IO.canceled (reproducer case C). Left side: Canceled for every fuel and schedule
-    (7 micro-steps). Right side: Succeeded((), _ => F.unit) at fuel 8.
+    g = IO.canceled (reproducer case C). Exact outcome sets with preemption: left side
+    {Canceled}, right side {Succeeded((), _ => F.unit)} (exploreP, 26 and 34 reachable
+    states, closed under every choice).
+  fixed_twin: >
+    Decision 39. CatsEffectInLean/Model/ResourceFixed.lean mirrors allocatedCase of PR #4630
+    (series/3.7.x). CatsEffectInLean/Proofs/Calibration/ResourceEvalFixed.lean: for a family
+    of g (also g that start, join or cancel child fibers), the fixed twin satisfies the
+    EqvP equation over all schedules with preemption, and v3.7.1 fails it for g = IO.canceled.
   model: >
     CatsEffectInLean/Model/Resource.lean (Res ADT, allocatedCase loop, make);
     CatsEffectInLean/Model/ResourceExamples.lean (case B agrees with the reproducer;
