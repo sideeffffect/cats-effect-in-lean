@@ -44,3 +44,5 @@
 ## [2026-11-10] ingest | Proof hygiene and agent tooling for Lean (this repo's CI setup)
 
 ## [2026-11-10] lint | 0 issues found, 0 auto-fixed
+
+## [2026-11-10] ingest | Proof hygiene and agent tooling for Lean (CI first runs, module-name gotcha)

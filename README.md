@@ -50,5 +50,5 @@ python3 scripts/check_wiki.py         # wiki links and index
 ## CI
 
 - `.github/workflows/ci.yml` (each push to `main` and each PR): `lake build --wfail`, leanchecker, axiom audit, `lake check`, forbidden-construct check, wiki lint.
-- `.github/workflows/paranoid.yml` (weekly and on demand): nanoda (no `sorry`) and `lake check --paranoid` (all bundled independent kernels).
+- `.github/workflows/paranoid.yml` (weekly and on demand): `lake check --paranoid` (Lean paranoid kernel, lean4lean, nanoda, con-leche, con-ron).
 - Dependabot keeps the pinned GitHub Actions up to date.

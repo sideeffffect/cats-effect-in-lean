@@ -1,6 +1,6 @@
 name: Paranoid kernel check
 
-# Slow (more than 2 minutes even on the empty scaffold), so it runs weekly
+# Slow (about 4 minutes locally even on the empty scaffold), so it runs weekly
 # and on demand, not on every push.
 on:
   schedule:
@@ -18,11 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # nanoda: an independent type checker written in Rust. No sorry allowed.
+      # Installs the toolchain and builds. We do not use lean-action's own
+      # `nanoda` input: it guesses the module name from the package name
+      # ("cats-effect-in-lean") and lean4export panics. `lake check --paranoid`
+      # below runs the bundled nanoda kernel anyway.
       - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
-        with:
-          nanoda: "true"
-          nanoda-allow-sorry: "false"
 
       - name: Allow bwrap user namespaces
         run: |
@@ -30,8 +30,9 @@ jobs:
           sudo apt-get install -y -qq bubblewrap
           sudo scripts/setup-bwrap-apparmor.sh
 
-      # Replays the build through all bundled kernels
-      # (lean4lean, nanoda, con-leche, con-ron, leanchecker-paranoid).
+      # Replays the build through all bundled kernels: Lean paranoid kernel,
+      # lean4lean, nanoda, con-leche, con-ron, and the default kernel.
+      # Fails on any axiom outside propext, Classical.choice, Quot.sound.
       - name: lake check --paranoid
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
