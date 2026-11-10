@@ -69,7 +69,7 @@ jobs:
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
           lake build --wfail Difftest cediff
-          lake exe cediff difftest/cases/basic.jsonl difftest/cases/sched.jsonl difftest/cases/deferred.jsonl difftest/cases/racesleep.jsonl difftest/cases/syncstep.jsonl difftest/cases/resource.jsonl difftest/cases/queue.jsonl > /dev/null
+          lake exe cediff difftest/cases/basic.jsonl difftest/cases/sched.jsonl difftest/cases/deferred.jsonl difftest/cases/racesleep.jsonl difftest/cases/syncstep.jsonl difftest/cases/resource.jsonl difftest/cases/queue.jsonl difftest/cases/preempt.jsonl > /dev/null
 
   # Scala side of the difftest: runner tests against cats-effect 3.7.1 (golden files,
   # rerun determinism, hand-checked facts). See difftest/README.md.
@@ -97,8 +97,9 @@ jobs:
         run: python3 difftest/py/selftest.py
       # Lean model against Scala, replay mode (wiki/methodology/differential-testing.md):
       # every case that the model can run must agree on all compared fields. Testcontrol-mode
-      # cases are `unsupported` (decision 15); all replay ops run except `timeoutTo` (format v1:
-      # not mirrored). Any mismatch, harness error or hang fails the job. A mismatch of a known
+      # cases are `unsupported` (decision 15); all replay ops run (also `timeoutTo` since track D).
+      # 25% of generated cases have small IORuntimeConfig thresholds (auto-yield = a `preempt`
+      # choice, gate caveat 3). Each format-v1 op must be in >= 150 agreeing cases. Any mismatch, harness error or hang fails the job. A mismatch of a known
       # model bug fails the job too (decision 32: CI never passes --allow-known-model-bugs). Installs only the Lean
       # toolchain; `cediff` needs the model, not the proofs.
       - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
@@ -108,9 +109,9 @@ jobs:
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
           lake build --wfail cediff
-          python3 difftest/py/drive.py check --lean "lake exe cediff" difftest/cases/basic.jsonl difftest/cases/sched.jsonl difftest/cases/deferred.jsonl difftest/cases/racesleep.jsonl difftest/cases/syncstep.jsonl difftest/cases/resource.jsonl difftest/cases/queue.jsonl
+          python3 difftest/py/drive.py check --lean "lake exe cediff" difftest/cases/basic.jsonl difftest/cases/sched.jsonl difftest/cases/deferred.jsonl difftest/cases/racesleep.jsonl difftest/cases/syncstep.jsonl difftest/cases/resource.jsonl difftest/cases/queue.jsonl difftest/cases/preempt.jsonl
           python3 difftest/py/drive.py corpus --lean "lake exe cediff"
-          python3 difftest/py/drive.py run --seeds 1 2 3 --n 2000 --modes replay --lean "lake exe cediff"
+          python3 difftest/py/drive.py run --seeds 1 2 3 --n 2000 --modes replay --lean "lake exe cediff" --min-v1-agree 150
 
   twin-checks:
     # CE-0002 fixed-twin checks (lean_lib TwinChecks; decision 39). One `decide +kernel` needs up

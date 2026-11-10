@@ -33,12 +33,14 @@ SEED = 20261110
 COV_N = 600
 COV_MIN = 0.035
 COV_MAX_STUCK = 0.25
-# Static coverage of the format v1 ops (the 5 x 10,000 target is 5 %; timeoutTo is unsupported
-# on the Lean side, so it gets less)
+# Static coverage of the format v1 ops (the 5 x 10,000 target is 5 %). timeoutTo runs on the
+# model since track D (weight 0.35 -> 1.2), so it has the same minimum.
 V1_OPS = ('syncStep', 'timeout', 'timeoutTo', 'queueNew', 'queueOffer', 'queueTake', 'queueTryTake',
           'allocatedCase', 'rPure', 'rEval', 'rMake', 'rFlatMap')
 V1_MIN = 0.03
-V1_MIN_TIMEOUTTO = 0.005
+V1_MIN_TIMEOUTTO = 0.03
+# Share of cases with small IORuntimeConfig thresholds (`runtime`, preempt coverage; 25 %)
+RUNTIME_MIN = 0.15
 
 
 def check(cond, msg):
@@ -85,6 +87,8 @@ def main():
     v1cov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V1_OPS}
     low = {op: f for op, f in v1cov.items() if f < (V1_MIN_TIMEOUTTO if op == 'timeoutTo' else V1_MIN)}
     check(not low, f"each format v1 op in >= {V1_MIN:.0%} of {N} cases (timeoutTo {V1_MIN_TIMEOUTTO:.1%}) {low}")
+    rt = sum(1 for c in a if 'runtime' in c) / N
+    check(rt >= RUNTIME_MIN, f"small runtime thresholds in {rt:.0%} >= {RUNTIME_MIN:.0%} of {N} cases")
 
     # 3 + 4. Scala runs: no generator bug, deterministic
     tcs = [gen.to_testcontrol(c, t) for c in a[:N // 2] for t in (1, 2)]

@@ -453,7 +453,12 @@ def cmd_run(a):
                                             'v1_op_agree': op_agree}, indent=1))
     bad = bins['generator-bug'] + bins['harness'] + bins['hang']
     known = 0 if a.allow_known_model_bugs else bins['known-model-bug']
-    return 1 if bad or (a.lean and (bins['mismatch'] or known)) else 0
+    few = []
+    if a.lean and a.min_v1_agree:
+        few = [op for op in V1_OPS if sum(op_agree.get(op, {}).values()) < a.min_v1_agree]
+        if few:
+            print(f"  FAIL: fewer than {a.min_v1_agree} agreeing cases for format-v1 ops: {few}")
+    return 1 if bad or few or (a.lean and (bins['mismatch'] or known)) else 0
 
 
 def cmd_shrink(a):
@@ -746,7 +751,9 @@ def main(argv=None):
     r.add_argument('--max-shrink', type=int, default=5)
     r.add_argument('--json')
     r.add_argument('--allow-known-model-bugs', action='store_true',
-                   help='do not fail on the bin known-model-bug (it is still printed); CI uses it, the corpus pins each known bug')
+                   help='do not fail on the bin known-model-bug (it is still printed); CI never uses it (decision 32)')
+    r.add_argument('--min-v1-agree', type=int, default=0,
+                   help='fail if a format-v1 op is in fewer agreeing cases (needs --lean)')
 
     c = sub.add_parser('scala-check')
     c.add_argument('--seeds', type=int, nargs='+', default=[1, 2, 3])
