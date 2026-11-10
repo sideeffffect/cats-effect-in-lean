@@ -1,5 +1,6 @@
 import Difftest.Env
 import CatsEffectInLean.Model.Sched
+import CatsEffectInLean.Model.SyncStep
 import Std.Data.HashMap
 
 /-!
@@ -30,6 +31,13 @@ micro-step and keeps the parts of the Scala output that the model does not hold:
 * `failures`: user `reportFailure` calls (emitted as `TraceEv.failure`) and runtime ones
   (`Model.TraceEv.reportFailure`). Inside one micro-step, runtime ones come last: after a runtime
   `reportFailure` (`done`, `cancelationLoopFailureK`) the iteration runs no more user code.
+* `Ref` and queue handles (format v1). The queue mirror keeps its state in model `Ref` cells, so
+  a model cell id is not the Scala `Ref` handle. The `refH` and `queueH` events (emitted when
+  Scala calls `h.newRef` / `h.newQueue`) give the handles in creation order. A `Val.ref` prints
+  as a queue if its cell is a queue buffer, else as the `Ref` handle of the cell.
+* Root `syncStep` (format v1): `syncStepInit` runs the `SyncIO` part (`SyncStep.steppedRest`)
+  before the scheduler starts; the run starts on the heap it left (its emitted events come
+  first in the trace).
 
 This is test glue, not model logic. It never changes the model state.
 -/
@@ -64,6 +72,10 @@ structure RS where
   hids : Array Nat := #[0]
   /-- Model fiber id → handle. -/
   hOf : Std.HashMap Nat Nat := ({} : Std.HashMap Nat Nat).insert 0 0
+  /-- Model `Ref` cell id → Scala `Ref` handle. -/
+  refOf : Std.HashMap Nat Nat := {}
+  /-- Model buffer cell id → Scala queue handle. -/
+  qOf : Std.HashMap Nat Nat := {}
   /-- `ContState` id → async id. -/
   asyncIds : Std.HashMap Nat Nat := {}
   /-- `ContState` id → indices of `later` callbacks not yet in the ready list. -/
@@ -75,8 +87,10 @@ structure RS where
   /-- A glue error (an event or a ready list that the glue cannot read). -/
   glueErr : Option String := none
 
-/-- The Scala text of a `reportFailure` argument (`ScriptedEC.reportFailure`). -/
+/-- The Scala text of a `reportFailure` argument (`ScriptedEC.reportFailure`). A
+`TimeoutException` prints without its message (format v1; the model does not keep it). -/
 def errText (e : Err) : String :=
+  if e == Timeout.timeoutErr then "TimeoutException" else
   match userCode? e with
   | some c => s!"UserError: UserError({c})"
   | none => if e == typeErr then "TypeError: ?" else s!"ModelError: code {e.code}"
@@ -109,6 +123,10 @@ def absorb (r : RS) : RS := Id.run do
     | some (.cbLater st i) =>
       r := { r with later := r.later.insert st ((r.later.getD st []) ++ [i]) }
     | some (.failure e) => r := { r with failures := r.failures.push (errText e) }
+    | some (.refH i) =>
+      if !r.refOf.contains i then r := { r with refOf := r.refOf.insert i r.refOf.size }
+    | some (.queueH b) =>
+      if !r.qOf.contains b then r := { r with qOf := r.qOf.insert b r.qOf.size }
     | some e => r := { r with trace := r.trace.push e }
     | none => r := r.setErr s!"unknown emitted value {repr v}"
   r := { r with outLen := n }
@@ -214,8 +232,16 @@ def errJson (e : Err) : Json :=
   | some c => Json.mkObj [("t", "errored"), ("code", toJson c)]
   | none => Json.mkObj [("t", "errored"), ("exn", .str (errText e))]
 
-/-- A value (`Json.encodeVal`); fiber ids become handles. -/
-def valJson (hOf : Std.HashMap Nat Nat) : Val → Json
+/-- The handle tables of a run: fibers, `Ref`s, queues (model id → Scala handle). -/
+structure Ren where
+  hOf : Std.HashMap Nat Nat
+  refOf : Std.HashMap Nat Nat := {}
+  qOf : Std.HashMap Nat Nat := {}
+
+instance : Coe (Std.HashMap Nat Nat) Ren := ⟨fun h => { hOf := h }⟩
+
+/-- A value (`Json.encodeVal`); fiber, `Ref` and queue ids become handles. -/
+def valJson (hOf : Ren) : Val → Json
   | .unit => Json.mkObj [("t", "unit")]
   | .bool b => Json.mkObj [("t", "bool"), ("v", .bool b)]
   | .nat n => Json.mkObj [("t", "nat"), ("v", toJson n)]
@@ -225,19 +251,23 @@ def valJson (hOf : Std.HashMap Nat Nat) : Val → Json
   | .ocSucceeded v => Json.mkObj [("t", "succeeded"), ("v", valJson hOf v)]
   | .ocErrored e => errJson e
   | .ocCanceled => Json.mkObj [("t", "canceled")]
-  | .fiber i => Json.mkObj [("t", "fiber"), ("id", toJson (hOf.getD i (1000000 + i)))]
-  | .ref i => Json.mkObj [("t", "ref"), ("id", toJson i)]
+  | .fiber i => Json.mkObj [("t", "fiber"), ("id", toJson (hOf.hOf.getD i (1000000 + i)))]
+  | .ref i =>
+    match hOf.qOf.get? i with
+    | some q => Json.mkObj [("t", "queue"), ("id", toJson q)]
+    | none => Json.mkObj [("t", "ref"), ("id", toJson (hOf.refOf.getD i (1000000 + i)))]
   | .deferred i => Json.mkObj [("t", "deferred"), ("id", toJson i)]
   | v => Json.mkObj [("t", .str s!"model:{(repr v).pretty}")]
 
 /-- A trace event (`Interp.scala` `ev`). -/
-def evJson (hOf : Std.HashMap Nat Nat) : TraceEv → Json
+def evJson (hOf : Ren) : TraceEv → Json
   | .call fn arg => Json.mkObj [("ev", "call"), ("fn", toJson fn), ("arg", valJson hOf arg)]
   | .finOnCancel tag => Json.mkObj [("ev", "fin"), ("op", "onCancel"), ("tag", toJson tag)]
   | .finAsync tag => Json.mkObj [("ev", "fin"), ("op", "async"), ("tag", toJson tag)]
   | .finGuaranteeCase tag oc =>
     Json.mkObj [("ev", "fin"), ("op", "guaranteeCase"), ("tag", toJson tag), ("oc", valJson hOf oc)]
-  | .set ref v => Json.mkObj [("ev", "set"), ("ref", toJson ref), ("v", valJson hOf v)]
+  | .set ref v =>
+    Json.mkObj [("ev", "set"), ("ref", toJson (hOf.refOf.getD ref (1000000 + ref))), ("v", valJson hOf v)]
   | .complete d v ok =>
     Json.mkObj [("ev", "complete"), ("deferred", toJson d), ("v", valJson hOf v), ("ok", .bool ok)]
   | .asyncReg a => Json.mkObj [("ev", "asyncReg"), ("async", toJson a)]
@@ -246,7 +276,7 @@ def evJson (hOf : Std.HashMap Nat Nat) : TraceEv → Json
 
 /-- The outcome of a run. A model result that is not a Cats Effect result prints as
 `{"t":"model:…"}`, so the driver sees a mismatch. -/
-def summaryJson (hOf : Std.HashMap Nat Nat) : Summary → Json
+def summaryJson (hOf : Ren) : Summary → Json
   | .done (.succeeded v) => Json.mkObj [("t", "succeeded"), ("v", valJson hOf v)]
   | .done (.errored e) => errJson e
   | .done .canceled => Json.mkObj [("t", "canceled")]
@@ -262,15 +292,30 @@ def comparedFields : List String :=
 plus the unwinding at its start. -/
 def replayFuel (cfg : Config) (maxSteps : Nat) : Nat := (maxSteps + 1) * (cfg.autoYieldThreshold + 64) + 64
 
-/-- Run case `tc` with root term `io` in replay mode; the output fields (without `v`, `id`,
-`mode`). -/
-def replayFields (p : Prog) (choices : List Choice) (maxSteps : Nat) (io : IO) :
+/-- Fuel of the `SyncIO` part of a root `syncStep` (`interpret` calls and `SyncIO` run-loop
+iterations). Out of fuel prints a `model:` outcome, so the driver sees a mismatch. -/
+def syncStepFuel : Nat := 1000000
+
+/-- The start state of a root `syncStep e limit` (`Interp.root`): run
+`I(e).syncStep(limit).unsafeRunSync()` on the caller thread (`SyncStep.steppedRest`, no fiber
+yet, no `Ref` cells), then the selected `IO` is the root fiber on the heap that the `SyncIO` part
+left. `.error s`: the model stops in the `SyncIO` part (`outOfFuel`, `aborted`). -/
+def syncStepInit (p : Prog) (io : IO) (limit : Nat) : Except Summary (Sched RMask) :=
+  match SyncStep.steppedRest counterMaskModel (userEnv p) syncStepFuel io (limit : Int) [] with
+  | .error s => .error s
+  | .ok (rest, h) =>
+    let s := Sched.init counterMaskModel rest
+    .ok { s with heap := { h with ready := h.ready ++ s.heap.ready } }
+
+/-- Run case `tc` from the scheduler state `s0` (the root term on `Sched.init`, or
+`syncStepInit`) in replay mode; the output fields (without `v`, `id`, `mode`). -/
+def replayFields (p : Prog) (choices : List Choice) (maxSteps : Nat) (s0 : Sched RMask) :
     List (String × Json) :=
   let cfg : Config := {}
   let env := userEnv p
-  let r0 : RS := { s := Sched.init counterMaskModel io, cs := choices }
+  let r0 : RS := { s := s0, cs := choices }
   let r := RS.run cfg env maxSteps (replayFuel cfg maxSteps) r0.absorb
-  let hOf := r.hOf
+  let hOf : Ren := { hOf := r.hOf, refOf := r.refOf, qOf := r.qOf }
   let outcome := match r.glueErr with
     | some m => Json.mkObj [("t", .str s!"glue:{m}")]
     | none => summaryJson hOf r.s.summary

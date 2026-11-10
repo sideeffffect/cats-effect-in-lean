@@ -1,4 +1,4 @@
-"""Scope and type checker for difftest programs (format v0).
+"""Scope and type checker for difftest programs (format v1; v0 is a subset).
 
 Spec: wiki/methodology/difftest-program-format.md.
 A program that passes `check_prog` cannot raise `TypeError` in the Scala runner
@@ -6,7 +6,8 @@ A program that passes `check_prog` cannot raise `TypeError` in the Scala runner
 and the shrinker uses it to keep only well-typed candidates.
 
 Types are tuples: ('unit',), ('bool',), ('nat',), ('pair', A, B), ('either', A, B),
-('outcome', A), ('fiber', A), ('ref', A), ('deferred', A). Type variables are ('?', n).
+('outcome', A), ('fiber', A), ('ref', A), ('deferred', A), ('queue', A) and, for resource
+positions only, ('resource', A). Type variables are ('?', n).
 Inference is first-order unification (no let-polymorphism; a variable has one type).
 """
 
@@ -235,13 +236,73 @@ class Checker:
             env2 = {**env, p['a']: ('val', a)}
             env2[p['b']] = ('val', b)
             return self.prog(p['k'], env2)
+        # ---- format v1
+        if op == 'timeout':
+            _ms(p)
+            return self.prog(p['e'], env)
+        if op == 'timeoutTo':
+            _ms(p)
+            t = self.prog(p['e'], env)
+            u(t, self.prog(p['fb'], env), "timeoutTo fallback")
+            return t
+        if op == 'queueNew':
+            return ('queue', f())
+        if op == 'queueOffer':
+            u(self.atom(p['q'], env), ('queue', self.atom(p['v'], env)), "queueOffer")
+            return ('unit',)
+        if op == 'queueTake':
+            a = f()
+            u(self.atom(p['q'], env), ('queue', a), "queueTake")
+            return a
+        if op == 'queueTryTake':
+            a = f()
+            u(self.atom(p['q'], env), ('queue', a), "queueTryTake")
+            return ('either', ('unit',), a)
+        if op == 'allocatedCase':
+            return self.res(p['res'], env)
+        if op == 'syncStep':
+            raise TypeErr("syncStep below the root")
+        if op in RES_OPS:
+            raise TypeErr(f"resource op {op!r} at a program position")
         raise TypeErr(f"unknown op {op!r}")
+
+    def res(self, r, env):
+        """The value type A of a resource node (`Resource[IO, A]`)."""
+        op = r.get('op')
+        if op == 'rPure':
+            return self.atom(r['v'], env)
+        if op == 'rEval':
+            return self.prog(r['e'], env)
+        if op == 'rMake':
+            a = self.prog(r['acq'], env)
+            self.prog(r['rel'], {**env, r['x']: ('val', a)})
+            return a
+        if op == 'rFlatMap':
+            a = self.res(r['res'], env)
+            return self.res(r['k'], {**env, r['x']: ('val', a)})
+        raise TypeErr(f"op {op!r} at a resource position")
+
+
+RES_OPS = ('rPure', 'rEval', 'rMake', 'rFlatMap')
+MAX_LIMIT = 2**31 - 1
+
+
+def _ms(p):
+    ms = p.get('ms')
+    if not isinstance(ms, int) or isinstance(ms, bool) or not 0 <= ms <= MAX_NAT:
+        raise TypeErr(f"ms {ms!r}")
 
 
 def check_prog(p):
-    """Return the (zonked) type of a closed program, or raise TypeErr."""
+    """Return the (zonked) type of a closed program, or raise TypeErr. `syncStep` is allowed
+    only at the root."""
     c = Checker()
     try:
+        if p.get('op') == 'syncStep':
+            lim = p['limit']
+            if not isinstance(lim, int) or isinstance(lim, bool) or not 0 <= lim <= MAX_LIMIT:
+                raise TypeErr(f"syncStep limit {lim!r}")
+            return c.zonk(c.prog(p['e'], {}))
         return c.zonk(c.prog(p, {}))
     except (KeyError, TypeError, AttributeError) as e:
         raise TypeErr(f"malformed program: {e!r}") from e

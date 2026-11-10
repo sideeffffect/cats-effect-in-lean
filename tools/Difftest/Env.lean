@@ -3,12 +3,18 @@ import Difftest.Translate
 /-!
 # The user environment of a difftest program
 
-`denv p id arg vw` runs closure `id` (`Clo.decode?`) of program `p` with the view `vw` (the
+`denv p id arg vw` runs closure `id` (`cloOfId?`) of program `p` with the view `vw` (the
 `Ref` cells, fiber outcomes and `Deferred` cells that user code sees). It mirrors the Scala
 lambda named in `Lam`. `userEnv p` is the `Model.UserEnv`: trace events and `reportFailure`
 calls become `UserEffect.emit` effects (`TraceEv.toVal`), before the other effects
 (`DResult.toUser`). The `async` registration puts its events in `effects` itself, in Scala
 order.
+
+Format v1: `userEnv p` also runs the closures of the library mirrors (`dispatch`): queue
+(`Std.Queue.call`, `Codec.nsFn` namespace 1), timeout (`Timeout.call`, namespace 2, with the
+source builder `srcIO`) and `Resource` (`Resource.cloCall`, odd ids). A difftest closure id is
+never one of them (`Difftest/Closure.lean`). An id that decodes as both a `Resource` closure and
+a queue or timeout closure is a harness error (never seen; a check, not an assumption).
 -/
 
 namespace Difftest
@@ -32,8 +38,9 @@ def DResult.toUser (r : DResult) : UserResult :=
   { r.base with effects := r.trace.map (.emit ∘ TraceEv.toVal)
       ++ r.failures.map (.emit ∘ TraceEv.toVal ∘ .failure) ++ r.base.effects }
 
-/-- Run closure `c` (made by node `n` of the program) on `arg` with view `vw`. -/
-def runClo (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
+/-- Run closure `c` (made by node `n` of the program) on `arg` with view `vw`. `R`: the meaning
+of the resource codes of the program (`renvOf`). -/
+def runClo (R : Resource.REnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
   let refs := vw.refs
   let node := c.node
   let env := c.vals
@@ -42,13 +49,13 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
     match atomVal env a with
     | .ok v => callUser fn v
     | .error e => ofTr (.error e)
-  | .bindK, .bind e k => ofTr (tr k (node + 1 + e.size) (arg :: env) vw)
-  | .seqK, .seq e k => ofTr (tr k (node + 1 + e.size) env vw)
+  | .bindK, .bind e k => ofTr (tr R k (node + 1 + e.size) (arg :: env) vw)
+  | .seqK, .seq e k => ofTr (tr R k (node + 1 + e.size) env vw)
   | .mapFn, .map _ fn => callUser fn arg
   | .hewK, .handleErrorWith e k =>
     match arg with
     | .err t => match userCode? t with
-      | some c => ofTr (tr k (node + 1 + e.size) (.nat c :: env) vw)
+      | some c => ofTr (tr R k (node + 1 + e.size) (.nat c :: env) vw)
       | none => prog (.error t)
     | _ => DResult.harness
   | .attemptMap, .attempt _ =>
@@ -58,13 +65,13 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
       | some c => ret (.left (.nat c))
       | none => { base := { out := .throw t } }
     | _ => DResult.harness
-  | .uncBody, .uncancelable body => ofTr (tr body (node + 1) (arg :: env) vw)
+  | .uncBody, .uncancelable body => ofTr (tr R body (node + 1) (arg :: env) vw)
   | .ocFinEmit, .onCancel _ _ tag => ret .unit [.finOnCancel tag]
   | .ocFinThen, .onCancel e fin _ =>
     -- `run(fin)` was built with the `onCancel` term: use the captured snapshot
     match env with
     | snap :: env0 =>
-      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr fin (node + 1 + e.size) env0 (snapView snap))
+      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr R fin (node + 1 + e.size) env0 (snapView snap))
     | [] => DResult.harness
   | .voidFn, _ => ret .unit
   | .asUnit, _ => ret .unit
@@ -78,9 +85,9 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
     match arg, env with
     | .poll m f, snap :: env =>
       ofTr ((fun ie =>
-        let finalized := IO.onCancel (.unmaskRunLoop ie m f) (gcFinalizer node env .ocCanceled)
+        let finalized := IO.onCancel (pollTerm ie m f) (gcFinalizer node env .ocCanceled)
         IO.flatMap (.handleErrorWith finalized (clo node .gcOnError env))
-          (clo node .gcTap env)) <$> tr e (node + 1) env (snapView snap))
+          (clo node .gcTap env)) <$> tr R e (node + 1) env (snapView snap))
     | _, _ => DResult.harness
   | .gcOnError, .guaranteeCase _ _ _ =>
     -- `pf = { case e => finalizer(Outcome.errored(e)).reportError }` (`IO.scala:526-528`),
@@ -121,7 +128,7 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
     -- Scala builds `run(fin)` in `o => IO.delay(emit) *> run(fin).void`, one run-loop iteration
     -- before this closure runs (`FlatMap` over `Delay`, `IOFiber.scala:420-437`); nothing else
     -- runs in between, so the current view is the same.
-    ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr fin (node + 1 + e.size) env vw)
+    ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr R fin (node + 1 + e.size) env vw)
   | .fiberHandle, _ =>
     match arg with
     | .fiber i => ret (.fiber i) [.handle i]
@@ -207,7 +214,7 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
   | .asyncFinThen, .asyncFin _ fin _ =>
     match env with
     | snap :: env0 =>
-      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr fin (node + 1) env0 (snapView snap))
+      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr R fin (node + 1) env0 (snapView snap))
     | [] => DResult.harness
   | .neverBody, _ => prog (.uncancelable (clo node .neverUnc [arg]))
   | .neverUnc, _ =>
@@ -224,9 +231,12 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
     match atomVal env a with
     | .ok v => { base := { effects := [.allocRef v], out := .ret (.ref refs.length) } }
     | .error e => ofTr (.error e)
-  -- `h.newRef(r)` counts `Ref`s in creation order: the same number as the cell id, because the
-  -- thunk and this function run in one run-loop iteration (`Map` over `Delay`, `IOFiber.scala:349-368`)
-  | .refHandle, _ => ret arg
+  -- `h.newRef(r)` counts `Ref`s in creation order. Format v1: queue cells share the model cell
+  -- ids, so the `refH` event gives the handle; the glue renumbers.
+  | .refHandle, _ =>
+    match arg with
+    | .ref i => ret arg [.refH i]
+    | _ => DResult.harness
   | .deferredNewThunk, _ =>
     { base := { effects := [.allocDeferred], out := .ret (.deferred vw.deferreds.length) } }
   | .deferredHandle, _ => ret arg
@@ -238,30 +248,106 @@ def runClo (c : Clo) (n : Prog) (arg : Val) (vw : View) : DResult :=
       | .ok (.deferred i), .ok x => ret (.bool ok) [.complete i x ok]
       | _, _ => ofTr (.error .typeError)
     | _ => DResult.harness
+  -- format v1
+  -- `q => VQueue(h.newQueue(q))`: the queue is the cell id of its buffer (`Std.Queue.newIO`)
+  | .queueHandle, _ =>
+    match arg with
+    | .ref b => ret arg [.queueH b]
+    | _ => DResult.harness
+  -- `{ case Some(v) => VRight(v); case None => VLeft(VUnit) }`
+  | .optEither, _ =>
+    match arg with
+    | .some v => ret (.right v)
+    | .none => ret (.left .unit)
+    | _ => DResult.harness
+  -- `_._1` of `(B, ExitCase => F[Unit])`
+  | .allocFst, _ =>
+    match arg with
+    | .pair b _ => ret b
+    | _ => DResult.harness
   | _, _ => DResult.harness
 
-/-- The closures of program `p`, with trace and failure lists. -/
+/-- The difftest closures of program `p`, with trace and failure lists. -/
 def denv (p : Prog) (id : Nat) (arg : Val) (vw : View) : DResult :=
-  match Clo.decode? id with
+  match cloOfId? id with
   | none => DResult.harness
   | some c => match p.at? c.node with
     | none => DResult.harness
-    | some n => runClo c n arg vw
+    | some n => runClo (renvOf p) c n arg vw
+
+/-- The source builder of `Timeout.call`: `src` is the code of a `timeoutSrc` closure value;
+the result is `I(e)` of that `timeout` node, built with the snapshot. -/
+def srcIO (p : Prog) (src : Nat) : IO :=
+  match Clo.decode? src with
+  | some { node, lam := .timeoutSrc, vals := snap :: env } =>
+    match p.at? node with
+    | some (.timeout e _) =>
+      match tr (renvOf p) e (node + 1) env (snapView snap) with
+      | .ok io => io
+      | .error e => .error e.toErr
+    | _ => .error harnessErr
+  | _ => .error harnessErr
+
+/-- A library closure of the mirrors. -/
+inductive LibClo where
+  | queue (l : CatsEffectInLean.Std.Queue.QLam)
+  | timeout (l : Timeout.TLam)
+  | resource (c : Resource.Clo)
+
+/-- The library closure of an id that is not a difftest closure id, if exactly one mirror
+decodes it. -/
+def libClo? (id : Nat) : Option LibClo :=
+  let res : Option LibClo :=
+    if id % 2 == 1 then
+      match CatsEffectInLean.Model.ValCodec.natToVal (id / 2) with
+      | some v => (Resource.Clo.ofVal v).map .resource
+      | none => none
+    else none
+  let lib : Option LibClo :=
+    match CatsEffectInLean.Model.Codec.decList id with
+    | 1 :: l => (CatsEffectInLean.Std.Queue.QLam.ofList l).map .queue
+    | 2 :: l => (Timeout.TLam.ofList l).map .timeout
+    | _ => none
+  match res, lib with
+  | some c, none => some c
+  | none, some c => some c
+  | _, _ => none
+
+/-- All closures of program `p`: difftest closures (with trace and failures) and library
+closures (module doc). -/
+def dispatch (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
+  match cloOfId? id with
+  | some c =>
+    match p.at? c.node with
+    | some n => (runClo (renvOf p) c n arg vw).toUser
+    | none => DResult.harness.toUser
+  | none =>
+    match libClo? id with
+    | some (.queue l) => CatsEffectInLean.Std.Queue.call l arg vw
+    | some (.timeout l) => Timeout.call (srcIO p) l arg vw
+    | some (.resource c) => Resource.cloCall (renvOf p) c arg vw
+    | none => DResult.harness.toUser
 
 /-- The `Model.UserEnv` of program `p` (see module doc). -/
 def userEnv (p : Prog) : UserEnv where
-  call id arg refs := (denv p id arg { refs }).toUser
-  callV id arg vw := (denv p id arg vw).toUser
+  call id arg refs := dispatch p id arg { refs }
+  callV id arg vw := dispatch p id arg vw
 
 /-- The view of the root term: only the root fiber, not completed. -/
 def rootView : View := { outcomes := [none] }
 
-/-- The root term `I(p)` (`Interp.apply`: `run(p, Map.empty)`). -/
-def rootTerm (p : Prog) : Except TrErr IO := tr p 0 [] rootView
+/-- The root term `I(p)` (`Interp.apply`: `run(p, Map.empty)`). For a root `syncStep e`, the
+term `I(e)` (node 1) that `syncStep` steps. -/
+def rootTerm (p : Prog) : Except TrErr IO :=
+  match p with
+  | .syncStep e _ => tr (renvOf p) e 1 [] rootView
+  | _ => tr (renvOf p) p 0 [] rootView
 
-/-- Ops in `p` that the model cannot express yet (no repeats, in first-use order). -/
+/-- Ops in `p` that the model cannot express yet (no repeats, in first-use order), and the
+resource restriction (`Prog.resViewFree`). -/
 def unsupportedOps (p : Prog) : List String :=
-  (p.ops.filter fun o => unsupportedReason o != "unknown").eraseDups
+  (p.ops.filter fun o => unsupportedReason o != "unknown").eraseDups ++
+    (if p.resViewFree then [] else ["resource-reads-state"])
 
 end Difftest
 

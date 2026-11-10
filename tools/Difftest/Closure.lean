@@ -1,5 +1,6 @@
 import Difftest.Prog
 import CatsEffectInLean.Model.Syntax
+import CatsEffectInLean.Model.Codec
 
 /-!
 # Closures as `Fn.user` ids
@@ -18,6 +19,12 @@ A closure is `⟨node, lam, vals⟩`:
 
 `Clo.encode` packs this into one `Nat` without loss; `Clo.decode?` unpacks it. Only `Nat`
 `div`/`mod`/`mul`/`add` are used, which the kernel evaluates with GMP.
+
+Format v1 programs also run library closures of the mirrors: `Std.Queue` (`Codec.nsFn` namespace
+1), `Model.Timeout` (namespace 2) and `Model.Resource` (odd ids `2 * valToNat c + 1`). So a
+difftest closure id is `Codec.nsFn 3 [Clo.encode c]` = `encList [3, Clo.encode c]`. This id is
+even (`encList (h :: t)` is even for an odd head `h`), so it is never a `Resource` id, and its
+namespace 3 is never a queue or timeout id. `Difftest/Env.lean` (`dispatch`) checks the rest.
 -/
 
 namespace Difftest
@@ -129,6 +136,22 @@ inductive Lam where
   | dcThen
   /-- `deferredComplete`: the thunk `{ emit complete; VBool(ok) }`. `vals = bool ok :: env`. -/
   | dcEmit
+  -- format v1
+  /-- `queueNew`: `q => VQueue(h.newQueue(q))`. -/
+  | queueHandle
+  /-- `queueTryTake`: `{ case Some(v) => VRight(v); case None => VLeft(VUnit) }`. -/
+  | optEither
+  /-- `allocatedCase`: `_._1`. -/
+  | allocFst
+  /-- `timeout`: not a lambda. The source code `src` of `Timeout.timeoutIO src ms`: the
+  program `I(e)`, built when the `timeout` term is built. `vals = snap :: env`. -/
+  | timeoutSrc
+  /-- `rFlatMap`: `v => I_R(k)[x := v]` (the `REnv.bind` code). `vals = env`. -/
+  | resBind
+  /-- `rMake`: the acquire `I(acq)` (the `REnv.acquire` code). `vals = env`. -/
+  | resAcquire
+  /-- `rMake`: `a => I(rel)[x := a].void` (the `REnv.release` code). `vals = env`. -/
+  | resRelease
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -139,7 +162,7 @@ def Lam.all : List Lam :=
    .rpRight, .refGetThunk, .refSetThunk, .refSetThen, .refSetEmit, .refModifyThunk, .asyncEc,
    .asyncBody, .asyncUnc, .asyncReg, .asyncSel, .asyncFinEmit, .asyncFinThen, .neverBody,
    .neverUnc, .neverSel, .refNewThunk, .refHandle, .deferredNewThunk, .deferredHandle, .dcThen,
-   .dcEmit]
+   .dcEmit, .queueHandle, .optEither, .allocFst, .timeoutSrc, .resBind, .resAcquire, .resRelease]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?
@@ -275,8 +298,17 @@ def Clo.decode? (id : Nat) : Option Clo := do
     if rest.isEmpty then pure { node, lam, vals } else none
   | _ => none
 
-/-- The `Fn` of a closure. -/
-def Clo.fn (c : Clo) : Fn := .user c.encode
+/-- The `Codec.nsFn` namespace of the difftest closures. -/
+def cloNs : Nat := 3
+
+/-- The `Fn` of a closure: `nsFn 3 [Clo.encode c]` (module doc). -/
+def Clo.fn (c : Clo) : Fn := CatsEffectInLean.Model.Codec.nsFn cloNs [c.encode]
+
+/-- The closure of a `Fn.user` id, if the id is a difftest closure id. -/
+def cloOfId? (id : Nat) : Option Clo :=
+  match CatsEffectInLean.Model.Codec.decList id with
+  | [3, e] => Clo.decode? e
+  | _ => none
 
 /-- Shorthand: `Fn` of lambda `lam` at node `node` with captured `vals`. -/
 def clo (node : Nat) (lam : Lam) (vals : List Val) : Fn := Clo.fn { node, lam, vals }

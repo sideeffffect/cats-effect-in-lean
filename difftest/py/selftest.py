@@ -7,6 +7,7 @@ Checks:
 3. Generated cases are well-typed, and the Scala runner gives no decode error, no
    non-UserError error (TypeError, decision 8), and no hang.
 4. Scala replay and testcontrol runs are deterministic (each case twice, same line).
+   Each format v1 op occurs in enough generated cases (static count).
 5. Driver with a fake Lean side (mock_lean.py): bins, shrinking, corpus save and rerun.
 6. The regression corpus (difftest/corpus/) still gives the stored Scala results.
 7. Run-event coverage (coverage.py, decision 17): each key event in at least COV_MIN of
@@ -32,6 +33,12 @@ SEED = 20261110
 COV_N = 600
 COV_MIN = 0.035
 COV_MAX_STUCK = 0.25
+# Static coverage of the format v1 ops (the 5 x 10,000 target is 5 %; timeoutTo is unsupported
+# on the Lean side, so it gets less)
+V1_OPS = ('syncStep', 'timeout', 'timeoutTo', 'queueNew', 'queueOffer', 'queueTake', 'queueTryTake',
+          'allocatedCase', 'rPure', 'rEval', 'rMake', 'rFlatMap')
+V1_MIN = 0.03
+V1_MIN_TIMEOUTTO = 0.005
 
 
 def check(cond, msg):
@@ -43,7 +50,8 @@ def check(cond, msg):
 def main():
     t0 = time.time()
     # 1. type checker
-    basic = [json.loads(x) for x in (drive.REPO / 'difftest/cases/basic.jsonl').read_text().splitlines() if x.strip()]
+    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue')
+             for x in (drive.REPO / f'difftest/cases/{f}.jsonl').read_text().splitlines() if x.strip()]
     check(all(well_typed(c['prog']) for c in basic), f"type checker accepts all {len(basic)} golden cases")
     N1 = {'t': 'nat', 'v': 1}
     bad = [
@@ -53,6 +61,13 @@ def main():
         {'op': 'bind', 'x': 'r', 'e': {'op': 'refNew', 'v': N1}, 'k': {'op': 'refModify', 'r': {'t': 'var', 'x': 'r'}, 'fn': 0}},
         {'op': 'case', 'on': N1, 'l': 'a', 'lk': {'op': 'cede'}, 'r': 'b', 'rk': {'op': 'cede'}},
         {'op': 'async', 'cbs': [{'when': 'sync', 'ok': N1}, {'when': 'later', 'ok': {'t': 'unit'}}]},
+        # format v1: syncStep only at the root; resource ops only at resource positions
+        {'op': 'seq', 'ps': [{'op': 'syncStep', 'e': {'op': 'cede'}, 'limit': 1}]},
+        {'op': 'rPure', 'v': N1},
+        {'op': 'allocatedCase', 'res': {'op': 'cede'}},
+        {'op': 'bind', 'x': 'q', 'e': {'op': 'queueNew'}, 'k': {'op': 'seq', 'ps': [
+            {'op': 'queueOffer', 'q': {'t': 'var', 'x': 'q'}, 'v': N1},
+            {'op': 'queueOffer', 'q': {'t': 'var', 'x': 'q'}, 'v': {'t': 'unit'}}]}},
     ]
     for p in bad:
         try:
@@ -67,6 +82,9 @@ def main():
     b = gen.gen_cases(SEED, N)
     check([gen.dumps(c) for c in a] == [gen.dumps(c) for c in b], "generator is deterministic")
     check(gen.dumps(gen.gen_case(SEED, N // 2)) == gen.dumps(a[N // 2]), "case i does not depend on N")
+    v1cov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V1_OPS}
+    low = {op: f for op, f in v1cov.items() if f < (V1_MIN_TIMEOUTTO if op == 'timeoutTo' else V1_MIN)}
+    check(not low, f"each format v1 op in >= {V1_MIN:.0%} of {N} cases (timeoutTo {V1_MIN_TIMEOUTTO:.1%}) {low}")
 
     # 3 + 4. Scala runs: no generator bug, deterministic
     tcs = [gen.to_testcontrol(c, t) for c in a[:N // 2] for t in (1, 2)]

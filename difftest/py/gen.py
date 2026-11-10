@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seeded generator of difftest cases (format v0, JSON lines).
+"""Seeded generator of difftest cases (format v1, JSON lines; v0 is a subset).
 
 Spec of the format: wiki/methodology/difftest-program-format.md.
 Design notes: wiki/methodology/differential-testing.md ("Generator").
@@ -11,6 +11,11 @@ Design notes: wiki/methodology/differential-testing.md ("Generator").
   async callbacks (0/1/2/3 calls, sync/later, with a finalizer), external cancel choices.
 - Long-lived scenarios (decision 17, `tpl_scenario`): the root stays alive, so cancels and child
   steps really run. Run-event coverage: coverage.py.
+- Format v1 (decision 30): a root `syncStep` (`CONFIG['p_syncstep']`), `timeout`/`timeoutTo`
+  around any program, `Queue.unbounded` ops (`tpl_queue`: producer/consumer, `take.timeout`, the
+  CE-0003 shape), and `allocatedCase` of `Resource` trees (`g_res`). Programs inside resource
+  nodes see no fiber or `Deferred` variables of the outer scope: the Lean `Resource` mirror builds
+  them without a heap view (`Prog.resViewFree` in tools/Difftest/Prog.lean).
 
 Usage:
   gen.py --seed 1 --n 1000 [--max-size 40] [--mode replay|testcontrol] [--out FILE]
@@ -23,13 +28,14 @@ import sys
 
 from typecheck import check_prog
 
-FORMAT_VERSION = 0
+FORMAT_VERSION = 1
+MAX_LIMIT = 2**31 - 1  # Int.MaxValue: the largest syncStep limit
 
 # Region markers: `delay fn1 arg nat M` with M = MARK_BASE + kind * MARK_KIND + 2 * id + exit.
 # They only add `call` trace events. coverage.py reads them to see what ran (decision 17).
 MARK_BASE = 7_700_000_000
 MARK_KIND = 1_000_000
-MARK_UNC, MARK_FIN, MARK_ESC_POLL_FIN, MARK_JOIN = 1, 2, 3, 4
+MARK_UNC, MARK_FIN, MARK_ESC_POLL_FIN, MARK_JOIN, MARK_REL = 1, 2, 3, 4, 5
 
 UNIT, BOOL, NAT = ('unit',), ('bool',), ('nat',)
 
@@ -40,6 +46,7 @@ def outcome(a): return ('outcome', a)
 def fiber(a): return ('fiber', a)
 def ref(a): return ('ref', a)
 def deferred(a): return ('deferred', a)
+def queue(a): return ('queue', a)
 
 
 def race_type(a, b):
@@ -71,6 +78,10 @@ WEIGHTS = {
     'handle_boost': 2.5, 'tpl_ref': 1.5,
     'tpl_scenario': 3,  # parent + long-lived child + cancel (decision 17); see tpl_scenario
     'fn_raise': 0.4,  # relative weight of user function 3 (raise) in delay/map; others 1
+    # format v1 (decision 30)
+    'timeout': 1.2, 'timeoutTo': 0.35, 'allocatedCase': 2.2,
+    'queueNew': 2, 'queueOffer': 3, 'queueTake': 3, 'queueTryTake': 6, 'tpl_queue': 2.2, 'tpl_resource': 1,
+    'res_pure': 2.5, 'res_eval': 2.5, 'res_make': 3.5, 'res_flatMap': 12,
 }
 
 # Other knobs (probabilities and ranges).
@@ -89,6 +100,9 @@ CONFIG = {
     'p_cancel_marker': 0.5,    # a generated `cancel f` gets a `delay fn1 f` marker before it
     'p_fifo_bias': 0.7,        # root scenario: choice list with mostly FIFO picks
     'p_hint_cancel': 0.95,     # use the scenario hint for external cancel choices
+    # format v1
+    'p_syncstep': 0.09,        # the root is `syncStep(prog, limit)`
+    'p_queue_type': 0.1,       # bind_type gives a queue type
 }
 
 
@@ -157,7 +171,8 @@ class Gen:
         return self.pick([(2, UNIT), (3, NAT), (1, BOOL), (0.7, pair(NAT, NAT)), (0.7, either(NAT, NAT)), (0.7, either(NAT, a)),
                           (0.5, outcome(a)), (3, fiber(a)), (2, ref(self.pick([(3, NAT), (1, a)]))),
                           (1.5, deferred(self.pick([(2, NAT), (1, UNIT), (1, a)]))),
-                          (0.4, race_type(self.small_type(), self.small_type()))])
+                          (0.4, race_type(self.small_type(), self.small_type())),
+                          (self.c['p_queue_type'] * 25, queue(self.pick([(3, NAT), (1, a)])))])
 
     def literal(self, t):
         k = t[0]
@@ -294,6 +309,9 @@ class Gen:
             opts.append((w['refNew'], lambda: {'op': 'refNew', 'v': self.atom(t[1], env)}))
         if t[0] == 'deferred':
             opts.append((w['deferredNew'], lambda: {'op': 'deferredNew'}))
+        if t[0] == 'queue':
+            opts.append((w['queueNew'], lambda: {'op': 'queueNew'}))
+        opts += self.queue_opts(t, env)
         rg = self.vars_of(env, lambda u: u == ref(t))
         if rg:
             opts.append((w['refGet'] * hb, lambda: {'op': 'refGet', 'r': {'t': 'var', 'x': self.r.choice(rg)}}))
@@ -321,6 +339,27 @@ class Gen:
             opts += self.composite_opts(t, env, size, ctx)
 
         return self.pick(opts)()
+
+    def queue_opts(self, t, env):
+        """Queue ops of type t on the queues in scope (format v1)."""
+        w, hb = self.w, self.w['handle_boost']
+        opts = []
+        qs = self.vars_of(env, lambda u: u[0] == 'queue')
+        if t == UNIT:
+            qo = [x for x in qs if self.atom_possible(env[x][1][1], env)]
+            if qo:
+                def g_offer():
+                    x = self.r.choice(qo)
+                    return {'op': 'queueOffer', 'q': {'t': 'var', 'x': x}, 'v': self.atom(env[x][1][1], env)}
+                opts.append((w['queueOffer'] * hb, g_offer))
+        qt = [x for x in qs if env[x][1][1] == t]
+        if qt:
+            opts.append((w['queueTake'] * hb, lambda: {'op': 'queueTake', 'q': {'t': 'var', 'x': self.r.choice(qt)}}))
+        if t[0] == 'either' and t[1] == UNIT:
+            qtt = [x for x in qs if env[x][1][1] == t[2]]
+            if qtt:
+                opts.append((w['queueTryTake'] * hb, lambda: {'op': 'queueTryTake', 'q': {'t': 'var', 'x': self.r.choice(qtt)}}))
+        return opts
 
     def child_ctx(self, ctx):
         c = dict(ctx)
@@ -383,7 +422,10 @@ class Gen:
             n = self.pick([(4, 2), (2, 3), (1, 4)])
             parts = self.split_size(size, n)
             dfd = 3 if self.vars_of(env, lambda u: u[0] == 'deferred') else 0
-            ps = [self.prog(self.pick([(6, UNIT), (1, self.small_type()), (dfd, BOOL)]), env, s, cc) for s in parts[:-1]]
+            qs = self.vars_of(env, lambda u: u[0] == 'queue')
+            qtt = either(UNIT, env[self.r.choice(qs)][1][1]) if qs else UNIT
+            ps = [self.prog(self.pick([(6, UNIT), (1, self.small_type()), (dfd, BOOL), (2 if qs else 0, qtt)]), env, s, cc)
+                  for s in parts[:-1]]
             ps.append(self.prog(t, env, parts[-1], ctx))
             return {'op': 'seq', 'ps': ps}
         opts.append((w['seq'], g_seq))
@@ -461,6 +503,17 @@ class Gen:
                 return {'op': 'split', 'on': on, 'a': xa, 'b': xb, 'k': self.prog(t, env2, size - 1, ctx)}
             opts.append((w['split'], g_split))
 
+        # ---- format v1
+        opts.append((w['timeout'], lambda: {'op': 'timeout', 'e': self.timeout_source(t, env, size - 1, cc), 'ms': self.timeout_ms()}))
+        if size >= 3:
+            def g_timeout_to():
+                se, sf = self.split_size(size, 2)
+                return {'op': 'timeoutTo', 'e': self.timeout_source(t, env, se, cc), 'ms': self.timeout_ms(),
+                        'fb': self.prog(t, env, sf, cc)}
+            opts.append((w['timeoutTo'], g_timeout_to))
+        if self.res_ok(t):
+            opts.append((w['allocatedCase'], lambda: {'op': 'allocatedCase', 'res': self.g_res(t, env, size - 1, cc)}))
+
         # ---- templates
         if size >= 4:
             opts.append((w['tpl_escapedPoll'], lambda: self.tpl_escaped_poll(t, env, size, ctx)))
@@ -473,7 +526,147 @@ class Gen:
             opts.append((w['tpl_ref'], lambda: self.tpl_ref(t, env, size, ctx)))
         if size >= 6:
             opts.append((w['tpl_scenario'], lambda: self.tpl_scenario(t, env, size, ctx)))
+        if size >= 4:
+            opts.append((w['tpl_queue'], lambda: self.tpl_queue(t, env, size, ctx)))
+        if size >= 4 and self.res_ok(t):
+            opts.append((w['tpl_resource'], lambda: self.tpl_resource(t, env, size, cc)))
         return opts
+
+    # ------------------------------------------------------- format v1
+
+    def timeout_source(self, t, env, size, ctx):
+        """The source of a `timeout`: often it first waits (sleep, cede or never), so the timeout
+        can fire."""
+        e = self.prog(t, env, size, ctx)
+        k = self.pick([(5, 'plain'), (4, 'sleep'), (1, 'cede'), (0.6, 'never')])
+        if k == 'never':
+            return {'op': 'never'}
+        if k == 'plain':
+            return e
+        w = {'op': 'cede'} if k == 'cede' else {'op': 'sleep', 'ms': self.pick([(2, 1), (3, 10), (2, 100), (1, 2000)])}
+        return {'op': 'seq', 'ps': [w, e]}
+
+    def timeout_ms(self):
+        return self.pick([(2, 0), (3, 1), (3, 10), (1, 100), (1, 1000)])
+
+    @staticmethod
+    def res_ok(t):
+        """A resource value type: no handle types (the Lean mirror builds resource programs
+        without a heap view, so no `join`/`cancel`/`deferredGet` on a bound handle)."""
+        return literalable(t)
+
+    @staticmethod
+    def res_env(env):
+        """The scope of a program inside a resource node: no fiber or Deferred variables."""
+        return {k: b for k, b in env.items() if not (b[0] == 'val' and b[1][0] in ('fiber', 'deferred'))}
+
+    def g_res(self, t, env, size, ctx):
+        """A resource tree of value type t (format v1): rPure, rEval, rMake, rFlatMap."""
+        w = self.w
+        env = self.res_env(env)
+        opts = []
+        if self.atom_possible(t, env):
+            opts.append((w['res_pure'], lambda: {'op': 'rPure', 'v': self.atom(t, env)}))
+        opts.append((w['res_eval'], lambda: {'op': 'rEval', 'e': self.prog(t, env, max(1, size - 1), ctx)}))
+
+        opts.append((w['res_make'], lambda: self.res_make(t, env, size, ctx)))
+        if size >= 2:
+            def g_flat():
+                s = self.small_type()
+                sa, sk = self.split_size(size, 2)
+                x = self.fresh('x', env)
+                kenv = {**env, x: ('val', s)}
+                k = self.g_res(t, kenv, sk, ctx)
+                f = self.pick([(3, 'plain'), (2, 'raise'), (1, 'canceled')])
+                if f != 'plain':
+                    # the rest fails or is canceled: the release of the earlier resources runs
+                    stop = {'op': 'raise', 'code': self.code()} if f == 'raise' else {'op': 'canceled'}
+                    k = {'op': 'rFlatMap', 'res': {'op': 'rEval', 'e': stop if f == 'raise' else
+                                                   {'op': 'seq', 'ps': [stop, {'op': 'pure', 'v': {'t': 'unit'}}]}},
+                         'x': self.fresh('x'), 'k': k}
+                # often a `make` first: its release runs when the rest fails
+                first = self.res_make(s, env, sa, ctx) if self.r.random() < 0.5 else self.g_res(s, env, sa, ctx)
+                return {'op': 'rFlatMap', 'res': first, 'x': x, 'k': k}
+            opts.append((w['res_flatMap'], g_flat))
+        return self.pick(opts)()
+
+    def res_make(self, t, env, size, ctx):
+        """`rMake(acq, x, rel)` of value type t. `env` is a resource scope (`res_env`)."""
+        sa, sr = self.split_size(max(size, 3), 2)
+        x = self.fresh('x', env)
+        rel = self.prog(self.small_type(), {**env, x: ('val', t)}, sr, self.fin_ctx(ctx))
+        if self.r.random() < 0.8:  # a marker: the trace shows that the release ran
+            self.rids += 1
+            rel = {'op': 'seq', 'ps': [self.mark(MARK_REL, self.rids), rel]}
+        return {'op': 'rMake', 'acq': self.prog(t, self.res_env(env), sa, ctx), 'x': x, 'rel': rel}
+
+    def tpl_resource(self, t, env, size, ctx):
+        """allocatedCase(rFlatMap(rMake(acq, x, rel), y, rest)): the rest often waits, fails or is
+        canceled, so the release `rel(ExitCase)` runs (`Resource.scala:507-510`)."""
+        renv = self.res_env(env)
+        s = self.small_type()
+        sm, sk = self.split_size(size - 1, 2)
+        y = self.fresh('x', renv)
+        kenv = {**renv, y: ('val', s)}
+        stop = self.pick([(3, {'op': 'raise', 'code': self.code()}), (2, {'op': 'canceled'}), (2, {'op': 'cede'}),
+                          (1, {'op': 'sleep', 'ms': 1}), (1, {'op': 'never'})])
+        rest = {'op': 'rEval', 'e': {'op': 'seq', 'ps': [stop, self.prog(t, kenv, max(1, sk - 2), ctx)]}}
+        return {'op': 'allocatedCase', 'res': {'op': 'rFlatMap', 'res': self.res_make(s, renv, sm, ctx), 'x': y, 'k': rest}}
+
+    def tpl_queue(self, t, env, size, ctx):
+        """bind q = queueNew in a producer/consumer scenario: consumers `take` (often with
+        `timeout`, the CE-0003 shape) in started fibers, the parent offers, cancels or joins a
+        consumer, and drains with `tryTake`."""
+        a = self.pick([(4, NAT), (1, UNIT), (1, BOOL)])
+        q = self.fresh('x')
+        qv = {'t': 'var', 'x': q}
+        env2 = {**env, q: ('val', queue(a))}
+        take = {'op': 'queueTake', 'q': qv}
+        ps = []
+        cons = []
+        for _ in range(self.pick([(1, 0), (4, 1), (2, 2)])):
+            c = take if self.r.random() < 0.5 else {'op': 'timeout', 'e': take, 'ms': self.timeout_ms()}
+            if self.r.random() < 0.25:
+                c = self.tag({'op': 'onCancel', 'e': c, 'fin': self.prog(UNIT, env2, 1, self.fin_ctx(ctx))})
+            f = self.fresh('x')
+            cons.append(f)
+            ps.append(('bind', f, {'op': 'start', 'e': c}))
+        env3 = dict(env2)
+        for f in cons:
+            env3[f] = ('val', fiber(a))
+        steps = []
+        for _ in range(self.r.randint(1, 5)):
+            k = self.pick([(4, 'offer'), (2, 'cede'), (1, 'sleep'), (2 if cons else 0, 'cancel'), (2 if cons else 0, 'join'),
+                           (3, 'tryTake'), (1, 'take')])
+            if k == 'offer':
+                steps.append({'op': 'queueOffer', 'q': qv, 'v': self.literal(a)})
+            elif k == 'cede':
+                steps.append({'op': 'cede'})
+            elif k == 'sleep':
+                steps.append({'op': 'sleep', 'ms': self.pick([(2, 0), (3, 1), (1, 10)])})
+            elif k == 'cancel':
+                steps.append({'op': 'cancel', 'f': {'t': 'var', 'x': self.r.choice(cons)}})
+            elif k == 'join':
+                steps.append(self.join_marked({'t': 'var', 'x': self.r.choice(cons)}, a, {'op': 'cede'}, env3))
+            elif k == 'tryTake':
+                steps.append(self.trytake_marked(qv, a, env3))
+            else:
+                # the parent takes too: `attempt(timeout(take q))`, the result dropped
+                steps.append({'op': 'map', 'e': {'op': 'attempt', 'e': {'op': 'timeout', 'e': take, 'ms': self.timeout_ms()}},
+                              'fn': 1})
+        if self.r.random() < 0.5:  # drain (CE-0003 program A)
+            steps += [self.trytake_marked(qv, a, env3) for _ in range(self.pick([(2, 1), (1, 2)]))]
+        k = self.prog(t, env3, max(1, size - len(steps) - 2), ctx)
+        body = {'op': 'seq', 'ps': steps + [k]}
+        for _, f, e in reversed(ps):
+            body = {'op': 'bind', 'x': f, 'e': e, 'k': body}
+        return {'op': 'bind', 'x': q, 'e': {'op': 'queueNew'}, 'k': body}
+
+    def trytake_marked(self, qv, a, env):
+        """bind r = tryTake q in delay fn1 r: the trace shows the result."""
+        r = self.fresh('x')
+        return {'op': 'bind', 'x': r, 'e': {'op': 'queueTryTake', 'q': qv},
+                'k': {'op': 'delay', 'fn': 1, 'arg': {'t': 'var', 'x': r}}}
 
     # ------------------------------------------------------------ templates
 
@@ -887,7 +1080,11 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
     g = Gen(rng, weights, config)
     size = g.pick([(2, rng.randint(1, 5)), (5, rng.randint(6, 20)), (3, rng.randint(21, max(21, max_size)))])
     t = g.pick([(3, NAT), (2, UNIT), (1, BOOL), (1, either(NAT, NAT)), (1, outcome(NAT)), (1, pair(NAT, BOOL))])
-    if size >= 4 and rng.random() < g.c['p_scenario_root']:
+    if rng.random() < g.c['p_syncstep']:
+        # format v1: `syncStep(prog, limit)` at the root (it runs before the runtime starts)
+        limit = g.pick([(2, 0), (3, 1), (3, 2), (3, 3), (2, 5), (1, 10), (4, MAX_LIMIT)])
+        prog = {'op': 'syncStep', 'e': g.prog(t, {}, size, {'root_path': True}), 'limit': limit}
+    elif size >= 4 and rng.random() < g.c['p_scenario_root']:
         prog = g.tpl_scenario(t, {}, size, {'root_path': True}, root_first=True)
         g.fifo_bias = True
     else:

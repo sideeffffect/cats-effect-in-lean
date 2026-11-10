@@ -37,7 +37,10 @@ final class ScriptedEC extends ExecutionContext:
     label(r)
     ready += r
 
-  def reportFailure(t: Throwable): Unit = failures += s"${t.getClass.getSimpleName}: ${t.getMessage}"
+  // A TimeoutException message holds the duration, which the Lean model does not keep (v1).
+  def reportFailure(t: Throwable): Unit = t match
+    case _: java.util.concurrent.TimeoutException => failures += "TimeoutException"
+    case _ => failures += s"${t.getClass.getSimpleName}: ${t.getMessage}"
 
 /** Result of one case, before JSON encoding. */
 final case class RunResult(
@@ -57,7 +60,7 @@ object Runner:
     case Outcome.Succeeded(v) => ujson.Obj("t" -> "succeeded", "v" -> Json.encodeVal(v))
     case Outcome.Errored(t) =>
       Json.encodeErr(t match
-        case UserError(c) => Err.User(c)
+        case CodeOf(c) => Err.User(c)
         case o => Err.Foreign(s"${o.getClass.getSimpleName}: ${o.getMessage}"))
     case Outcome.Canceled() => ujson.Obj("t" -> "canceled")
 
@@ -69,7 +72,7 @@ object Runner:
       case _: Mode.Replay => "replay"
       case _: Mode.TestControlSeed => "testcontrol"
     ujson.Obj(
-      "v" -> Json.FormatVersion,
+      "v" -> c.version,
       "id" -> c.id,
       "mode" -> modeName,
       "outcome" -> r.outcome,
@@ -109,7 +112,7 @@ object Runner:
     val runtime = IORuntime(ec, ec, scheduler, () => (), IORuntimeConfig())
 
     var result: Option[Outcome[cats.Id, Throwable, Val]] = None
-    val root = Interp(h)(prog).unsafeRunFiber(
+    val root = Interp(h).root(prog).unsafeRunFiber(
       { result = Some(Outcome.Canceled()) },
       t => result = Some(Outcome.Errored(t)),
       v => result = Some(Outcome.Succeeded[cats.Id, Throwable, Val](v)),
@@ -201,7 +204,7 @@ object Runner:
           }
       }
 
-    val prog0 = Interp(h)(prog)
+    val prog0 = Interp(h).root(prog)
     val (outcome, steps) = TestControl.execute(prog0, seed = Some(b64)).flatMap(loop(_, 0)).unsafeRunSync()
     RunResult(outcome, h.trace, steps, None, ujson.Obj("seed" -> seed.toDouble), None,
       ujson.Obj(), 0, Nil)
