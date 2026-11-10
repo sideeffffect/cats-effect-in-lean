@@ -1,0 +1,183 @@
+{
+ "case": {
+  "id": "g109-64216",
+  "mode": "replay",
+  "prog": {
+   "e": {
+    "e": {
+     "e": {
+      "e": {
+       "op": "never"
+      },
+      "ms": 100,
+      "op": "timeout"
+     },
+     "k": {
+      "arg": {
+       "t": "var",
+       "x": "x10"
+      },
+      "fn": 3,
+      "op": "delay"
+     },
+     "op": "handleErrorWith",
+     "x": "x10"
+    },
+    "op": "start"
+   },
+   "k": {
+    "op": "never"
+   },
+   "op": "bind",
+   "x": "x11"
+  },
+  "v": 1
+ },
+ "expect": "agree",
+ "field": "failures",
+ "found": {
+  "date": "2026-11-10",
+  "orig_id": "g109-64216",
+  "orig_size": 89,
+  "size": 7
+ },
+ "known_bug": "",
+ "lean": {
+  "compare": [
+   "outcome",
+   "trace",
+   "steps",
+   "time",
+   "schedule",
+   "fifoFrom",
+   "fibers",
+   "pending",
+   "failures"
+  ],
+  "failures": [
+   "TimeoutException"
+  ],
+  "fibers": {
+   "0": "f0",
+   "1": "f1"
+  },
+  "fifoFrom": 0,
+  "id": "g109-64216",
+  "mode": "replay",
+  "outcome": {
+   "t": "blocked"
+  },
+  "pending": 0,
+  "schedule": [
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 0,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1"
+    ],
+    "step": 1,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f3"
+    ],
+    "step": 2,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3"
+    ],
+    "step": 3,
+    "task": "f3"
+   },
+   {
+    "advance": 100,
+    "woken": [
+     "t0"
+    ]
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "t0"
+    ],
+    "step": 4,
+    "task": "t0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f3"
+    ],
+    "step": 5,
+    "task": "f3"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1"
+    ],
+    "step": 6,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2"
+    ],
+    "step": 7,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1"
+    ],
+    "step": 8,
+    "task": "f1"
+   }
+  ],
+  "steps": 9,
+  "time": 100,
+  "trace": [
+   {
+    "arg": {
+     "t": "nat",
+     "v": 999998
+    },
+    "ev": "call",
+    "fn": 3
+   }
+  ],
+  "v": 1
+ },
+ "note": "Same cause as fixed-usererr-999998-a.",
+ "scala": {
+  "outcome": {
+   "t": "blocked"
+  },
+  "trace": [
+   {
+    "arg": {
+     "t": "nat",
+     "v": 999998
+    },
+    "ev": "call",
+    "fn": 3
+   }
+  ]
+ },
+ "triage": "harness-bug"
+}

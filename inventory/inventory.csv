@@ -1016,8 +1016,8 @@ core.IO.as,core,method,core/shared/src/main/scala/cats/effect/IO.scala,182,todo,
 core.IO.attempt,core,method,core/shared/src/main/scala/cats/effect/IO.scala,200,todo,,
 core.IO.attemptTap,core,method,core/shared/src/main/scala/cats/effect/IO.scala,209,todo,,
 core.IO.option,core,method,core/shared/src/main/scala/cats/effect/IO.scala,215,todo,,
-core.IO.bothOutcome,core,method,core/shared/src/main/scala/cats/effect/IO.scala,228,todo,,
-core.IO.both,core,method,core/shared/src/main/scala/cats/effect/IO.scala,243,todo,,
+core.IO.bothOutcome,core,method,core/shared/src/main/scala/cats/effect/IO.scala,228,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak
+core.IO.both,core,method,core/shared/src/main/scala/cats/effect/IO.scala,243,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak
 core.IO.bracket,core,method,core/shared/src/main/scala/cats/effect/IO.scala,338,todo,,
 core.IO.bracketCase,core,method,core/shared/src/main/scala/cats/effect/IO.scala,370,todo,,
 core.IO.evalOn,core,method,core/shared/src/main/scala/cats/effect/IO.scala,384,todo,,
@@ -1049,8 +1049,8 @@ core.IO.parProductR,core,method,core/shared/src/main/scala/cats/effect/IO.scala,
 core.IO.parProduct,core,method,core/shared/src/main/scala/cats/effect/IO.scala,623,todo,,
 core.IO.parReplicateA,core,method,core/shared/src/main/scala/cats/effect/IO.scala,629,todo,,
 core.IO.parReplicateA_,core,method,core/shared/src/main/scala/cats/effect/IO.scala,635,todo,,
-core.IO.race,core,method,core/shared/src/main/scala/cats/effect/IO.scala,638,todo,,
-core.IO.raceOutcome,core,method,core/shared/src/main/scala/cats/effect/IO.scala,641,todo,,
+core.IO.race,core,method,core/shared/src/main/scala/cats/effect/IO.scala,638,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak;laws.GenSpawnLaws.uncancelableRaceNotInherited.IO
+core.IO.raceOutcome,core,method,core/shared/src/main/scala/cats/effect/IO.scala,641,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak;core.IO.raceOutcome.isWinnerOutcome
 core.IO.racePair,core,method,core/shared/src/main/scala/cats/effect/IO.scala,644,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 core.IO.rethrow,core,method,core/shared/src/main/scala/cats/effect/IO.scala,667,todo,,
 core.IO.redeem,core,method,core/shared/src/main/scala/cats/effect/IO.scala,692,todo,,
@@ -1063,7 +1063,7 @@ core.IO.delayBy,core,method,core/shared/src/main/scala/cats/effect/IO.scala,776,
 core.IO.delayBy#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,779,excluded,internal: private helper; modelled as part of its public caller,
 core.IO.andWait,core,method,core/shared/src/main/scala/cats/effect/IO.scala,789,todo,,
 core.IO.andWait#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,792,excluded,internal: private helper; modelled as part of its public caller,
-core.IO.timeout,core,method,core/shared/src/main/scala/cats/effect/IO.scala,818,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
+core.IO.timeout,core,method,core/shared/src/main/scala/cats/effect/IO.scala,818,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement;core.IO.timeout.noLeak
 core.IO.timeout#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,825,excluded,internal: private helper; modelled as part of its public caller,
 core.IO.timeoutTo,core,method,core/shared/src/main/scala/cats/effect/IO.scala,850,todo,,
 core.IO.timeoutTo#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,862,excluded,internal: private helper; modelled as part of its public caller,
@@ -1156,11 +1156,11 @@ core.IO.uncancelable#2,core,method,core/shared/src/main/scala/cats/effect/IO.sca
 core.IO._unit,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1715,excluded,internal: private helper; modelled as part of its public caller,
 core.IO.unit,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1720,todo,,
 core.IO.stub,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1724,todo,,
-core.IO.bothOutcome#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1729,todo,,
-core.IO.both#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1732,todo,,
+core.IO.bothOutcome#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1729,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak
+core.IO.both#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1732,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak
 core.IO.fromFuture,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1763,todo,,
 core.IO.fromFutureCancelable,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1769,todo,,
-core.IO.race#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1788,todo,,
+core.IO.race#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1788,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak
 core.IO.racePair#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1817,todo,,
 core.IO.ref,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1822,todo,,
 core.IO.deferred,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1824,todo,,
@@ -1914,10 +1914,10 @@ kernel.GenSpawn.cancelable,kernel,method,kernel/shared/src/main/scala/cats/effec
 kernel.GenSpawn.never,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,297,todo,,
 kernel.GenSpawn.cede,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,337,todo,,
 kernel.GenSpawn.racePair,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,354,todo,,
-kernel.GenSpawn.raceOutcome,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,370,todo,,
-kernel.GenSpawn.race,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,401,todo,,
-kernel.GenSpawn.bothOutcome,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,442,todo,,
-kernel.GenSpawn.both,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,474,todo,,
+kernel.GenSpawn.raceOutcome,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,370,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak;core.IO.raceOutcome.isWinnerOutcome
+kernel.GenSpawn.race,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,401,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak;laws.GenSpawnLaws.uncancelableRaceNotInherited.IO
+kernel.GenSpawn.bothOutcome,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,442,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak
+kernel.GenSpawn.both,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,474,todo,,core.IO.race.combNoLeak;core.IO.race.combCanceledNoLeak
 kernel.GenSpawn.apply,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,512,todo,,
 kernel.GenSpawn.apply#2,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,513,todo,,
 kernel.GenSpawn.genSpawnForOptionT,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala,515,excluded,"out-of-scope: monad-transformer instance (OptionT, EitherT, Kleisli, ...); user decision Q1 (2026-11-10): ignore monad transformers",
@@ -2552,7 +2552,7 @@ laws.GenSpawnLaws.fiberNeverIsNever,laws,law,laws/shared/src/main/scala/cats/eff
 laws.GenSpawnLaws.fiberStartOfNeverIsUnit,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,130,todo,,
 laws.GenSpawnLaws.fiberJoinIsGuaranteeCase,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,133,todo,,
 laws.GenSpawnLaws.neverDominatesOverFlatMap,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,143,todo,,
-laws.GenSpawnLaws.uncancelableRaceNotInherited,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,146,todo,,
+laws.GenSpawnLaws.uncancelableRaceNotInherited,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,146,todo,,laws.GenSpawnLaws.uncancelableRaceNotInherited.IO
 laws.GenSpawnLaws.uncancelableCancelCancels,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,149,todo,,
 laws.GenSpawnLaws.uncancelableStartIsCancelable,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,153,todo,,
 laws.GenSpawnLaws.forceRNeverIsNever,laws,law,laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala,157,todo,,

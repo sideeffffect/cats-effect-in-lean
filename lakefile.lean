@@ -46,4 +46,15 @@ lean_exe cediff where
 -- (`scripts/check_twin_checks.sh`), with its own axiom check.
 lean_lib TwinChecks where
   roots := #[`CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed,
-    `CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedOld]
+    `CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedOld,
+    -- CE-0005 fixed-twin check and the track G smoke tests (Phase 6): several minutes each,
+    -- so not in the default build (decision 45)
+    `CatsEffectInLean.Proofs.Phase6.BracketFullFixed,
+    `CatsEffectInLean.Proofs.Phase6.BracketSmoke]
+
+-- Leak smoke test of track R (Phase 6): exact bounded search (`exploreP`) of `race`, `both`,
+-- `raceOutcome`, `bothOutcome` and `timeout` over a small family of sides, with the leak
+-- observation of `Model/Leak.lean`. `lake exe leaksmoke`. Test code, not part of the library.
+lean_exe leaksmoke where
+  srcDir := "tools"
+  root := `LeakSmoke.Main

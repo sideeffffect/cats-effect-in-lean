@@ -152,6 +152,31 @@ inductive Lam where
   | resAcquire
   /-- `rMake`: `a => I(rel)[x := a].void` (the `REnv.release` code). `vals = env`. -/
   | resRelease
+  -- format v2 (track R)
+  /-- `race`/`raceOutcome`/`both`/`bothOutcome`: not a lambda. The source code of `I(a)` of the
+  combinator at `node` (`Race.call` builds it with `srcIO`). `vals = snap :: env`. -/
+  | raceSrcA
+  /-- The same for `I(b)`. -/
+  | raceSrcB
+  /-- `race`: `{ case Left(v) => VLeft(v); case Right(v) => VRight(v) }`. -/
+  | raceK
+  /-- `raceOutcome`: `{ case Left(oc) => ocVal(oc).map(VLeft(_)); case Right(oc) => ... }`. -/
+  | roK
+  /-- `VLeft(_)`. -/
+  | mkLeft
+  /-- `VRight(_)`. -/
+  | mkRight
+  /-- `both`: `{ case (x, y) => VPair(x, y) }`. -/
+  | pairK
+  /-- `bothOutcome`: `{ case (oa, ob) => ocVal(oa).flatMap(x => ...) }`. -/
+  | boK
+  /-- `bothOutcome`: `x => ocVal(ob).map(y => VPair(x, y))`. `vals = [ob]`. -/
+  | boK2
+  /-- `bothOutcome`: `y => VPair(x, y)`. `vals = [x]`. -/
+  | boK3
+  /-- `timeoutTo`: not a lambda. The fallback code `c` of `Timeout.timeoutToIO src c ms`: the
+  program `I(fb)`, built when the `timeoutTo` term is built. `vals = snap :: env`. -/
+  | timeoutFb
   -- format v2 (track G): `guarantee`, `bracket`, `bracketCase`, `bracketFull`. The ops run on
   -- the mirror `Model/Bracket.lean`; these are the program lambdas and the source codes.
   /-- `guarantee`: source code of `I(e)` (built with the op). `vals = snap :: env`. -/
@@ -193,6 +218,8 @@ def Lam.all : List Lam :=
    .asyncBody, .asyncUnc, .asyncReg, .asyncSel, .asyncFinEmit, .asyncFinThen, .neverBody,
    .neverUnc, .neverSel, .refNewThunk, .refHandle, .deferredNewThunk, .deferredHandle, .dcThen,
    .dcEmit, .queueHandle, .optEither, .allocFst, .timeoutSrc, .resBind, .resAcquire, .resRelease,
+   .raceSrcA, .raceSrcB, .raceK, .roK, .mkLeft, .mkRight, .pairK, .boK, .boK2, .boK3,
+   .timeoutFb,
    .gSrcE, .gSrcFin, .gFinEmit, .gFinThen, .brAcqSrc, .brUse, .brRel, .brFinEmit, .brRelThen,
    .brcRel, .brcFinK, .brcFinEmit, .brcFinThen, .bfAcq]
 

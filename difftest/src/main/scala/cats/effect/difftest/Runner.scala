@@ -38,12 +38,8 @@ final class ScriptedEC extends ExecutionContext:
     ready += r
 
   // A TimeoutException message holds the duration, which the Lean model does not keep (v1).
-  // The value language identifies `UserError(999998)` with `TimeoutException` (`CodeOf`): a
-  // program can raise it with `raise` (fn 3) of a code that `handleErrorWith` bound. The Lean side
-  // cannot tell them apart (same `Err`), so both print as "TimeoutException" (track G, 2026-11-10).
   def reportFailure(t: Throwable): Unit = t match
     case _: java.util.concurrent.TimeoutException => failures += "TimeoutException"
-    case UserError(TimeoutCode) => failures += "TimeoutException"
     case _ => failures += s"${t.getClass.getSimpleName}: ${t.getMessage}"
 
 /** Result of one case, before JSON encoding. */
@@ -70,7 +66,11 @@ object Runner:
 
   def run(c: TestCase): ujson.Value =
     val r = c.mode match
-      case Mode.Replay(choices) => replay(c.prog, choices, c.maxSteps)
+      case Mode.Replay(choices) =>
+        val config = c.runtime.fold(IORuntimeConfig()) { (cct, ayt) =>
+          IORuntimeConfig().copy(cancelationCheckThreshold = cct, autoYieldThreshold = ayt)
+        }
+        replay(c.prog, choices, c.maxSteps, config)
       case Mode.TestControlSeed(seed) => testControl(c.prog, seed, c.maxSteps)
     val modeName = c.mode match
       case _: Mode.Replay => "replay"
@@ -98,7 +98,11 @@ object Runner:
     * root fiber has an outcome, when nothing is ready and no timer exists ("blocked"), or at
     * maxSteps ("fuel").
     */
-  def replay(prog: Prog, choices: List[Choice], maxSteps: Int): RunResult =
+  def replay(
+      prog: Prog,
+      choices: List[Choice],
+      maxSteps: Int,
+      config: IORuntimeConfig = IORuntimeConfig()): RunResult =
     val h = Harness()
     val ec = ScriptedEC()
     var now = 0L // virtual nanoseconds
@@ -113,7 +117,7 @@ object Runner:
         () => { timers -= e; () }
       def nowMillis(): Long = now / 1000000
       def monotonicNanos(): Long = now
-    val runtime = IORuntime(ec, ec, scheduler, () => (), IORuntimeConfig())
+    val runtime = IORuntime(ec, ec, scheduler, () => (), config)
 
     var result: Option[Outcome[cats.Id, Throwable, Val]] = None
     val root = Interp(h).root(prog).unsafeRunFiber(

@@ -8,6 +8,7 @@ import CatsEffectInLean.Props.Calibration.QueueTimeout
 import CatsEffectInLean.Proofs.Calibration.QueueTimeout
 import CatsEffectInLean.Props.Calibration.FatalRaise
 import CatsEffectInLean.Proofs.Calibration.FatalRaise
+import CatsEffectInLean.Props.Phase6.Race
 import CatsEffectInLean.Props.Phase6.Bracket
 import CatsEffectInLean.Proofs.Phase6.BracketFullTwin
 
@@ -138,8 +139,9 @@ def registry : List Entry := [
       started fiber; cancel it; join; drain), all xs, d, s and pick schedules. Counterexample: \
       xs = [42], d = 1000, s = 1, FIFO schedule: the take racer completes Succeeded(42) after \
       the consumer is canceled; the racePair finalizer drops the outcome. Row core.IO.timeoutTo \
-      is not listed: the model mirrors timeoutTo only with the TimeoutException fallback of \
-      IO#timeout (review batch 2), so the row stays todo." },
+      is not listed: this property uses only IO#timeout (TimeoutException fallback). Since \
+      Phase 6 track D, Model/Timeout.lean mirrors timeoutTo with any fallback (timeoutToIO), \
+      but no settled entry names core.IO.timeoutTo yet, so the row stays todo." },
   { id := "core.SyncIO.runLoop.Error.fatalTwin"
     rows := ["core.IOFiber.runLoop.Error", "core.SyncIO.runLoop.Error"]
     prop := ``Props.Calibration.raiseErrorTwin
@@ -160,6 +162,49 @@ def registry : List Entry := [
       domain e in {nonFatal 0, interrupted 0} (Proofs.Calibration.FatalRaise.v371_nonFatal). \
       A proof for all codes needs a lemma that runs do not depend on the error code (decide \
       cannot check a free code)." },
+  -- Phase 6, track R (race, both, raceOutcome, bothOutcome, timeout; Props/Phase6/Race.lean)
+  { id := "core.IO.race.combNoLeak"
+    rows := ["core.IO.race", "core.IO.race#2", "core.IO.raceOutcome", "core.IO.both", "core.IO.both#2",
+      "core.IO.bothOutcome", "core.IO.bothOutcome#2", "kernel.GenSpawn.race",
+      "kernel.GenSpawn.raceOutcome", "kernel.GenSpawn.both", "kernel.GenSpawn.bothOutcome"]
+    prop := ``Props.Phase6.Race.combNoLeak
+    status := .«open»
+    note := "No leaked fiber: for the four kernel defaults (IO dispatches to them, no own body), \
+      all WellFormed sides, all user code and all PChoice schedules, when the root (the \
+      combinator) completes, its racePair has no live child (Model/Leak.lean). Smoke: \
+      lake exe leaksmoke (140,400 random runs, 0 violations; wrong function 'race without \
+      cancel' leaks), spikes/race-leak/LeakSmoke.scala on CE 3.7.1 (7,038 completed runs, 0 \
+      violations). Open: needs an invariant over Step/SchedP that a racing fiber passes its \
+      combinator only after both children are done; exact search does not scale (>10^4 states)." },
+  { id := "core.IO.race.combCanceledNoLeak"
+    rows := ["core.IO.race", "core.IO.race#2", "core.IO.raceOutcome", "core.IO.both", "core.IO.both#2",
+      "core.IO.bothOutcome", "core.IO.bothOutcome#2", "kernel.GenSpawn.race",
+      "kernel.GenSpawn.raceOutcome", "kernel.GenSpawn.both", "kernel.GenSpawn.bothOutcome"]
+    prop := ``Props.Phase6.Race.combCanceledNoLeak
+    status := .«open»
+    note := "Decision 50 form of combNoLeak: a parent starts the combinator, cancels it and joins \
+      it; at root completion fiber 1 has no live race child. Same smoke evidence; open for the \
+      same reason." },
+  { id := "core.IO.timeout.noLeak"
+    rows := ["core.IO.timeout"]
+    prop := ``Props.Phase6.Race.timeoutNoLeak
+    status := .«open»
+    note := "fa.timeout(d), direct and canceled by a parent (decision 50): at root completion the \
+      timeout's racePair (source and sleep) has no live child. Smoke as combNoLeak; open." },
+  { id := "core.IO.raceOutcome.isWinnerOutcome"
+    rows := ["core.IO.raceOutcome", "kernel.GenSpawn.raceOutcome"]
+    prop := ``Props.Phase6.Race.raceOutcomeIsWinnerOutcome
+    status := .«open»
+    note := "raceOutcome returns Left(oc) only if fiber 1 (fa) ended with oc, Right(oc) only if \
+      fiber 2 (fb) did. Smoke: leaksmoke (0 violations). Open: same invariant argument." },
+  { id := "laws.GenSpawnLaws.uncancelableRaceNotInherited.IO"
+    rows := ["laws.GenSpawnLaws.uncancelableRaceNotInherited", "core.IO.race", "kernel.GenSpawn.race"]
+    prop := ``Props.Phase6.Race.uncancelableRaceNotInherited
+    status := .«open»
+    note := "Closed law (no input) under EqvP. Believed true: random runs of both sides give only \
+      'blocked' (leaksmoke). Open: the exact state set of the left side is too large for \
+      checkEqvP in the kernel (decide +kernel hit the deterministic timeout after 8 min; the \
+      compiled exploreP had 994 states after 800 expansions, not closed)." },
   -- Phase 6, track G (guarantee, bracket*)
   { id := "core.IO.bracketFull.kernelDefaultTwin"
     rows := ["core.IO.bracketFull", "core.IO.IOAsync.bracketFull", "kernel.MonadCancel.bracketFull"]

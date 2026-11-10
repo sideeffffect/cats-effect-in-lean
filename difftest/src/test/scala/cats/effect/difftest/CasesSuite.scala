@@ -73,7 +73,9 @@ class CasesSuite extends munit.FunSuite:
         """{"v":1,"id":"g","mode":"replay","prog":{"op":"seq","ps":[{"op":"syncStep","limit":1,"e":{"op":"cede"}}]}}""",
         """{"v":1,"id":"h","mode":"replay","prog":{"op":"rPure","v":{"t":"unit"}}}""",
         """{"v":1,"id":"i","mode":"replay","prog":{"op":"pure","v":{"t":"queue","id":0}}}""",
-        """{"v":1,"id":"j","mode":"replay","prog":{"op":"guarantee","e":{"op":"cede"},"fin":{"op":"cede"}}}""",
+        // format v2 (track R): a v2 op in a v1 case
+        """{"v":1,"id":"j","mode":"replay","prog":{"op":"race","a":{"op":"cede"},"b":{"op":"cede"}}}""",
+        """{"v":1,"id":"j2","mode":"replay","prog":{"op":"guarantee","e":{"op":"cede"},"fin":{"op":"cede"}}}""",
         """{"v":2,"id":"k","mode":"replay","prog":{"op":"bracket","acq":{"op":"pure","v":{"t":"var","x":"a"}},"x":"a","use":{"op":"cede"},"rel":{"op":"cede"}}}""",
         """{"v":2,"id":"l","mode":"replay","prog":{"op":"bracketFull","poll":"p","acq":{"op":"cede"},"x":"a","use":{"op":"poll","poll":"p","e":{"op":"cede"}},"y":"o","rel":{"op":"cede"}}}"""
       )

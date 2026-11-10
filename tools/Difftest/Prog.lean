@@ -35,10 +35,17 @@ open CatsEffectInLean.Model
 /-! ## Errors
 
 `Err.code` encodes the Scala exception class. Codes 0 and 1 are reserved for harness errors,
-so a `UserError(c)` has code `c + 2`. -/
+so a `UserError(c)` has code `c + 2`. Code `10^6` is the model `TimeoutException`
+(`Timeout.timeoutCode`), so `UserError(c)` for `c + 2 ≥ 10^6` has code `c + 3`. (Before
+2026-11-10, `UserError(999998)` had code `10^6` and printed as `TimeoutException`: a program
+that catches a `TimeoutException` gets `nat 999998` and can raise it again as a `UserError`.)
+Both errors give the value-language code 999998 (`Interp.scala` `CodeOf`). -/
+
+/-- The code of `Model.Timeout.timeoutErr` (`Tests.lean` checks that they agree). -/
+def timeoutModelCode : Nat := 1000000
 
 /-- `UserError(c)` (`difftest/.../UserFns.scala:6`). -/
-def userErr (c : Nat) : Err := { code := c + 2 }
+def userErr (c : Nat) : Err := { code := if c + 2 < timeoutModelCode then c + 2 else c + 3 }
 
 /-- `TypeError` (`difftest/.../UserFns.scala:9`): a value of the wrong shape. -/
 def typeErr : Err := { code := 0 }
@@ -47,9 +54,12 @@ def typeErr : Err := { code := 0 }
 yet (see `wiki/methodology/difftest-program-format.md`, "Lean side"). It never occurs in Scala. -/
 def harnessErr : Err := { code := 1 }
 
-/-- The `UserError` code of an error, if it is a `UserError`. -/
+/-- The value-language code of an error (`Interp.scala` `CodeOf`): `c` for `UserError(c)`, and
+999998 for the model `TimeoutException`. -/
 def userCode? (e : Err) : Option Nat :=
-  if e.kind = .nonFatal ∧ e.code ≥ 2 then some (e.code - 2) else none
+  if e.kind = .nonFatal ∧ e.code ≥ 2 then
+    some (if e.code ≤ timeoutModelCode then e.code - 2 else e.code - 3)
+  else none
 
 /-! ## AST -/
 
@@ -133,6 +143,15 @@ inductive Prog where
   | rEval (e : Prog)
   | rMake (acq rel : Prog)
   | rFlatMap (res k : Prog)
+  -- format v2 (track R)
+  /-- `I(a).race(I(b))` then `Left(v) ↦ left v`, `Right(v) ↦ right v`. -/
+  | race (a b : Prog)
+  /-- `I(a).raceOutcome(I(b))` then `ocVal` under `left`/`right`. -/
+  | raceOutcome (a b : Prog)
+  /-- `I(a).both(I(b))` then `(x, y) ↦ pair x y`. -/
+  | both (a b : Prog)
+  /-- `I(a).bothOutcome(I(b))` then `ocVal` of each, as a pair. -/
+  | bothOutcome (a b : Prog)
   -- format v2 (Phase 6, track G)
   /-- `I(e).guarantee(IO.delay(emit fin) *> I(fin).void)`. -/
   | guarantee (e fin : Prog) (tag : Nat)
@@ -150,7 +169,8 @@ inductive Prog where
 number `n` are `n + 1` and `n + 1 + size first`. -/
 def Prog.size : Prog → Nat
   | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
-  | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k => 1 + e.size + k.size
+  | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k
+  | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => 1 + e.size + k.size
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => 1 + e.size
   | .guarantee e k _ => 1 + e.size + k.size
@@ -163,7 +183,8 @@ def Prog.at? : Prog → Nat → Option Prog
   | p, i + 1 =>
     match p with
     | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
-    | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k =>
+    | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k
+    | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k =>
       if i < e.size then e.at? i else k.at? (i - e.size)
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => e.at? i
@@ -190,14 +211,22 @@ def Prog.opName : Prog → String
   | .queueNew => "queueNew" | .queueOffer .. => "queueOffer" | .queueTake .. => "queueTake"
   | .queueTryTake .. => "queueTryTake" | .allocatedCase .. => "allocatedCase"
   | .rPure .. => "rPure" | .rEval .. => "rEval" | .rMake .. => "rMake" | .rFlatMap .. => "rFlatMap"
+  | .race .. => "race" | .raceOutcome .. => "raceOutcome" | .both .. => "both"
+  | .bothOutcome .. => "bothOutcome"
   | .guarantee .. => "guarantee" | .bracket .. => "bracket" | .bracketCase .. => "bracketCase"
   | .bracketFull .. => "bracketFull"
+
+/-- The two sub-programs of a v2 combinator (`race`, `raceOutcome`, `both`, `bothOutcome`). -/
+def Prog.combArgs? : Prog → Option (Prog × Prog)
+  | .race a b | .raceOutcome a b | .both a b | .bothOutcome a b => some (a, b)
+  | _ => none
 
 /-- All op names that occur in the program (pre-order, with repeats). -/
 def Prog.ops (p : Prog) : List String :=
   p.opName :: match p with
     | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
-    | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k => e.ops ++ k.ops
+    | .racePair e k | .case _ e k | .timeoutTo e k _ | .rMake e k | .rFlatMap e k
+    | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => e.ops ++ k.ops
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e => e.ops
     | .guarantee e k _ => e.ops ++ k.ops
@@ -214,6 +243,7 @@ def Prog.eagerReads : Prog → Bool
   | .allocatedCase e => e.eagerReads
   | .onCancel e k _ | .racePair e k | .timeoutTo e k _ | .case _ e k | .rMake e k
   | .rFlatMap e k => e.eagerReads || k.eagerReads
+  | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => e.eagerReads || k.eagerReads
   | .split _ k => k.eagerReads
   -- format v2: `guarantee` builds `e` and `fin` at once; `bracket`/`bracketCase` build `acq`
   | .guarantee e k _ => e.eagerReads || k.eagerReads
@@ -228,6 +258,7 @@ def Prog.resViewFree : Prog → Bool
   | .rMake a r => !a.eagerReads && !r.eagerReads && a.resViewFree && r.resViewFree
   | .bind e k | .seq e k | .handleErrorWith e k | .onCancel e k _ | .guaranteeCase e k _
   | .racePair e k | .case _ e k | .timeoutTo e k _ | .rFlatMap e k => e.resViewFree && k.resViewFree
+  | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k => e.resViewFree && k.resViewFree
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e => e.resViewFree
   | .guarantee e k _ => e.resViewFree && k.resViewFree
@@ -255,6 +286,12 @@ structure TestCase where
   mode : Mode
   prog : Prog
   maxSteps : Nat
+  /-- `IORuntimeConfig.cancelationCheckThreshold` of a replay run (optional case field
+  `runtime`; default 512, `IORuntimeConfig.scala`). -/
+  cancelCheck : Nat := 512
+  /-- `IORuntimeConfig.autoYieldThreshold` of a replay run (default 1024). A small value puts
+  an auto-yield (the effect of a `preempt` choice, `Model/SchedP.lean`) at many points. -/
+  autoYield : Nat := 1024
   deriving Repr
 
 /-- `Json.FormatVersion` in `Json.scala`. Versions 0, 1 and 2 are accepted. -/
@@ -265,8 +302,9 @@ def maxLimit : Nat := 2147483647
 def v1Ops : List String :=
   ["syncStep", "timeout", "timeoutTo", "queueNew", "queueOffer", "queueTake", "queueTryTake",
    "allocatedCase", "rPure", "rEval", "rMake", "rFlatMap"]
-/-- Ops of format v2 (`Json.V2Ops`). -/
-def v2Ops : List String := ["guarantee", "bracket", "bracketCase", "bracketFull"]
+/-- Ops of format v2 (`Json.V2Ops`): a decode error in a v0 or v1 case. -/
+def v2Ops : List String := ["race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket",
+  "bracketCase", "bracketFull"]
 /-- The resource ops. -/
 def resOps : List String := ["rPure", "rEval", "rMake", "rFlatMap"]
 /-- `Json.DefaultMaxSteps` in `Json.scala`. -/
@@ -494,6 +532,10 @@ partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .i
   | "rFlatMap" =>
     only ["res", "x", "k"]; let x ← s "x"
     pure (.rFlatMap (← r "res") (← r "k" ((x, .v) :: scope)))
+  | "race" => only ["a", "b"]; pure (.race (← p "a") (← p "b"))
+  | "raceOutcome" => only ["a", "b"]; pure (.raceOutcome (← p "a") (← p "b"))
+  | "both" => only ["a", "b"]; pure (.both (← p "a") (← p "b"))
+  | "bothOutcome" => only ["a", "b"]; pure (.bothOutcome (← p "a") (← p "b"))
   -- format v2
   | "guarantee" => only ["e", "fin", "tag"]; pure (.guarantee (← p "e") (← p "fin") (← tag))
   | "bracket" =>
@@ -509,9 +551,21 @@ partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .i
       (← p "rel" ((y, .v) :: (x, .v) :: scope)) (← tag))
   | _ => fail s!"unknown op '{op}'"
 
+/-- Reject a v2 op anywhere in `j` (a case of format v0 or v1; `Json.checkNoV2`). -/
+partial def checkNoV2 : Json → D Unit
+  | .obj kvs => do
+    match kvs.toList.lookup "op" with
+    | some (.str op) =>
+      if v2Ops.contains op then fail s!"op '{op}': not in format v0/v1 (use \"v\":2)"
+    | _ => pure ()
+    kvs.toList.forM fun (_, v) => checkNoV2 v
+  | .arr xs => xs.toList.forM checkNoV2
+  | _ => pure ()
+
 /-- Decode a closed program. `syncStep` is allowed only here, at the root. -/
 def decodeProg (j : Json) (version : Nat := formatVersion) : D Prog := do
   let v1 := version ≥ 1
+  if version < 2 then checkNoV2 j
   let o ← obj j "prog"
   match get? o "op" with
   | some (.str "syncStep") =>
@@ -534,7 +588,7 @@ private def choice (j : Json) : D Choice :=
 /-- Decode one test case (`Json.decodeCase`). -/
 def decodeCase (j : Json) : D TestCase := do
   let o ← obj j "case"
-  keys o ["v", "id", "mode", "choices", "seed", "maxSteps", "prog"] "case"
+  keys o ["v", "id", "mode", "choices", "seed", "maxSteps", "runtime", "prog"] "case"
   let v ← nat (← field o "v" "case") "case.v"
   if v > formatVersion then fail s!"case.v: unsupported format version {v}"
   let id ← str (← field o "id" "case") "case.id"
@@ -553,6 +607,20 @@ def decodeCase (j : Json) : D TestCase := do
   let maxSteps ← match get? o "maxSteps" with
     | some x => nat x "case.maxSteps"
     | none => pure defaultMaxSteps
-  pure { version := v, id, mode, prog := ← decodeProg (← field o "prog" "case") v, maxSteps }
+  -- `runtime`: the `IORuntimeConfig` thresholds of a replay run, with the checks of
+  -- `IORuntimeConfig.scala:33-40` (auto-yield > 1, cancelation check > 0, a multiple).
+  let (cancelCheck, autoYield) ← match get? o "runtime" with
+    | none => pure (512, 1024)
+    | some r =>
+      if (get? o "seed").isSome then fail "case: 'runtime' is only for mode replay"
+      let ro ← obj r "case.runtime"
+      keys ro ["cancelationCheckThreshold", "autoYieldThreshold"] "case.runtime"
+      let c ← nat (← field ro "cancelationCheckThreshold" "case.runtime") "case.runtime.cancelationCheckThreshold"
+      let a ← nat (← field ro "autoYieldThreshold" "case.runtime") "case.runtime.autoYieldThreshold"
+      if c == 0 || a ≤ 1 || a % c != 0 || a > maxLimit then
+        fail s!"case.runtime: invalid thresholds {c}, {a}"
+      pure (c, a)
+  pure { version := v, id, mode, prog := ← decodeProg (← field o "prog" "case") v, maxSteps,
+         cancelCheck, autoYield }
 
 end Difftest

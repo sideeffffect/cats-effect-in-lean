@@ -78,8 +78,13 @@ IO-class entry points: `IO#bracket` 338 → `IO#bracketCase` 370 → `IO.bracket
 - `GenSpawnTests` has a deprecated `spawn` overload (`:33-127`) without `fiberJoinIsGuaranteeCase`.
 - Lemmas (proven): if an instance keeps the default `guarantee`, `guaranteeIsGuaranteeCase` holds for each reflexive `Eqv`. With the `Uncancelable` mixin, nine `MonadCancel` laws hold the same way. So these laws test something only for an instance that overrides the method. For `IO`, `guaranteeIsGuaranteeCase` compares two different bodies (`IO:496` vs `IO:523`).
 
+## Update 2026-11-10 (Phase 6, track R)
+
+- Checked: every `IO` entry point of `race`, `raceOutcome`, `both`, `bothOutcome` ends in the kernel default; `IOAsync` overrides none of them. So these four have no IO-vs-kernel twin. Mirror: [race and both model](race-both-model.md).
+
 ## See Also
 
+- [race, both and fiber leaks](race-both-model.md)
 - [guarantee and bracket model, CE-0005](bracket-model.md)
 - [Outcome sets, `Eqv` and the IO laws](../semantics/outcome-equivalence.md)
 

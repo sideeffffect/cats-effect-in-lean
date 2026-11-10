@@ -245,6 +245,12 @@ class Checker:
             t = self.prog(p['e'], env)
             u(t, self.prog(p['fb'], env), "timeoutTo fallback")
             return t
+        # ---- format v2 (track R)
+        if op in ('race', 'raceOutcome', 'both', 'bothOutcome'):
+            a, b = self.prog(p['a'], env), self.prog(p['b'], env)
+            if op in ('raceOutcome', 'bothOutcome'):
+                a, b = ('outcome', a), ('outcome', b)
+            return ('either' if op.startswith('race') else 'pair', a, b)
         if op == 'queueNew':
             return ('queue', f())
         if op == 'queueOffer':

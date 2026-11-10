@@ -132,6 +132,14 @@
 ## [2026-11-10] ingest | Phase 6 start: batches and decisions 47-52
 - Updated: Project plan (status)
 
+## [2026-11-10] ingest | Phase 6 track R: race, both, leak observation, difftest v2
+- Created: race, both and fiber leaks
+- Updated: Difftest program format (format v2), Kernel typeclasses model (no twin), Queue and timeout model, Outcome sets (See Also), index
+
+## [2026-11-10] ingest | Track D: difftest depth, timeoutTo mirror, preempt coverage
+- Raw: raw/project-decisions/2026-11-10-difftest-depth-track-d-notes.md
+- Updated: Differential testing (format-v1 depth table, preempt coverage, CI), Difftest program format (`runtime` field, `timeoutTo` mirrored, UserError 999998 code, idpoll status), Outcome sets and Eqv (preempt vs auto-yield difftest), Phase 5 gate report (caveats 3 and 4 status)
+
 ## [2026-11-10] ingest | Phase 6 track G: guarantee, bracket*, CE-0005
 - Created: guarantee and bracket model, CE-0005
 - Updated: Difftest program format (format v2 ops, failure text of UserError 999998), Resource model (IO#guarantee now mirrored), Kernel typeclasses model (twin results), Bug history (CE-0005)

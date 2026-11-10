@@ -2,6 +2,7 @@ import Difftest.Closure
 import CatsEffectInLean.Model.Syntax
 import CatsEffectInLean.Model.Resource
 import CatsEffectInLean.Model.Timeout
+import CatsEffectInLean.Model.Race
 import CatsEffectInLean.Model.Bracket
 import CatsEffectInLean.Std.Queue
 
@@ -34,15 +35,16 @@ captures a snapshot (`snapVal`).
 
 ## Ops the model cannot express yet
 
-None in format v0 (`unsupportedReason`). `racePair` and `sleep` run on the `RacePair` and
-`Sleep` mirrors of the step function. Format v1: `timeoutTo` with a user fallback is not
-mirrored (`Model/Timeout.lean` has only the `TimeoutException` fallback of `timeout`).
+None (`unsupportedReason`). `racePair` and `sleep` run on the `RacePair` and `Sleep` mirrors
+of the step function. Format v1: `timeoutTo` with a user fallback runs on
+`Timeout.timeoutToIO` (since 2026-11-10; before, it was `unsupported`).
 
 ## Format v1: library mirrors
 
 * `timeout e ms` is `Timeout.timeoutIO src ms` (`Model/Timeout.lean`). The source `I(e)` is
   the code `src` of a `timeoutSrc` closure value (node, snapshot, environment); `srcIO`
-  (`Difftest/Env.lean`) builds it.
+  (`Difftest/Env.lean`) builds it. `timeoutTo e ms fb` is `Timeout.timeoutToIO src c ms`; the
+  fallback `I(fb)` is the code `c` of a `timeoutFb` closure value.
 * The queue ops are the `Std/Queue.lean` terms (`newIO`, `offerIO`, `takeIO`, `tryTakeIO`),
   plus the `Map` of the interpreter (`.as(VUnit)`, the `Option` selection, the handle).
 * `allocatedCase res` is `Resource.allocatedCase R res` (`Model/Resource.lean`), then
@@ -210,9 +212,9 @@ inductive TrErr where
   | unsupported (op : String)
   deriving DecidableEq, Repr
 
-/-- What the model lacks for each unsupported op. Every op of format v0 runs on the model. -/
+/-- What the model lacks for each unsupported op. Every op of formats v0 and v1 runs on the
+model. -/
 def unsupportedReason : String → String
-  | "timeoutTo" => "Model/Timeout.lean mirrors only the TimeoutException fallback of timeout"
   | _ => "unknown"
 
 /-- `⟦a⟧`. -/
@@ -262,6 +264,12 @@ def neverTerm (node : Nat) : IO := .ioCont (clo node .neverBody [])
 def TrErr.toErr : TrErr → Err
   | .typeError => typeErr
   | .unsupported _ => harnessErr
+
+/-- The two source codes of a v2 combinator at `node` (`raceSrcA`, `raceSrcB`, with the
+snapshot); `Env.srcIO` rebuilds `I(a)` and `I(b)` from them. -/
+def combSrcs (node : Nat) (env : List Val) (vw : View) : Val × Val :=
+  (.nat (Clo.encode { node, lam := .raceSrcA, vals := snapVal vw :: env }),
+   .nat (Clo.encode { node, lam := .raceSrcB, vals := snapVal vw :: env }))
 
 mutual
 /-- `I(p)` with `p` at pre-order number `node`, in environment `env`. `vw` is the state that
@@ -368,7 +376,14 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     -- snapshot.
     let _ ← tr R e (node + 1) env vw
     pure (Timeout.timeoutIO (.nat (Clo.encode { node, lam := .timeoutSrc, vals := snapVal vw :: env })) ms)
-  | .timeoutTo .., _, _, _ => throw (.unsupported "timeoutTo")
+  | .timeoutTo e fb ms, node, env, vw => do
+    -- `I(e).timeoutTo(ms.millis, I(fb))` (`IO.scala:850-860`) = `Timeout.timeoutToIO`. Scala
+    -- builds `I(e)`, then `I(fb)`, now; the model builds them in closures from the codes, with
+    -- the snapshot.
+    let _ ← tr R e (node + 1) env vw
+    let _ ← tr R fb (node + 1 + e.size) env vw
+    let code (lam : Lam) : Val := .nat (Clo.encode { node, lam, vals := snapVal vw :: env })
+    pure (Timeout.timeoutToIO (code .timeoutSrc) (code .timeoutFb) ms)
   | .queueNew, node, _, _ =>
     -- `Queue.unbounded[IO, Val].map(q => VQueue(h.newQueue(q)))` (`Queue.scala:160-167`)
     pure (.map CatsEffectInLean.Std.Queue.newIO (clo node .queueHandle []))
@@ -391,6 +406,33 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     | .error _ => throw .typeError
   | .rPure _, _, _, _ | .rEval _, _, _, _ | .rMake _ _, _, _, _ | .rFlatMap _ _, _, _, _ =>
     throw .typeError -- a resource node at an `IO` position: the decoder prevents this
+  -- format v2: `I(a).<op>(I(b))` (`IO.scala:638`, `:641`, `:243`, `:228`) = the kernel default
+  -- with `IOAsync` (`Model/Race.lean`). Scala builds `I(a)` then `I(b)` now; the model builds them
+  -- in the `body` closure from the source codes `raceSrcA`/`raceSrcB`, with the snapshot.
+  | .race a b, node, env, vw => do
+    let _ ← tr R a (node + 1) env vw
+    let _ ← tr R b (node + 1 + a.size) env vw
+    let (sa, sb) := combSrcs node env vw
+    -- `.map { case Left(v) => VLeft(v); case Right(v) => VRight(v) }`
+    pure (.map (Race.raceIO sa sb) (clo node .raceK []))
+  | .raceOutcome a b, node, env, vw => do
+    let _ ← tr R a (node + 1) env vw
+    let _ ← tr R b (node + 1 + a.size) env vw
+    let (sa, sb) := combSrcs node env vw
+    -- `.flatMap { case Left(oc) => ocVal(oc).map(VLeft(_)); case Right(oc) => ... }`
+    pure (.flatMap (Race.raceOutcomeIO sa sb) (clo node .roK []))
+  | .both a b, node, env, vw => do
+    let _ ← tr R a (node + 1) env vw
+    let _ ← tr R b (node + 1 + a.size) env vw
+    let (sa, sb) := combSrcs node env vw
+    -- `.map { case (x, y) => VPair(x, y) }`
+    pure (.map (Race.bothIO sa sb) (clo node .pairK []))
+  | .bothOutcome a b, node, env, vw => do
+    let _ ← tr R a (node + 1) env vw
+    let _ ← tr R b (node + 1 + a.size) env vw
+    let (sa, sb) := combSrcs node env vw
+    -- `.flatMap { case (oa, ob) => ocVal(oa).flatMap(x => ocVal(ob).map(y => VPair(x, y))) }`
+    pure (.flatMap (Race.bothOutcomeIO sa sb) (clo node .boK []))
   -- format v2: the mirror `Model/Bracket.lean`
   | .guarantee e fin _, node, env, vw => do
     -- `run(e).guarantee(IO.delay(emit) *> run(fin).void)` (`IO.scala:496-501`): both built now;
@@ -413,6 +455,7 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
   | .bracketFull _ _ _ _, node, env, _ =>
     -- `IO.bracketFull(acquire)(use)(release)` (`IO.scala:1826-1830`)
     pure (Bracket.bracketFullIO (cloId node .bfAcq env) (cloId node .brUse env) (cloId node .brcRel env))
+
 
 /-- `I_R(r)`: the `Resource` term of a resource node (`Interp.scala` `res`). The `IO` programs
 inside are built with an empty view (the resource restriction, `Prog.resViewFree`). -/

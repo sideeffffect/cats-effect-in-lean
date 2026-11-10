@@ -119,16 +119,22 @@ def runClo (R : Resource.REnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DR
     | _ => DResult.harness
   | .succFn, _ => ret (.ocSucceeded arg)
   | .gcFinK, .guaranteeCase _ _ _ =>
-    prog (.flatMap (.delay (clo node .gcFinEmit (arg :: env))) (clo node .gcFinThen (arg :: env)))
+    -- `o => IO.delay(emit) *> run(fin).void`: `*>` takes `that` by value (`IO.scala:138-139`),
+    -- so Scala builds `run(fin)` now, in this closure. `gcFinThen` captures the snapshot.
+    prog (.flatMap (.delay (clo node .gcFinEmit (arg :: env)))
+      (clo node .gcFinThen (snapVal vw :: arg :: env)))
   | .gcFinEmit, .guaranteeCase _ _ tag =>
     match env with
     | o :: _ => ret .unit [.finGuaranteeCase tag o]
     | [] => DResult.harness
   | .gcFinThen, .guaranteeCase e fin _ =>
-    -- Scala builds `run(fin)` in `o => IO.delay(emit) *> run(fin).void`, one run-loop iteration
-    -- before this closure runs (`FlatMap` over `Delay`, `IOFiber.scala:420-437`); nothing else
-    -- runs in between, so the current view is the same.
-    ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr R fin (node + 1 + e.size) env vw)
+    -- `run(fin)` was built in `gcFinK`: use the captured snapshot. (Before 2026-11-10 this used
+    -- the current view. An auto-yield between the two closures let another fiber complete, so
+    -- `fib.cancel` read a different `_cancel`: found with small `runtime` thresholds.)
+    match env with
+    | snap :: env0 =>
+      ofTr ((fun io => IO.map io (clo node .voidFn [])) <$> tr R fin (node + 1 + e.size) env0 (snapView snap))
+    | [] => DResult.harness
   | .fiberHandle, _ =>
     match arg with
     | .fiber i => ret (.fiber i) [.handle i]
@@ -138,6 +144,35 @@ def runClo (R : Resource.REnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) : DR
     match arg with
     | .left (.pair oc fb) => prog (.map (ocValTerm node oc) (clo node .rpLeft [fb]))
     | .right (.pair fa oc) => prog (.map (ocValTerm node oc) (clo node .rpRight [fa]))
+    | _ => DResult.harness
+  -- format v2 (track R)
+  | .raceK, .race _ _ =>
+    match arg with
+    | .left v => ret (.left v)
+    | .right v => ret (.right v)
+    | _ => DResult.harness
+  | .roK, .raceOutcome _ _ =>
+    match arg with
+    | .left oc => prog (.map (ocValTerm node oc) (clo node .mkLeft []))
+    | .right oc => prog (.map (ocValTerm node oc) (clo node .mkRight []))
+    | _ => DResult.harness
+  | .mkLeft, _ => ret (.left arg)
+  | .mkRight, _ => ret (.right arg)
+  | .pairK, .both _ _ =>
+    match arg with
+    | .pair x y => ret (.pair x y)
+    | _ => DResult.harness
+  | .boK, .bothOutcome _ _ =>
+    match arg with
+    | .pair oa ob => prog (.flatMap (ocValTerm node oa) (clo node .boK2 [ob]))
+    | _ => DResult.harness
+  | .boK2, .bothOutcome _ _ =>
+    match env with
+    | [ob] => prog (.map (ocValTerm node ob) (clo node .boK3 [arg]))
+    | _ => DResult.harness
+  | .boK3, .bothOutcome _ _ =>
+    match env with
+    | [x] => ret (.pair x arg)
     | _ => DResult.harness
   | .rpLeft, _ =>
     match env with
@@ -323,17 +358,38 @@ def denv (p : Prog) (id : Nat) (arg : Val) (vw : View) : DResult :=
     | none => DResult.harness
     | some n => runClo (renvOf p) c n arg vw
 
-/-- The source builder of `Timeout.call`: `src` is the code of a `timeoutSrc` closure value;
-the result is `I(e)` of that `timeout` node, built with the snapshot. -/
+/-- The source builder of `Timeout.call`: `src` is the code of a `timeoutSrc` closure value
+(the result is `I(e)` of that `timeout` or `timeoutTo` node) or of a `timeoutFb` closure value
+(the result is `I(fb)` of that `timeoutTo` node), built with the snapshot. -/
 def srcIO (p : Prog) (srcV : Val) : IO :=
+  let build (e : Prog) (n : Nat) (env : List Val) (snap : Val) : IO :=
+    match tr (renvOf p) e n env (snapView snap) with
+    | .ok io => io
+    | .error e => .error e.toErr
   match (match srcV with | .nat src => Clo.decode? src | _ => none) with
   | some { node, lam := .timeoutSrc, vals := snap :: env } =>
     match p.at? node with
-    | some (.timeout e _) =>
-      match tr (renvOf p) e (node + 1) env (snapView snap) with
+    | some (.timeout e _) | some (.timeoutTo e _ _) => build e (node + 1) env snap
+    | _ => .error harnessErr
+  | some { node, lam := .timeoutFb, vals := snap :: env } =>
+    match p.at? node with
+    | some (.timeoutTo e fb _) => build fb (node + 1 + e.size) env snap
+    | _ => .error harnessErr
+  -- format v2: `I(a)` / `I(b)` of a combinator node (`Translate.combSrcs`)
+  | some { node, lam := .raceSrcA, vals := snap :: env } =>
+    match (p.at? node).bind Prog.combArgs? with
+    | some (a, _) =>
+      match tr (renvOf p) a (node + 1) env (snapView snap) with
       | .ok io => io
       | .error e => .error e.toErr
-    | _ => .error harnessErr
+    | none => .error harnessErr
+  | some { node, lam := .raceSrcB, vals := snap :: env } =>
+    match (p.at? node).bind Prog.combArgs? with
+    | some (a, b) =>
+      match tr (renvOf p) b (node + 1 + a.size) env (snapView snap) with
+      | .ok io => io
+      | .error e => .error e.toErr
+    | none => .error harnessErr
   | _ => .error harnessErr
 
 /-- The external sources of `Bracket.call` (format v2): `I(e)` and the finalizer of
@@ -361,6 +417,7 @@ inductive LibClo where
   | queue (l : CatsEffectInLean.Std.Queue.QLam)
   | timeout (l : Timeout.TLam)
   | resource (c : Resource.Clo)
+  | race (l : Race.RLam)
   | bracket (l : Bracket.BLam)
 
 /-- The library closure of an id that is not a difftest closure id, if exactly one mirror
@@ -376,6 +433,7 @@ def libClo? (id : Nat) : Option LibClo :=
           if k == CatsEffectInLean.Std.Queue.ns then
             (CatsEffectInLean.Std.Queue.QLam.ofFields tag fs).map .queue
           else if k == Timeout.ns then (Timeout.TLam.ofFields tag fs).map .timeout
+          else if k == Race.ns then (Race.RLam.ofFields tag fs).map .race
           else if k == Bracket.ns then (Bracket.BLam.ofFields tag fs).map .bracket
           else none
         | none => none
@@ -406,6 +464,7 @@ def dispatch (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
     | some (.queue l) => CatsEffectInLean.Std.Queue.call l arg vw
     | some (.timeout l) => Timeout.call (srcIO p) l arg vw
     | some (.resource c) => Resource.cloCall (renvOf p) c arg vw
+    | some (.race l) => Race.call (srcIO p) l arg vw
     | some (.bracket l) => Bracket.call (dispatchDt p) (bracketSrcIO p) l arg vw
     | none => DResult.harness.toUser
 

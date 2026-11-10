@@ -1,7 +1,7 @@
 # Difftest program format (v0 and v1) and Scala runner
 
 > Sources: own design and implementation in `difftest/` (Phase 3 steps 1–2) and `tools/Difftest/` (Lean side), run 2026-11-10 against cats-effect 3.7.1; IO.scala, IOFiber.scala, IORuntime.scala, TestControl.scala at v3.7.1; first `cediff` replay runs (2026-11-10); format v1 (decision 30): `IO.scala:818-860`, `:1161-1162`, `:2173-2178`, `:2340-2402`, `Resource.scala:388-389`, `:464-531`, `:826-993`, `Queue.scala:105-106`, `:160-167`, `:871-988` at v3.7.1, own runs 2026-11-10
-> Raw: [Difftest v1 notes](../../raw/project-decisions/2026-11-10-difftest-v1-notes.md); [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Difftest runner notes](../../raw/project-decisions/2026-11-10-difftest-runner-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [Phase 0 decisions](../../raw/project-decisions/2026-11-10-phase0-decisions.md)
+> Raw: [Difftest v1 notes](../../raw/project-decisions/2026-11-10-difftest-v1-notes.md); [First difftest agreement notes](../../raw/project-decisions/2026-11-10-first-difftest-agreement-notes.md); [Difftest runner notes](../../raw/project-decisions/2026-11-10-difftest-runner-notes.md); [Lean decoder notes](../../raw/project-decisions/2026-11-10-lean-difftest-decoder-notes.md); [Phase 0 decisions](../../raw/project-decisions/2026-11-10-phase0-decisions.md); [Difftest depth notes (track D)](../../raw/project-decisions/2026-11-10-difftest-depth-track-d-notes.md)
 
 ## Overview
 
@@ -96,16 +96,27 @@ Decision 30: the `syncStep`/`SyncIO`, `Resource` and `Queue` mirrors need diffte
 | `rFlatMap` | `res`, `x`, `k` | `I_R(res).flatMap(v => I_R(k)[x := v])` |
 
 - Resource positions: `allocatedCase.res`, `rFlatMap.res`, `rFlatMap.k`. A resource op elsewhere, or an `IO` op there, is a decode error. `syncStep` below the root is a decode error.
-- `TimeoutException` is error code 999998 in the value language: `handleErrorWith` binds `nat 999998`, `attempt` gives `left (nat 999998)`, an outcome prints `{"t":"errored","code":999998}`, and `reportFailure` prints `TimeoutException` (no message). Lean: `Timeout.timeoutErr` (code 10^6 = 999998 + 2). Generated programs never raise 999998 themselves.
+- `TimeoutException` is error code 999998 in the value language: `handleErrorWith` binds `nat 999998`, `attempt` gives `left (nat 999998)`, an outcome prints `{"t":"errored","code":999998}`, and `reportFailure` prints `TimeoutException` (no message). Lean: `Timeout.timeoutErr` (code 10^6). A program can catch a timeout (`nat 999998`) and raise it again as `UserError(999998)`; Scala then reports `UserError: UserError(999998)`. So Lean codes `UserError(c)` as `c + 2`, or `c + 3` when `c + 2 ≥ 10^6` (`userErr`, fixed 2026-11-10), and `userCode?` gives 999998 for both.
 - `IdPoll`: a `poll` that `syncStep` gives to an `uncancelable` body is `IdPoll` (`IO.scala:2390-2394`): `poll(fa)` is `fa`. Lean: the poll value `poll 0 0` (`idPollVal`); `pollTerm` makes `poll(fa)` with mask id 0 the plain `fa`.
-- Lean side: `timeout` is `Timeout.timeoutIO src ms`, where `src` codes `(node, snapshot, env)` and `Difftest.srcIO` builds `I(e)`; the queue ops are the `Std.Queue` terms (`newIO`, `offerIO`, `takeIO`, `tryTakeIO`) plus the interpreter's `Map`; `allocatedCase` is `Resource.allocatedCase R res` plus `Map(_, _._1)`; the closures of the three mirrors run through `Env.dispatch` (`Std.Queue.call`, `Timeout.call`, `Resource.cloCall`). A queue is a model `Ref` cell (its buffer); the replay glue renumbers `Ref` and queue handles (`refH`, `queueH` internal events). A root `syncStep` runs `SyncStep.steppedRest` before the scheduler starts.
-- Not mirrored, so `unsupported` on the Lean side: `timeoutTo` with a user fallback (`Model/Timeout.lean` has only the `TimeoutException` fallback of `timeout`).
+- Lean side: `timeout` is `Timeout.timeoutIO src ms`, where `src` codes `(node, snapshot, env)` and `Difftest.srcIO` builds `I(e)`; `timeoutTo` is `Timeout.timeoutToIO src c ms`, where `c` codes the fallback `I(fb)` (closure kind `timeoutFb`; `timeout` passes the descriptor `Val.none`, the `TimeoutException` fallback); the queue ops are the `Std.Queue` terms (`newIO`, `offerIO`, `takeIO`, `tryTakeIO`) plus the interpreter's `Map`; `allocatedCase` is `Resource.allocatedCase R res` plus `Map(_, _._1)`; the closures of the three mirrors run through `Env.dispatch` (`Std.Queue.call`, `Timeout.call`, `Resource.cloCall`). A queue is a model `Ref` cell (its buffer); the replay glue renumbers `Ref` and queue handles (`refH`, `queueH` internal events). A root `syncStep` runs `SyncStep.steppedRest` before the scheduler starts.
+- `timeoutTo` with a user fallback runs on the model since 2026-11-10 (track D of batch 6.1; before, it was `unsupported`). Mutation check: a model that ignores the user fallback gives 41 mismatches in 5,000 cases.
 - Resource restriction (Lean): `REnv.bind`, `REnv.acquire`, `REnv.release` take no heap view. So a program inside a resource node must not read state when Scala builds it (`join`, `cancel`, `deferredGet` at an eager position, `Prog.eagerReads`). Such a case is `unsupported` (`resource-reads-state`). The generator never makes one.
-- Known model bug `idpoll` (2026-11-10): the `Timeout` and `Resource` mirrors build `UnmaskRunLoop(fa, 0, 0)` for the `IdPoll` of `syncStep`, so the root fiber stays masked after it. Shrunk cases: `difftest/corpus/known-idpoll-*.json`. Details: [Difftest v1 notes](../../raw/project-decisions/2026-11-10-difftest-v1-notes.md).
+- Model bug `idpoll` (found and fixed 2026-11-10): the `Timeout` and `Resource` mirrors built `UnmaskRunLoop(fa, 0, 0)` for the `IdPoll` of `syncStep`, so the root fiber stayed masked after it. Fix: `IO.applyPoll`. Regression cases: `difftest/corpus/fixed-idpoll-*.json` (`expect: agree`). Details: [Difftest v1 notes](../../raw/project-decisions/2026-11-10-difftest-v1-notes.md), [idpoll notes](../../raw/project-decisions/2026-11-10-idpoll-fix-notes.md).
 
-## Format v2 (track G)
+## Format v2 (Phase 6, decision 51)
 
-Decision 51. New ops (Scala runner, Lean decoder/translator and generator in one change):
+New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decode error (pre-pass `checkNoV2` in `Json.scala` and `Prog.lean`).
+
+| op | fields | term |
+|----|--------|------|
+| `race` | `a`, `b` | `I(a).race(I(b)).map { Left(v) ↦ left v; Right(v) ↦ right v }` |
+| `raceOutcome` | `a`, `b` | `I(a).raceOutcome(I(b)).flatMap { Left(oc) ↦ ocVal(oc).map(left); Right(oc) ↦ ocVal(oc).map(right) }` |
+| `both` | `a`, `b` | `I(a).both(I(b)).map { (x, y) ↦ pair(x, y) }` |
+| `bothOutcome` | `a`, `b` | `I(a).bothOutcome(I(b)).flatMap { (oa, ob) ↦ ocVal(oa).flatMap(x => ocVal(ob).map(y => pair(x, y))) }` |
+
+- Lean: `Model/Race.lean` terms; sources are `raceSrcA`/`raceSrcB` codes rebuilt by `Env.srcIO` with the snapshot. Generator: type-directed productions plus `tpl_comb` and `tpl_combCancel` (decision 50). Counts: `difftest/py/opcount.py` ([race and both model](../cats-effect/race-both-model.md)).
+
+### Format v2 ops of track G (same version, same `checkNoV2` gate)
 
 | op | fields | term |
 |----|--------|------|
@@ -119,7 +130,7 @@ Decision 51. New ops (Scala runner, Lean decoder/translator and generator in one
 - Lean side: the ops run on the mirror `Model/Bracket.lean` (`Bracket.guaranteeIO`, `bracketIO`, `bracketCaseIO`, `bracketFullIO`); `Env.bracketSrcIO` rebuilds `I(e)`, `I(fin)` and `I(acq)` from the build-time snapshot; trace event `TraceEv.finV2`.
 - `Prog.eagerReads`: `guarantee` builds `e` and `fin` at once; `bracket`/`bracketCase` build `acq`.
 - Fixed cases `cases/bracket.jsonl` (`cases/gen_v2.py`). Generator: weights `guarantee`, `bracket*`, `tpl_bracket` (bracket in a child that the parent cancels).
-- Failure text: the value language identifies `UserError(999998)` with `TimeoutException` (`CodeOf`), and the Lean side has one `Err` for both. Since track G the Scala `reportFailure` prints both as `TimeoutException` (found by 2 generated cases: `raise` of a code that `handleErrorWith` bound from a timeout).
+- Failure text of `UserError(999998)`: track G first changed the Scala text; track D fixed it on the Lean side instead (`userErr 999998 ≠ timeoutErr`). After the merge only D's fix is kept (Scala `Runner.scala` unchanged).
 - See [guarantee and bracket model](../cats-effect/bracket-model.md).
 
 ## User function table
@@ -153,9 +164,11 @@ Decision 51. New ops (Scala runner, Lean decoder/translator and generator in one
 
 ## Test case and run modes
 
-Input line: `{"v":1,"id":"…","mode":"replay","choices":[…],"maxSteps":n,"prog":P}` or `{"v":1,"id":"…","mode":"testcontrol","seed":n,"maxSteps":n,"prog":P}` (`"v":0` too). `maxSteps` default is 10,000.
+Input line: `{"v":1,"id":"…","mode":"replay","choices":[…],"maxSteps":n,"runtime":R,"prog":P}` or `{"v":1,"id":"…","mode":"testcontrol","seed":n,"maxSteps":n,"prog":P}` (`"v":0` too). `maxSteps` default is 10,000.
 
-**replay** (primary, decision 3). Scripted `ExecutionContext` and virtual-time `Scheduler` in `IORuntime(ec, ec, scheduler, () => (), IORuntimeConfig())`. The root runs through `unsafeRunFiber`.
+- `runtime` (optional, replay only, since 2026-11-10): `{"cancelationCheckThreshold":c,"autoYieldThreshold":a}`. The replay runtime uses `IORuntimeConfig().copy(cancelationCheckThreshold = c, autoYieldThreshold = a)`; the Lean side uses `Config` with the same values. Checks as `IORuntimeConfig.scala:33-40`: `c > 0`, `a > 1`, `a mod c = 0` (else a decode error). A small `a` puts an auto-yield after every few run-loop iterations. An auto-yield has the same effect as a `preempt` choice of `Model/SchedP.lean`, so these cases test the preemption transition ([Differential testing](differential-testing.md), "Preempt coverage").
+
+**replay** (primary, decision 3). Scripted `ExecutionContext` and virtual-time `Scheduler` in `IORuntime(ec, ec, scheduler, () => (), config)` (`config` = `IORuntimeConfig()`, or the `runtime` thresholds). The root runs through `unsafeRunFiber`.
 
 - Ready list: tasks in enqueue order. Labels at first enqueue: `f<k>` for IOFibers (root `f0`, then creation order), `x<k>` for external cancelers, `cb<a>.<i>` for callback tasks, `t<k>` for timer tasks.
 - A choice `n` runs ready task `n mod size` as one step (one `IOFiber.run()` or one callback/timer task).
@@ -181,7 +194,7 @@ Output line: `{"v":0,"id","mode","outcome","trace","steps","time","schedule","fi
 - Other CE version: `sbt -Dce.version=<version> test`.
 - Lean side: `lake build Difftest cediff`, then `lake exe cediff difftest/cases/basic.jsonl`. Compare with Scala: `python3 difftest/py/drive.py check --lean "lake exe cediff" difftest/cases/*.jsonl` (only the input files, not `*.expected.jsonl`).
 - Generated cases, driver, shrinker: `difftest/py/` ([Differential testing](differential-testing.md), sections Generator and Driver).
-- CI: job `difftest` runs `sbt -batch test` (JDK 21), `python3 difftest/py/selftest.py`, then builds `cediff` and requires agreement (`drive.py check` on the fixed files, `corpus`, `run` on 3 × 2,000 replay cases); the `lean` job runs the Lean side on the fixed case files (`basic`, `sched`, `deferred`, `racesleep`, `syncstep`, `resource`, `queue`).
+- CI: job `difftest` runs `sbt -batch test` (JDK 21), `python3 difftest/py/selftest.py`, then builds `cediff` and requires agreement (`drive.py check` on the fixed files, `corpus`, `run` on 3 × 2,000 replay cases); the `lean` job runs the Lean side on the fixed case files (`basic`, `sched`, `deferred`, `racesleep`, `syncstep`, `resource`, `queue`, `preempt`).
 
 ## Lean side
 
@@ -190,9 +203,9 @@ Code: `tools/Difftest/` (`lean_lib Difftest`, `lean_exe cediff`). It is test cod
 - `Prog.lean`: AST and decoder. Same rejections as `Json.scala`. Names become de Bruijn indices (0 = innermost; `split` binds `b` at 0, `a` at 1). `seq` becomes left-nested binary `seq`; `seq [p]` is `p`.
 - `Translate.lean`: `tr p node env vw` gives the root `Model.IO` term with the same constructor nesting as `Interp.run`. Examples: `canceled` = `Map(Canceled, _ => unit)`; `never` = `IOCont(body)` (`IO.scala:2198`, `Async.scala:168`, `IO.scala:1418-1431`); `guaranteeCase` = `Uncancelable(poll => FlatMap(HandleErrorWith(OnCancel(UnmaskRunLoop(e), fin(canceled)), onError), flatTap))` (`IO.scala:523-530`, `605-606`, `474`, `967-971`); `async` = `FlatMap(ReadEC, ec => IOCont(…))`; `join` = `FlatMap(IO.joinOf t oc, ocVal)`; `refNew` = `Map(Delay(Ref.unsafe v), handle)`.
 - State read at build time: `vw` is the `View` when Scala builds the term. `join`/`cancel` read the fiber outcome (`_join`/`_cancel`), `deferredGet` reads the cell. Scala builds three sub-terms eagerly that the model builds later in a closure (the `onCancel` finalizer, the `this` of `guaranteeCase`, the `async` finalizer); these closures capture a snapshot (`snapVal`).
-- `Closure.lean`: each Scala lambda is `Fn.user (Clo.encode ⟨node, lam, vals⟩)`: pre-order node number, lambda kind (`Lam`, 56 kinds), captured values. The encoding is lossless (`Clo.decode?`). Format v1: the id is `Codec.nsFn 3 [Clo.encode c]` (namespace 3, an even id), so it never collides with a queue (namespace 1), timeout (namespace 2) or `Resource` (odd) closure id; `Env.libClo?` rejects an id that two mirrors decode.
+- `Closure.lean`: each Scala lambda is `Fn.user (Clo.encode ⟨node, lam, vals⟩)`: pre-order node number, lambda kind (`Lam`, 57 kinds), captured values. The encoding is lossless (`Clo.decode?`). Format v1: the id is `Codec.nsFn 3 [Clo.encode c]` (namespace 3, an even id), so it never collides with a queue (namespace 1), timeout (namespace 2) or `Resource` (odd) closure id; `Env.libClo?` rejects an id that two mirrors decode.
 - `Env.lean`: `denv p id arg vw` runs a closure and returns the model result plus trace events and `reportFailure` calls. `userEnv p : UserEnv` turns the events into `UserEffect.emit` effects (`TraceEv.toVal`).
-- `Replay.lean`: runs the root term on `Model.Sched` (`counterMaskModel`, default `Config`) one micro-step at a time, and keeps what Scala prints but the model does not hold: fiber handles (decision 14: handle order of `h.fiberHandle`; a cancel choice maps the handle to the model id when it is used), task labels (`f<k>`, `x<k>`, `cb<a>.<i>`), async ids, the `cb` event of a `later` callback task, and the `failures` list.
+- `Replay.lean`: runs the root term on `Model.Sched` (`counterMaskModel`, `Config` from the case field `runtime`, else the default) one micro-step at a time, and keeps what Scala prints but the model does not hold: fiber handles (decision 14: handle order of `h.fiberHandle`; a cancel choice maps the handle to the model id when it is used), task labels (`f<k>`, `x<k>`, `cb<a>.<i>`), async ids, the `cb` event of a `later` callback task, and the `failures` list.
 - Errors: `UserError(c)` is `Err.code = c + 2`; code 0 is `TypeError`; code 1 is a harness error.
 - Trace: `asyncReg`/`cb` events hold the `ContState` id; internal events `handle` (`h.fiberHandle`) and `cbLater` (a `later` callback). The replay glue renumbers asyncs and fibers to the Scala ids.
 - `Tests.lean`: 81 `#guard` checks that run during `lake build Difftest`.
@@ -203,14 +216,13 @@ Code: `tools/Difftest/` (`lean_lib Difftest`, `lean_exe cediff`). It is test cod
 | Gap | Ops | Needed in the model |
 |-----|-----|---------------------|
 | testcontrol mode | all | the bounded schedule search with a `complete` flag (decision 15) |
-| `timeoutTo` with a user fallback (v1) | `timeoutTo` | a fallback code in `TLam.body`/`TLam.fold` and a builder `fbIO` (as `srcIO`) |
 | resource programs read no heap (v1) | resource nodes with eager `join`/`cancel`/`deferredGet` | a `View` argument for `REnv.bind`/`acquire`/`release` |
 | `Fn.user` has no captured values | none (workaround) | none (the encoding works); cleaner: `Fn.user id env` |
 | `Val` cannot hold an `IO` (`async` returns `Option[IO[Unit]]`, `IO.defer` returns an `IO`) | none (workaround) | none: a marker value, and the next closure rebuilds the term |
 
 ## Limits of v0 and v1
 
-- No `both`, `race`, `IO.blocking`, `evalOn`, `memoize`. Of `Resource` only `allocatedCase` over `pure`/`eval`/`make`/`flatMap` (no `use`, `allocated`, `map`); of `std` only `Queue.unbounded` (`offer`, `take`, `tryTake`).
+- No `IO.blocking`, `evalOn`, `memoize`. Of `Resource` only `allocatedCase` over `pure`/`eval`/`make`/`flatMap` (no `use`, `allocated`, `map`); of `std` only `Queue.unbounded` (`offer`, `take`, `tryTake`).
 - `syncStep` only at the root, and only `G = SyncIO` with `unsafeRunSync` (not `to[IO]`).
 - No recursion or loops in the language; programs are finite trees.
 - Replay labels only the root and handled fibers by handle. CE-internal fibers (none in v0 ops except the `racePair` pair) get plain `f<k>` labels.

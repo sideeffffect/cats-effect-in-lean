@@ -40,4 +40,25 @@ theorem old_u_unit : checkEqvP {} counterMaskModel env 200 (bracketFullIO 6 4 4)
 theorem old_u_canceled : checkEqvP {} counterMaskModel env 200 (bracketFullIO 6 8 4) (defaultBracketFullIO 6 8 4) = true := by decide +kernel
 theorem old_u_raise : checkEqvP {} counterMaskModel env 200 (bracketFullIO 6 10 4) (defaultBracketFullIO 6 10 4) = true := by decide +kernel
 
+
+/-- All checks of this module, for the axiom check of `scripts/check_twin_checks.sh`. -/
+theorem all_checks : True := by
+  have _ := @fixed_c_throw
+  have _ := @fixed_c_unit
+  have _ := @fixed_c_canceled
+  have _ := @fixed_c_raise
+  have _ := @fixed_u_throw
+  have _ := @fixed_u_unit
+  have _ := @fixed_u_canceled
+  have _ := @fixed_u_raise
+  have _ := @old_c_throw
+  have _ := @old_c_unit
+  have _ := @old_c_canceled
+  have _ := @old_c_raise
+  have _ := @old_u_throw
+  have _ := @old_u_unit
+  have _ := @old_u_canceled
+  have _ := @old_u_raise
+  trivial
+
 end CatsEffectInLean.Proofs.Phase6.BracketFullFixed

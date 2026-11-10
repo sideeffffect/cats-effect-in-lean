@@ -33,15 +33,20 @@ SEED = 20261110
 COV_N = 600
 COV_MIN = 0.035
 COV_MAX_STUCK = 0.25
-# Static coverage of the format v1 ops (the 5 x 10,000 target is 5 %; timeoutTo is unsupported
-# on the Lean side, so it gets less)
+# Static coverage of the format v1 ops (the 5 x 10,000 target is 5 %). timeoutTo runs on the
+# model since track D (weight 0.35 -> 1.2), so it has the same minimum.
 V1_OPS = ('syncStep', 'timeout', 'timeoutTo', 'queueNew', 'queueOffer', 'queueTake', 'queueTryTake',
           'allocatedCase', 'rPure', 'rEval', 'rMake', 'rFlatMap')
 V1_MIN = 0.03
-V1_MIN_TIMEOUTTO = 0.005
-# Static coverage of the format v2 ops (track G)
-V2_OPS = ('guarantee', 'bracket', 'bracketCase', 'bracketFull')
-V2_MIN = 0.03
+# Format v2 (track R): each op in at least this share of generated cases (static count)
+V2_OPS = ('race', 'raceOutcome', 'both', 'bothOutcome')
+V2_MIN = 0.05
+V1_MIN_TIMEOUTTO = 0.03
+# Share of cases with small IORuntimeConfig thresholds (`runtime`, preempt coverage; 25 %)
+RUNTIME_MIN = 0.15
+# Format v2 (track G): a lower share is enough (4 more ops share the weight)
+V2G_OPS = ('guarantee', 'bracket', 'bracketCase', 'bracketFull')
+V2G_MIN = 0.03
 
 
 def check(cond, msg):
@@ -53,7 +58,7 @@ def check(cond, msg):
 def main():
     t0 = time.time()
     # 1. type checker
-    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'bracket')
+    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race', 'bracket')
              for x in (drive.REPO / f'difftest/cases/{f}.jsonl').read_text().splitlines() if x.strip()]
     check(all(well_typed(c['prog']) for c in basic), f"type checker accepts all {len(basic)} golden cases")
     N1 = {'t': 'nat', 'v': 1}
@@ -67,6 +72,9 @@ def main():
         # format v1: syncStep only at the root; resource ops only at resource positions
         {'op': 'seq', 'ps': [{'op': 'syncStep', 'e': {'op': 'cede'}, 'limit': 1}]},
         {'op': 'rPure', 'v': N1},
+        # format v2: `both` gives a pair, `race` an either
+        {'op': 'bind', 'x': 'x', 'e': {'op': 'both', 'a': {'op': 'cede'}, 'b': {'op': 'cede'}},
+         'k': {'op': 'case', 'on': {'t': 'var', 'x': 'x'}, 'l': 'a', 'lk': {'op': 'cede'}, 'r': 'b', 'rk': {'op': 'cede'}}},
         {'op': 'allocatedCase', 'res': {'op': 'cede'}},
         {'op': 'bind', 'x': 'q', 'e': {'op': 'queueNew'}, 'k': {'op': 'seq', 'ps': [
             {'op': 'queueOffer', 'q': {'t': 'var', 'x': 'q'}, 'v': N1},
@@ -96,8 +104,13 @@ def main():
     low = {op: f for op, f in v1cov.items() if f < (V1_MIN_TIMEOUTTO if op == 'timeoutTo' else V1_MIN)}
     check(not low, f"each format v1 op in >= {V1_MIN:.0%} of {N} cases (timeoutTo {V1_MIN_TIMEOUTTO:.1%}) {low}")
     v2cov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2_OPS}
-    low = {op: f for op, f in v2cov.items() if f < V2_MIN}
-    check(not low, f"each format v2 op in >= {V2_MIN:.0%} of {N} cases {low}")
+    low2 = {op: f for op, f in v2cov.items() if f < V2_MIN}
+    check(not low2, f"each format v2 op in >= {V2_MIN:.0%} of {N} cases {low2}")
+    rt = sum(1 for c in a if 'runtime' in c) / N
+    check(rt >= RUNTIME_MIN, f"small runtime thresholds in {rt:.0%} >= {RUNTIME_MIN:.0%} of {N} cases")
+    v2gcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2G_OPS}
+    lowg = {op: f for op, f in v2gcov.items() if f < V2G_MIN}
+    check(not lowg, f"each format v2 op of track G in >= {V2G_MIN:.0%} of {N} cases {lowg}")
 
     # 3 + 4. Scala runs: no generator bug, deterministic
     tcs = [gen.to_testcontrol(c, t) for c in a[:N // 2] for t in (1, 2)]

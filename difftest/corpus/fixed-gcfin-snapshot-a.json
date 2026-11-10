@@ -1,0 +1,288 @@
+{
+ "case": {
+  "choices": [
+   0,
+   0,
+   0,
+   1
+  ],
+  "id": "g102-47911",
+  "mode": "replay",
+  "prog": {
+   "e": {
+    "e": {
+     "e": {
+      "e": {
+       "op": "seq",
+       "ps": [
+        {
+         "op": "cede"
+        },
+        {
+         "op": "cede"
+        },
+        {
+         "op": "canceled"
+        }
+       ]
+      },
+      "op": "start"
+     },
+     "k": {
+      "op": "seq",
+      "ps": [
+       {
+        "op": "cede"
+       },
+       {
+        "e": {
+         "op": "canceled"
+        },
+        "fin": {
+         "op": "seq",
+         "ps": [
+          {
+           "f": {
+            "t": "var",
+            "x": "x2"
+           },
+           "op": "cancel"
+          },
+          {
+           "op": "cede"
+          }
+         ]
+        },
+        "op": "guaranteeCase",
+        "x": "x3"
+       }
+      ]
+     },
+     "op": "bind",
+     "x": "x2"
+    },
+    "op": "start"
+   },
+   "k": {
+    "op": "never"
+   },
+   "op": "bind",
+   "x": "x1"
+  },
+  "runtime": {
+   "autoYieldThreshold": 4,
+   "cancelationCheckThreshold": 4
+  },
+  "v": 1
+ },
+ "expect": "agree",
+ "field": "steps",
+ "found": {
+  "date": "2026-11-10",
+  "orig_id": "g102-47911",
+  "orig_size": 21,
+  "size": 16
+ },
+ "known_bug": "",
+ "lean": {
+  "compare": [
+   "outcome",
+   "trace",
+   "steps",
+   "time",
+   "schedule",
+   "fifoFrom",
+   "fibers",
+   "pending",
+   "failures"
+  ],
+  "failures": [],
+  "fibers": {
+   "0": "f0",
+   "1": "f1",
+   "2": "f2"
+  },
+  "fifoFrom": 4,
+  "id": "g102-47911",
+  "mode": "replay",
+  "outcome": {
+   "t": "blocked"
+  },
+  "pending": 0,
+  "schedule": [
+   {
+    "pick": 0,
+    "ready": [
+     "f0"
+    ],
+    "step": 0,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f0"
+    ],
+    "step": 1,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f2",
+     "f1"
+    ],
+    "step": 2,
+    "task": "f0"
+   },
+   {
+    "pick": 1,
+    "ready": [
+     "f2",
+     "f1",
+     "f0"
+    ],
+    "step": 3,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f0",
+     "f1"
+    ],
+    "step": 4,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f0",
+     "f1",
+     "f2"
+    ],
+    "step": 5,
+    "task": "f0"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2"
+    ],
+    "step": 6,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f1"
+    ],
+    "step": 7,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2"
+    ],
+    "step": 8,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f1"
+    ],
+    "step": 9,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1",
+     "f2"
+    ],
+    "step": 10,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f2",
+     "f1"
+    ],
+    "step": 11,
+    "task": "f2"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1"
+    ],
+    "step": 12,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1"
+    ],
+    "step": 13,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1"
+    ],
+    "step": 14,
+    "task": "f1"
+   },
+   {
+    "pick": 0,
+    "ready": [
+     "f1"
+    ],
+    "step": 15,
+    "task": "f1"
+   }
+  ],
+  "steps": 16,
+  "time": 0,
+  "trace": [
+   {
+    "ev": "fin",
+    "oc": {
+     "t": "canceled"
+    },
+    "op": "guaranteeCase",
+    "tag": 0
+   }
+  ],
+  "v": 1
+ },
+ "note": "gcFinThen built run(fin) with the view of its own call; Scala builds it one closure earlier (`*>` takes its argument by value, closure gcFinK). An auto-yield between the two (small runtime thresholds) let the target fiber complete, so `fib.cancel` read another `_cancel`. Fixed: gcFinK captures the snapshot.",
+ "scala": {
+  "outcome": {
+   "t": "blocked"
+  },
+  "trace": [
+   {
+    "ev": "fin",
+    "oc": {
+     "t": "canceled"
+    },
+    "op": "guaranteeCase",
+    "tag": 0
+   }
+  ]
+ },
+ "triage": "harness-bug"
+}

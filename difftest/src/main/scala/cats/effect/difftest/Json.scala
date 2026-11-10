@@ -101,11 +101,23 @@ object Json:
   private val ResOps = Set("rPure", "rEval", "rMake", "rFlatMap")
 
   /** Ops of format v2 (a decode error in a v0 or v1 case). */
-  val V2Ops: Set[String] = Set("guarantee", "bracket", "bracketCase", "bracketFull")
+  val V2Ops: Set[String] = Set("race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket", "bracketCase",
+    "bracketFull")
+
+  /** Reject a v2 op anywhere in `j` (a case of format v0 or v1). */
+  private def checkNoV2(j: Value): Unit = j match
+    case o: ujson.Obj =>
+      o.value.get("op") match
+        case Some(ujson.Str(op)) if V2Ops.contains(op) => fail(s"op '$op': not in format v0/v1 (use \"v\":2)")
+        case _ => ()
+      o.value.valuesIterator.foreach(checkNoV2)
+    case ujson.Arr(xs) => xs.foreach(checkNoV2)
+    case _ => ()
 
   /** Decode a closed program. `syncStep` is allowed only here, at the root. */
   def decodeProg(j: Value, version: Long = FormatVersion): Prog =
     val v1 = version >= 1
+    if version < 2 then checkNoV2(j)
     val ver = version
     obj(j, "prog").get("op") match
       case Some(ujson.Str("syncStep")) if v1 =>
@@ -217,6 +229,10 @@ object Json:
       case "queueTake" => only("q"); Prog.QueueTake(a("q"))
       case "queueTryTake" => only("q"); Prog.QueueTryTake(a("q"))
       case "allocatedCase" => only("res"); Prog.AllocatedCase(res(field(o, "res", ctx), scope, v1))
+      case "race" => only("a", "b"); Prog.Race(p("a"), p("b"))
+      case "raceOutcome" => only("a", "b"); Prog.RaceOutcome(p("a"), p("b"))
+      case "both" => only("a", "b"); Prog.Both(p("a"), p("b"))
+      case "bothOutcome" => only("a", "b"); Prog.BothOutcome(p("a"), p("b"))
       // ---- format v2
       case "guarantee" => only("e", "fin", "tag"); Prog.Guarantee(p("e"), p("fin"), tag)
       case "bracket" =>
@@ -250,7 +266,7 @@ object Json:
 
   def decodeCase(j: Value): TestCase =
     val o = obj(j, "case")
-    keys(o, Set("v", "id", "mode", "choices", "seed", "maxSteps", "prog"), "case")
+    keys(o, Set("v", "id", "mode", "choices", "seed", "maxSteps", "runtime", "prog"), "case")
     val v = nat(field(o, "v", "case"), "case.v")
     if !Versions.contains(v) then fail(s"case.v: unsupported format version $v")
     val id = str(field(o, "id", "case"), "case.id")
@@ -267,7 +283,18 @@ object Json:
         Mode.TestControlSeed(nat(field(o, "seed", "case"), "case.seed"))
       case m => fail(s"case.mode: unknown mode '$m'")
     val max = o.get("maxSteps").map(nat(_, "case.maxSteps").toInt).getOrElse(DefaultMaxSteps)
-    TestCase(id, mode, decodeProg(field(o, "prog", "case"), v), max, v.toInt)
+    // `runtime`: IORuntimeConfig thresholds, with the checks of IORuntimeConfig.scala:33-40.
+    val runtime = o.get("runtime").map { r =>
+      if o.contains("seed") then fail("case: 'runtime' is only for mode replay")
+      val ro = obj(r, "case.runtime")
+      keys(ro, Set("cancelationCheckThreshold", "autoYieldThreshold"), "case.runtime")
+      val c = nat(field(ro, "cancelationCheckThreshold", "case.runtime"), "case.runtime.cancelationCheckThreshold")
+      val a = nat(field(ro, "autoYieldThreshold", "case.runtime"), "case.runtime.autoYieldThreshold")
+      if c == 0 || a <= 1 || a % c != 0 || a > MaxLimit then
+        fail(s"case.runtime: invalid thresholds $c, $a")
+      (c.toInt, a.toInt)
+    }
+    TestCase(id, mode, decodeProg(field(o, "prog", "case"), v), max, v.toInt, runtime)
 
   private def choice(j: Value): Choice = j match
     case ujson.Num(_) => Choice.Pick(nat(j, "choice").toInt)

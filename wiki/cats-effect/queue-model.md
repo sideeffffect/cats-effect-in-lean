@@ -51,6 +51,8 @@ No existing model file changed. Library code is written over the public API, so 
 
 ## See Also
 
+- [race, both and fiber leaks](race-both-model.md) (`timeout` no-leak statement)
+
 - [Bug history](bug-history.md)
 - [Scheduler model (multi-fiber, replay)](scheduler-model.md)
 - [SyncIO and syncStep model](syncio-and-syncstep-model.md)

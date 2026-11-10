@@ -79,4 +79,28 @@ theorem twin_pure_u_5 : checkEqvP {} counterMaskModel env 400 (bracketFullIO (ui
 theorem twin_pure_u_8 : checkEqvP {} counterMaskModel env 400 (bracketFullIO (uid 0 [.nat 6]) (uid 0 [.nat 8]) (uid 2 [.nat 9]))
     (defaultBracketFullIO (uid 0 [.nat 6]) (uid 0 [.nat 8]) (uid 2 [.nat 9])) = true := by decide +kernel
 
+
+/-- All checks of this module, for the axiom check of `scripts/check_twin_checks.sh`. -/
+theorem all_checks : True := by
+  have _ := @law_0_3
+  have _ := @law_2_3
+  have _ := @law_1_3
+  have _ := @law_3_3
+  have _ := @law_5_3
+  have _ := @law_7_3
+  have _ := @law_8_3
+  have _ := @law_0_4
+  have _ := @law_2_4
+  have _ := @law_1_4
+  have _ := @law_5_4
+  have _ := @law_8_4
+  have _ := @law_9_5
+  have _ := @law_8_8
+  have _ := @law_wrongFunction
+  have _ := @twin_pure_c_7
+  have _ := @twin_pure_c_2
+  have _ := @twin_pure_u_5
+  have _ := @twin_pure_u_8
+  trivial
+
 end CatsEffectInLean.Proofs.Phase6.BracketSmoke

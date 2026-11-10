@@ -77,6 +77,11 @@ enum Prog:
   case QueueTake(q: Atom)
   case QueueTryTake(q: Atom)
   case AllocatedCase(r: Res)
+  // ---- format v2 (track R: race, both, raceOutcome, bothOutcome)
+  case Race(a: Prog, b: Prog)
+  case RaceOutcome(a: Prog, b: Prog)
+  case Both(a: Prog, b: Prog)
+  case BothOutcome(a: Prog, b: Prog)
   // ---- format v2 (Phase 6, track G)
   /** `e.guarantee(IO.delay(emit fin) *> fin.void)`. */
   case Guarantee(e: Prog, fin: Prog, tag: Long)
@@ -103,6 +108,15 @@ enum Mode:
   case Replay(choices: List[Choice])
   case TestControlSeed(seed: Long)
 
-final case class TestCase(id: String, mode: Mode, prog: Prog, maxSteps: Int, version: Int = Json.FormatVersion)
+/** `runtime`: the `IORuntimeConfig` thresholds (cancelation check, auto-yield) of a replay run;
+  * `None` is the default config.
+  */
+final case class TestCase(
+    id: String,
+    mode: Mode,
+    prog: Prog,
+    maxSteps: Int,
+    version: Int = Json.FormatVersion,
+    runtime: Option[(Int, Int)] = None)
 
 final class DecodeError(msg: String) extends Exception(msg)

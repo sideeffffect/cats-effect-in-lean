@@ -1,7 +1,7 @@
 # Phase 5 gate report (2026-11-10)
 
 > Sources: own gate summary from the registry, inventory, difftest runs, reproducers and review batches 1–3 (2026-11-10)
-> Raw: [Phase 5 gate approval](../../raw/project-decisions/2026-11-10-phase5-gate-approval.md); [Phase decisions](../../raw/project-decisions/2026-11-10-phase0-decisions.md); [Review batch 3 notes](../../raw/project-decisions/2026-11-10-review-batch-3-notes.md); [CI memory notes](../../raw/project-decisions/2026-11-10-ci-memory-split-notes.md)
+> Raw: [Phase 5 gate approval](../../raw/project-decisions/2026-11-10-phase5-gate-approval.md); [Phase decisions](../../raw/project-decisions/2026-11-10-phase0-decisions.md); [Review batch 3 notes](../../raw/project-decisions/2026-11-10-review-batch-3-notes.md); [CI memory notes](../../raw/project-decisions/2026-11-10-ci-memory-split-notes.md); [Difftest depth notes (track D)](../../raw/project-decisions/2026-11-10-difftest-depth-track-d-notes.md)
 
 ## Overview
 
@@ -33,8 +33,8 @@ Phases 0–5 ran autonomously on 2026-11-10. Review batch 3 says the Phase 5 gat
 
 1. CE-0001: the PR #4700 twin was checked in an encoding outside the formal `WellFormed` domain. A stricter reviewer could call it HOLLOW.
 2. CE-0003: no fixed twin.
-3. Three observation models exist (`EqvP`, the single-fiber driver, the replay scheduler). `preempt` choices have no difftest.
-4. Difftest depth for format-v1 ops is 5,000–10,000 cases each, not 50,000.
+3. Three observation models exist (`EqvP`, the single-fiber driver, the replay scheduler). `preempt` choices have no difftest. *Update (track D, 2026-11-10): partly closed. Difftest cases with small `IORuntimeConfig` thresholds run the same transition as `preempt` (auto-yield) at many positions; no refinement against the multi-threaded runtime yet ([Differential testing](differential-testing.md), "Preempt coverage").*
+4. Difftest depth for format-v1 ops is 5,000–10,000 cases each, not 50,000. *Update (track D, 2026-11-10): closed. Each v1 op, also `timeoutTo` (now mirrored), is in 65,960 to 208,695 agreeing cases over 12 seeds ([Differential testing](differential-testing.md), "Format-v1 depth").*
 5. The two proven laws are low strength (`fa` never runs).
 6. CI cost: one fixed-twin check needs 13 GB; it runs in its own job.
 

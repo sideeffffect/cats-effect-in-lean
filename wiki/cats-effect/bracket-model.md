@@ -15,8 +15,8 @@ Phase 6, track G. The model mirrors `IO#guarantee`, `IO#guaranteeCase`, `IO#brac
 | `Model/BracketExamples.lean` | Small user environment for smoke tests |
 | `Props/Phase6/Bracket.lean` | 5 properties, the parent-cancel test program, markers |
 | `Proofs/Phase6/BracketFullTwin.lean` | `bracketFullIsKernelDefault_refuted` and the well-formed witness |
-| `Proofs/Phase6/BracketFullFixed.lean` | Fixed-twin check (decision 39) |
-| `Proofs/Phase6/BracketSmoke.lean` | Kernel-checked smoke tests: the law (14 pairs + wrong-function test), the pure-use twin (4) |
+| `Proofs/Phase6/BracketFullFixed.lean` | Fixed-twin check (decision 39); in `lean_lib TwinChecks` (several minutes), built by `scripts/check_twin_checks.sh` |
+| `Proofs/Phase6/BracketSmoke.lean` | In `TwinChecks` (about 6 min). Kernel-checked smoke tests: the law (14 pairs + wrong-function test), the pure-use twin (4) |
 | `test/Phase6/BracketSmokeParent.lean` | `#guard` smoke tests of the two invariants (parent cancel, about 3,000 states per program; `decide +kernel` needs about 19 GB, so not in the build). Run: `lake env lean test/Phase6/BracketSmokeParent.lean` |
 
 ## Mirror rules

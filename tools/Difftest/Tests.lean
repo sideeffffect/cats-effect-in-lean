@@ -1,4 +1,5 @@
 import Difftest.Env
+import Difftest.Replay
 
 /-!
 # Checks of the difftest decoder and translation
@@ -119,7 +120,11 @@ def snap0 : Val := snapVal rootView
       (clo 0 .reportK []))
     (clo 0 .constRaise [.err (userErr 2)]))
 #guard (callFn pGc (clo 0 .gcFinEmit [.ocCanceled]) .unit).trace == [.finGuaranteeCase 4 .ocCanceled]
-#guard outOf (callFn pGc (clo 0 .gcFinThen [.ocCanceled]) .unit) ==
+-- `o => IO.delay(emit) *> run(fin).void`: `run(fin)` is built in `gcFinK` (`*>` is by value), so
+-- `gcFinThen` captures the snapshot of that moment.
+#guard outOf (callFn pGc (clo 0 .gcFinK []) .ocCanceled) == .prog
+  (.flatMap (.delay (clo 0 .gcFinEmit [.ocCanceled])) (clo 0 .gcFinThen [snapVal {}, .ocCanceled]))
+#guard outOf (callFn pGc (clo 0 .gcFinThen [snap0, .ocCanceled]) .unit) ==
   .prog (.map (.pure .ocCanceled) (clo 0 .voidFn []))
 
 -- `onCancel e fin`: `OnCancel(I(e), Delay(emit).flatMap(_ => I(fin).void))`.
@@ -216,8 +221,18 @@ def vDone : View := { outcomes := [none, some (.succeeded (.nat 3))], deferreds 
 -- The `IdPoll` of `syncStep` (mask id 0) is the identity; a real poll is `UnmaskRunLoop`.
 #guard pollTerm .cede 0 0 == .cede
 #guard pollTerm .cede 1 0 == .unmaskRunLoop .cede 1 0
--- `timeoutTo` is not mirrored; a resource node that reads state is outside the restriction.
-#guard unsupportedOps (.timeoutTo .cede .cede 1) == ["timeoutTo"]
+-- The `runtime` field: the `IORuntimeConfig` thresholds, with the checks of
+-- `IORuntimeConfig.scala:33-40`; only in replay mode.
+#guard (decCase r#"{"v":1,"id":"x","mode":"replay","runtime":{"cancelationCheckThreshold":2,"autoYieldThreshold":6},"prog":{"op":"cede"}}"#).map (fun c => (c.cancelCheck, c.autoYield)) == .ok (2, 6)
+#guard (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"cede"}}"#).map (fun c => (c.cancelCheck, c.autoYield)) == .ok (512, 1024)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","runtime":{"cancelationCheckThreshold":1,"autoYieldThreshold":1},"prog":{"op":"cede"}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","runtime":{"cancelationCheckThreshold":2,"autoYieldThreshold":5},"prog":{"op":"cede"}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","runtime":{"cancelationCheckThreshold":0,"autoYieldThreshold":4},"prog":{"op":"cede"}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"testcontrol","seed":1,"runtime":{"cancelationCheckThreshold":1,"autoYieldThreshold":2},"prog":{"op":"cede"}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","runtime":{"autoYieldThreshold":2},"prog":{"op":"cede"}}"#)
+-- `timeoutTo` runs on `Timeout.timeoutToIO`; a resource node that reads state is outside the
+-- restriction.
+#guard unsupportedOps (.timeoutTo .cede .cede 1) == []
 #guard unsupportedOps (.allocatedCase (.rEval (.join (.lit (.fiber 1))))) == ["resource-reads-state"]
 #guard unsupportedOps (.allocatedCase (.rEval (.bind .cede (.join (.lit (.fiber 1)))))) == []
 -- The queue: `Map(newIO, handle)`; the handle emits `queueH` with the buffer cell.
@@ -227,6 +242,30 @@ def vDone : View := { outcomes := [none, some (.succeeded (.nat 3))], deferreds 
 #guard rootTerm (.allocatedCase (.rPure (.lit (.nat 3)))) ==
   .ok (.map (.pure (.pair (.nat 3) (CatsEffectInLean.Model.Resource.RelFn.unit.toVal))) (clo 0 .allocFst []))
 #guard [TraceEv.refH 3, .queueH 4].all fun e => TraceEv.ofVal? e.toVal == some e
+-- `UserError(999998)` is not the `TimeoutException`; both have value-language code 999998.
+#guard timeoutModelCode == Timeout.timeoutCode
+#guard userErr 999998 != Timeout.timeoutErr
+#guard userCode? (userErr 999998) == some 999998
+#guard userCode? Timeout.timeoutErr == some 999998
+#guard [0, 5, 999997, 999999, 2000000].all fun c => userCode? (userErr c) == some c
+#guard errText (userErr 999998) == "UserError: UserError(999998)"
+#guard errText Timeout.timeoutErr == "TimeoutException"
+
+-- Format v2 (track R): `race`, `raceOutcome`, `both`, `bothOutcome`. A v2 op in a v0/v1 case is a
+-- decode error; the term is the `Race` mirror plus the interpreter's `map`/`flatMap`.
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"race","a":{"op":"cede"},"b":{"op":"cede"}}}"#)
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"seq","ps":[{"op":"cede"},{"op":"both","a":{"op":"cede"},"b":{"op":"cede"}}]}}"#)
+#guard (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"bothOutcome","a":{"op":"cede"},"b":{"op":"never"}}}"#).map (·.prog) ==
+  .ok (.bothOutcome .cede .never)
+#guard isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"race","a":{"op":"cede"}}}"#)
+#guard rootTerm (.race .cede .never) ==
+  .ok (.map (CatsEffectInLean.Model.Race.raceIO (combSrcs 0 [] rootView).1 (combSrcs 0 [] rootView).2) (clo 0 .raceK []))
+#guard some (srcIO (.both .cede .never) (combSrcs 0 [] rootView).2) == (tr (renvOf (.both .cede .never)) .never 2 [] rootView).toOption
+#guard unsupportedOps (.raceOutcome .cede .cede) == []
+-- A race closure id is odd and in namespace `Race.ns` (never a difftest closure).
+#guard match (CatsEffectInLean.Model.Race.RLam.sel .both 1 0).fn with
+  | .user id => id % 2 == 1 && cloOfId? id == none && (libClo? id).isSome
+  | _ => false
 
 /-! ## Format v2 (track G: `guarantee`, `bracket*`) -/
 
