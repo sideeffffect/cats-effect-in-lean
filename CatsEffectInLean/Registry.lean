@@ -2,6 +2,8 @@ import CatsEffectInLean.Props.IO.MonadCancelLaws
 import CatsEffectInLean.Proofs.IO.MonadCancelLaws
 import CatsEffectInLean.Props.Calibration.SyncStep
 import CatsEffectInLean.Proofs.Calibration.SyncStep
+import CatsEffectInLean.Props.Calibration.QueueTimeout
+import CatsEffectInLean.Proofs.Calibration.QueueTimeout
 
 /-!
 # Property registry
@@ -98,7 +100,22 @@ def registry : List Entry := [
     thm := some ``Proofs.Calibration.syncStepIdentitySyncIO_refuted
     bug := some "bugs/CE-0001.yaml"
     note := "AsyncLaws.syncStepIdentity for IO#syncStep with G = SyncIO; counterexample = \
-      case 4 of reproducers/CE-0001 (IO.uncancelable(_ => IO.canceled *> flag.set(true)))." }
+      case 4 of reproducers/CE-0001 (IO.uncancelable(_ => IO.canceled *> flag.set(true)))." },
+  { id := "std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement"
+    rows := ["std.Queue.unbounded", "std.Queue.UnboundedAsyncQueue.unsafeOffer",
+      "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.take",
+      "std.Queue.UnboundedAsyncQueue.tryTake", "std.UnsafeUnbounded.put",
+      "std.UnsafeUnbounded.take", "std.UnsafeUnbounded.Cell.apply",
+      "core.IO.timeout", "core.IO.timeoutTo", "core.IO.racePair",
+      "core.IOFiber.runLoop.RacePair", "core.IO.asyncCheckAttempt"]
+    prop := ``Props.Calibration.QueueTimeout.takeTimeoutNoLostElement
+    status := .refuted
+    thm := some ``Proofs.Calibration.QueueTimeout.takeTimeoutNoLostElement_refuted
+    bug := some "bugs/CE-0003.yaml"
+    note := "No lost element for program A of reproducers/CE-0003 (offer xs; take.timeout(d) in a \
+      started fiber; cancel it; join; drain), all xs, d, s and pick schedules. Counterexample: \
+      xs = [42], d = 1000, s = 1, FIFO schedule: the take racer completes Succeeded(42) after \
+      the consumer is canceled; the racePair finalizer drops the outcome." }
 ]
 
 end CatsEffectInLean

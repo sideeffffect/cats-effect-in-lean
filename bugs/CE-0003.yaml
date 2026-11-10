@@ -1,6 +1,6 @@
 id: CE-0003
 title: "Queue.take.timeout loses an element when the fiber that runs it is canceled (racePair drops a completed child outcome)"
-status: draft  # calibration bug; known upstream; Lean refutation not done yet
+status: draft  # calibration bug; known upstream; Lean refutation done (2026-11-10), waits for review
 priority: high
 kind: safety
 area: core
@@ -82,5 +82,13 @@ duplicates:
     - "gh search issues 'lossless cancelation' -R typelevel/cats-effect (2026-11-10)"
     - "gh search issues 'timeout loses' -R typelevel/cats-effect (2026-11-10)"
 lean:
-  property: queue_take_timeout_no_lost_element   # planned name; core form: racePair_no_lost_outcome
-  theorem: open                                  # queue_take_timeout_no_lost_element_refuted
+  registry: std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
+  property: CatsEffectInLean.Props.Calibration.QueueTimeout.takeTimeoutNoLostElement
+  theorem: CatsEffectInLean.Proofs.Calibration.QueueTimeout.takeTimeoutNoLostElement_refuted
+  counterexample: >
+    Program A of the reproducer with xs = [42], timeout 1000, sleep 1, under the FIFO replay
+    schedule (empty choice list, 15 tasks): the take racer completes Succeeded(42) after the
+    consumer was canceled; the racePair callback loses; join gives Canceled, tryTake gives None.
+    Checked by decide +kernel (cx_run). The FIFO schedule is a model schedule; it is not the
+    replay of one TestControl seed.
+  model: CatsEffectInLean/Std/Queue.lean (UnboundedAsyncQueue, UnsafeUnbounded), CatsEffectInLean/Model/Timeout.lean (timeout, timeoutTo, never), CatsEffectInLean/Model/Codec.lean (closure ids)

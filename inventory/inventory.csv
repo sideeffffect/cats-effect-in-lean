@@ -1051,7 +1051,7 @@ core.IO.parReplicateA,core,method,core/shared/src/main/scala/cats/effect/IO.scal
 core.IO.parReplicateA_,core,method,core/shared/src/main/scala/cats/effect/IO.scala,635,todo,,
 core.IO.race,core,method,core/shared/src/main/scala/cats/effect/IO.scala,638,todo,,
 core.IO.raceOutcome,core,method,core/shared/src/main/scala/cats/effect/IO.scala,641,todo,,
-core.IO.racePair,core,method,core/shared/src/main/scala/cats/effect/IO.scala,644,todo,,
+core.IO.racePair,core,method,core/shared/src/main/scala/cats/effect/IO.scala,644,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 core.IO.rethrow,core,method,core/shared/src/main/scala/cats/effect/IO.scala,667,todo,,
 core.IO.redeem,core,method,core/shared/src/main/scala/cats/effect/IO.scala,692,todo,,
 core.IO.redeemWith,core,method,core/shared/src/main/scala/cats/effect/IO.scala,724,todo,,
@@ -1063,9 +1063,9 @@ core.IO.delayBy,core,method,core/shared/src/main/scala/cats/effect/IO.scala,776,
 core.IO.delayBy#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,779,excluded,internal: private helper; modelled as part of its public caller,
 core.IO.andWait,core,method,core/shared/src/main/scala/cats/effect/IO.scala,789,todo,,
 core.IO.andWait#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,792,excluded,internal: private helper; modelled as part of its public caller,
-core.IO.timeout,core,method,core/shared/src/main/scala/cats/effect/IO.scala,818,todo,,
+core.IO.timeout,core,method,core/shared/src/main/scala/cats/effect/IO.scala,818,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 core.IO.timeout#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,825,excluded,internal: private helper; modelled as part of its public caller,
-core.IO.timeoutTo,core,method,core/shared/src/main/scala/cats/effect/IO.scala,850,todo,,
+core.IO.timeoutTo,core,method,core/shared/src/main/scala/cats/effect/IO.scala,850,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 core.IO.timeoutTo#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,862,excluded,internal: private helper; modelled as part of its public caller,
 core.IO.timeoutAndForget,core,method,core/shared/src/main/scala/cats/effect/IO.scala,883,todo,,
 core.IO.timeoutAndForget#2,core,method,core/shared/src/main/scala/cats/effect/IO.scala,886,excluded,internal: private helper; modelled as part of its public caller,
@@ -1120,7 +1120,7 @@ core.IO.alignForIOPar,core,method,core/shared/src/main/scala/cats/effect/IO.scal
 core.IO.apply,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1275,todo,,
 core.IO.delay,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1284,todo,,
 core.IO.defer,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1296,todo,,
-core.IO.asyncCheckAttempt,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1353,todo,,
+core.IO.asyncCheckAttempt,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1353,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 core.IO.async,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1418,todo,,
 core.IO.async_,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1473,todo,,
 core.IO.canceled,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1501,todo,,
@@ -1367,7 +1367,7 @@ core.IOFiber.runLoop.IOCont,core,runloop-branch,core/shared/src/main/scala/cats/
 core.IOFiber.runLoop.IOCont.Get,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,771,todo,,
 core.IOFiber.runLoop.Cede,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,886,todo,,
 core.IOFiber.runLoop.Start,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,890,todo,,
-core.IOFiber.runLoop.RacePair,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,908,todo,,
+core.IOFiber.runLoop.RacePair,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,908,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 core.IOFiber.runLoop.Sleep,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,954,todo,,
 core.IOFiber.runLoop.EvalOn,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,983,todo,,
 core.IOFiber.runLoop.Blocking,core,runloop-branch,core/shared/src/main/scala/cats/effect/IOFiber.scala,1005,todo,,
@@ -2959,7 +2959,7 @@ std.Queue.droppingForConcurrent,std,method,std/shared/src/main/scala/cats/effect
 std.Queue.droppingForAsync,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,112,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.unsafeBounded,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,130,todo,,
 std.Queue.synchronous,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,149,todo,,
-std.Queue.unbounded,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,160,todo,,
+std.Queue.unbounded,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,160,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 std.Queue.unsafeUnbounded,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,181,todo,,
 std.Queue.dropping,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,196,todo,,
 std.Queue.circularBuffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,224,todo,,
@@ -3003,12 +3003,12 @@ std.Queue.BoundedAsyncQueue.tryOffer,std,method,std/shared/src/main/scala/cats/e
 std.Queue.UnboundedAsyncQueue.buffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,875,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.UnboundedAsyncQueue.takers,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,876,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.UnboundedAsyncQueue.FailureSignal,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,877,excluded,internal: private helper; modelled as part of its public caller,
-std.Queue.UnboundedAsyncQueue.unsafeOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,879,todo,,
-std.Queue.UnboundedAsyncQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,884,todo,,
+std.Queue.UnboundedAsyncQueue.unsafeOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,879,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
+std.Queue.UnboundedAsyncQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,884,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 std.Queue.UnboundedAsyncQueue.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,886,todo,,
 std.Queue.UnboundedAsyncQueue.size,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,892,todo,,
-std.Queue.UnboundedAsyncQueue.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,894,todo,,
-std.Queue.UnboundedAsyncQueue.tryTake,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,949,todo,,
+std.Queue.UnboundedAsyncQueue.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,894,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
+std.Queue.UnboundedAsyncQueue.tryTake,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,949,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 std.Queue.UnboundedAsyncQueue.notifyOne,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,959,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.DroppingAsyncQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,993,todo,,
 std.Queue.DroppingAsyncQueue.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,999,todo,,
@@ -3214,11 +3214,11 @@ std.UnsafeUnbounded.first,std,method,std/shared/src/main/scala/cats/effect/std/U
 std.UnsafeUnbounded.last,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,25,excluded,internal: private helper; modelled as part of its public caller,
 std.UnsafeUnbounded.FailureSignal,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,26,excluded,internal: private helper; modelled as part of its public caller,
 std.UnsafeUnbounded.size,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,28,todo,,
-std.UnsafeUnbounded.put,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,38,todo,,
-std.UnsafeUnbounded.take,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,52,todo,,
+std.UnsafeUnbounded.put,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,38,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
+std.UnsafeUnbounded.take,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,52,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 std.UnsafeUnbounded.debug,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,88,todo,,
 std.UnsafeUnbounded.Cell.data,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,102,todo,,
-std.UnsafeUnbounded.Cell.apply,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,104,todo,,
+std.UnsafeUnbounded.Cell.apply,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,104,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 std.UnsafeUnbounded.Cell.debug,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,108,todo,,
 std.internal.BankersQueue.nonEmpty,std,method,std/shared/src/main/scala/cats/effect/std/internal/BankersQueue.scala,36,todo,,
 std.internal.BankersQueue.pushFront,std,method,std/shared/src/main/scala/cats/effect/std/internal/BankersQueue.scala,38,todo,,
