@@ -265,8 +265,11 @@ def choice_candidates(cs):
 
 def measure(case):
     cs = case.get('choices', [])
+    # `never` nodes count before the JSON length: replacing a `never` by a same-size op (for
+    # example `canceled`) is progress, so a blocked side can turn into a finished one.
+    js = json.dumps(case['prog'])
     return (gen.size_of(case['prog']), len(cs), sum(c for c in cs if isinstance(c, int)),
-            len(json.dumps(case['prog'])), 'maxSteps' in case)
+            js.count('"never"'), len(js), 'maxSteps' in case)
 
 
 def case_candidates(case):

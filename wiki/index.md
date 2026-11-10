@@ -33,6 +33,7 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [SyncIO and syncStep model](cats-effect/syncio-and-syncstep-model.md) | SyncIO run loop and SyncStep.interpret (G = SyncIO) mirror; syncStepIdentitySyncIO refuted (CE-0001, reproducer case 4) | 2026-11-10 |
 | [Resource model and CE-0002](cats-effect/resource-model.md) | Resource ADT + allocatedCase mirror (F = IO), closure-id codec; resourceEvalPreservesUncancelable refuted (CE-0002, reproducer case C) | 2026-11-10 |
 | [Queue and timeout model](cats-effect/queue-model.md) | UnboundedAsyncQueue + IO#timeout/timeoutTo/never mirror; takeTimeoutNoLostElement refuted by the FIFO schedule (CE-0003) | 2026-11-10 |
+| [race, both and fiber leaks](cats-effect/race-both-model.md) | Kernel-default mirror of race/raceOutcome/both/bothOutcome (no IO twin), leak observation liveRaceChildren, difftest v2 (≥50k per op), 5 open entries, smoke 0 violations | 2026-11-10 |
 
 ## semantics
 

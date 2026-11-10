@@ -131,3 +131,7 @@
 
 ## [2026-11-10] ingest | Phase 6 start: batches and decisions 47-52
 - Updated: Project plan (status)
+
+## [2026-11-10] ingest | Phase 6 track R: race, both, leak observation, difftest v2
+- Created: race, both and fiber leaks
+- Updated: Difftest program format (format v2), Kernel typeclasses model (no twin), Queue and timeout model, Outcome sets (See Also), index

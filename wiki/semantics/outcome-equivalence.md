@@ -117,6 +117,8 @@ Decision 29/36 (done): `EqvP`. Smoke tests (`Model/EnumPExamples.lean`), with `f
 
 ## See Also
 
+- [race, both and fiber leaks](../cats-effect/race-both-model.md) (leak observation beside `Obs`; exact search too large for 3 fibers)
+
 - [Kernel typeclasses model](../cats-effect/kernel-typeclasses-model.md)
 - [Scheduler model](../cats-effect/scheduler-model.md)
 - [TestControl and schedule replay](../cats-effect/testcontrol.md)

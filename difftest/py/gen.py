@@ -87,7 +87,7 @@ WEIGHTS = {
     'queueNew': 2, 'queueOffer': 3, 'queueTake': 3, 'queueTryTake': 6, 'tpl_queue': 2.2, 'tpl_resource': 1,
     'res_pure': 2.5, 'res_eval': 2.5, 'res_make': 3.5, 'res_flatMap': 12,
     # format v2 (track R)
-    'race': 2, 'raceOutcome': 2, 'both': 2, 'bothOutcome': 2, 'tpl_comb': 3.5, 'tpl_combCancel': 2,
+    'race': 2.5, 'raceOutcome': 2.5, 'both': 2.5, 'bothOutcome': 2.5, 'tpl_comb': 5, 'tpl_combCancel': 2.5,
 }
 
 # Other knobs (probabilities and ranges).

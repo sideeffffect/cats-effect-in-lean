@@ -103,6 +103,19 @@ Decision 30: the `syncStep`/`SyncIO`, `Resource` and `Queue` mirrors need diffte
 - Resource restriction (Lean): `REnv.bind`, `REnv.acquire`, `REnv.release` take no heap view. So a program inside a resource node must not read state when Scala builds it (`join`, `cancel`, `deferredGet` at an eager position, `Prog.eagerReads`). Such a case is `unsupported` (`resource-reads-state`). The generator never makes one.
 - Known model bug `idpoll` (2026-11-10): the `Timeout` and `Resource` mirrors build `UnmaskRunLoop(fa, 0, 0)` for the `IdPoll` of `syncStep`, so the root fiber stays masked after it. Shrunk cases: `difftest/corpus/known-idpoll-*.json`. Details: [Difftest v1 notes](../../raw/project-decisions/2026-11-10-difftest-v1-notes.md).
 
+## Format v2 (Phase 6, decision 51)
+
+New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decode error (pre-pass `checkNoV2` in `Json.scala` and `Prog.lean`).
+
+| op | fields | term |
+|----|--------|------|
+| `race` | `a`, `b` | `I(a).race(I(b)).map { Left(v) ↦ left v; Right(v) ↦ right v }` |
+| `raceOutcome` | `a`, `b` | `I(a).raceOutcome(I(b)).flatMap { Left(oc) ↦ ocVal(oc).map(left); Right(oc) ↦ ocVal(oc).map(right) }` |
+| `both` | `a`, `b` | `I(a).both(I(b)).map { (x, y) ↦ pair(x, y) }` |
+| `bothOutcome` | `a`, `b` | `I(a).bothOutcome(I(b)).flatMap { (oa, ob) ↦ ocVal(oa).flatMap(x => ocVal(ob).map(y => pair(x, y))) }` |
+
+- Lean: `Model/Race.lean` terms; sources are `raceSrcA`/`raceSrcB` codes rebuilt by `Env.srcIO` with the snapshot. Generator: type-directed productions plus `tpl_comb` and `tpl_combCancel` (decision 50). Counts: `difftest/py/opcount.py` ([race and both model](../cats-effect/race-both-model.md)).
+
 ## User function table
 
 `call(fn, v)` first emits `{"ev":"call","fn":fn,"arg":v}`, then applies the function. Lean must implement the same table.
@@ -191,7 +204,7 @@ Code: `tools/Difftest/` (`lean_lib Difftest`, `lean_exe cediff`). It is test cod
 
 ## Limits of v0 and v1
 
-- No `both`, `race`, `bracket`, `IO.blocking`, `evalOn`, `memoize`. Of `Resource` only `allocatedCase` over `pure`/`eval`/`make`/`flatMap` (no `use`, `allocated`, `map`); of `std` only `Queue.unbounded` (`offer`, `take`, `tryTake`).
+- No `bracket`, `IO.blocking`, `evalOn`, `memoize`. Of `Resource` only `allocatedCase` over `pure`/`eval`/`make`/`flatMap` (no `use`, `allocated`, `map`); of `std` only `Queue.unbounded` (`offer`, `take`, `tryTake`).
 - `syncStep` only at the root, and only `G = SyncIO` with `unsafeRunSync` (not `to[IO]`).
 - No recursion or loops in the language; programs are finite trees.
 - Replay labels only the root and handled fibers by handle. CE-internal fibers (none in v0 ops except the `racePair` pair) get plain `f<k>` labels.
