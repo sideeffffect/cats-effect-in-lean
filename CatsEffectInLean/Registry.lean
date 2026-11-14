@@ -390,7 +390,6 @@ def registry : List Entry := [
   { id := "core.IO.parTraverseN.resultOrder"
     rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
     prop := ``Props.Phase6.ParTraverse.parTraverseNOrder
-    libNote := "NOT id-free, OPEN GAP (decision 56, review batch 7 defect D): the ParTraverse closures keep the user function f as a number field (PT.k1 ...), so ptIsLib uses the shallow capture. Track G switches the statement to a Lib with function fields (Proofs/Phase6/PrivacyExamples.lean ptLibDeep shows the forgery is then rejected). This note is an explicit, reviewed exemption until then."
     status := .«open»
     note := "If parTraverseN(n)(as)(f) succeeds, the result holds one entry per input in input order \
       (f tagged by the harness as a => f(a).map(b => (a, b)); no lost, duplicated or \
@@ -405,7 +404,6 @@ def registry : List Entry := [
   { id := "core.IO.parTraverseN.pureSucceeds"
     rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
     prop := ``Props.Phase6.ParTraverse.parTraverseNPureSucceeds
-    libNote := "NOT id-free, OPEN GAP (decision 56, review batch 7 defect D): the ParTraverse closures keep the user function f as a number field (PT.k1 ...), so ptIsLib uses the shallow capture. Track G switches the statement to a Lib with function fields (Proofs/Phase6/PrivacyExamples.lean ptLibDeep shows the forgery is then rejected). This note is an explicit, reviewed exemption until then."
     status := .«open»
     note := "For f(a) = IO.pure(g(a)), every run that stops ends Succeeded(as.map(g)): no deadlock, \
       no error, input order. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
@@ -415,7 +413,6 @@ def registry : List Entry := [
   { id := "core.IO.parTraverseN.errorAborts"
     rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
     prop := ``Props.Phase6.ParTraverse.parTraverseNErrorAborts
-    libNote := "NOT id-free, OPEN GAP (decision 56, review batch 7 defect D): the ParTraverse closures keep the user function f as a number field (PT.k1 ...), so ptIsLib uses the shallow capture. Track G switches the statement to a Lib with function fields (Proofs/Phase6/PrivacyExamples.lean ptLibDeep shows the forgery is then rejected). This note is an explicit, reviewed exemption until then."
     status := .«open»
     note := "If f(a0) raises e, a0 is among the first n inputs and every other f(a) never completes, \
       every run that stops ends Errored(e) (Scaladoc K/GC:137-139: errors abort the \
@@ -426,7 +423,6 @@ def registry : List Entry := [
   { id := "core.IO.parTraverseN.cancelAborts"
     rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
     prop := ``Props.Phase6.ParTraverse.parTraverseNCancelAborts
-    libNote := "NOT id-free, OPEN GAP (decision 56, review batch 7 defect D): the ParTraverse closures keep the user function f as a number field (PT.k1 ...), so ptIsLib uses the shallow capture. Track G switches the statement to a Lib with function fields (Proofs/Phase6/PrivacyExamples.lean ptLibDeep shows the forgery is then rejected). This note is an explicit, reviewed exemption until then."
     status := .«open»
     note := "The same for a self-cancel f(a0) = IO.canceled: every run that stops ends Canceled. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
       HashSet from 5 elements; any permutation, review 7). \

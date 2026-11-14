@@ -77,3 +77,8 @@ import CatsEffectInLean.RegistryHeavy
 import CatsEffectInLean.Model.ParTraverse
 import CatsEffectInLean.Props.Phase6.ParTraverse
 import CatsEffectInLean.Proofs.Phase6.ParTraverseWitness
+import CatsEffectInLean.Model.LibProbe
+import CatsEffectInLean.Proofs.Phase6.LibFieldsBracket
+import CatsEffectInLean.Proofs.Phase6.LibFieldsResource
+import CatsEffectInLean.Proofs.Phase6.LibFieldsResourceUse
+import CatsEffectInLean.Proofs.Phase6.LibFieldsParTraverse
