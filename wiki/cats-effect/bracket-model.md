@@ -1,7 +1,7 @@
 # guarantee and bracket model, and CE-0005
 
 > Sources: Cats Effect source at v3.7.1 (`IO.scala:338-371`, `:496-530`, `:967-972`, `:1826-1830`, `:2023-2064`; `kernel/.../MonadCancel.scala:344-456`; `laws/.../MonadCancelLaws.scala:28-29`); own Lean work and scala-cli runs, 2026-11-10
-> Raw: [Track G notes](../../raw/cats-effect/2026-11-10-track-g-bracket-notes.md); [Review 4 fix notes](../../raw/cats-effect/2026-11-10-track-g-review4-fix-notes.md)
+> Raw: [Review batch 6 notes](../../raw/project-decisions/2026-11-14-review-batch-6-notes.md); [Track G notes](../../raw/cats-effect/2026-11-10-track-g-bracket-notes.md); [Review 4 fix notes](../../raw/cats-effect/2026-11-10-track-g-review4-fix-notes.md)
 
 ## Overview
 
@@ -59,6 +59,8 @@ The new form: the test program is a harness (`henv`, closures `HLam`, namespace 
 
 - Satisfiability witnesses (kernel-checked, `BracketWitness.lean`): for each entry one input that meets all hypotheses and reaches the interesting case. The invariants: acquire done (or `fa` started), release run once, child canceled by the parent. `pureUse`: acquire `IO.canceled`, pure `use`, left side `Canceled`. The law: `fa` raises, `fin` emits, left side runs `fin`.
 - Smoke (`test/Phase6/BracketSmokeParent.lean`, `#guard`, hypotheses checked too): bracket, 4 acquires x 4 uses plus 2 releases that suspend or cancel themselves; guarantee, 4 x 3. The claim holds for every observation of the exact outcome sets. Wrong-function test: a bracket without release (`childOf` `g = 2`) and a guarantee without finalizer (`g = 3`) break the claims.
+
+**Review batch 6 (2026-11-14): still HOLLOW.** User code can forward the counter source through a `Bracket` leaf stored as a number: `BLam.thenUse (BLam.constThis (Src.ext (srcAcq 0)).toVal).id ()` holds no top-level handle, is `good`, and runs `a0.flatMap(markA 0)` again. `WF.captured` does not decode closure ids in fields. Fix: a deep `captured`, or a deep scan for the counter handles without an escape clause. See [review batch 6](../../review/2026-11-14-review-batch-6.md).
 
 Why open: a proof for all programs needs a simulation or a state invariant over `Sched.tickP` and all of `Step.lean`. Not done.
 
