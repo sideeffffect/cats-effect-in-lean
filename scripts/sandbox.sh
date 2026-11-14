@@ -11,12 +11,15 @@
 set -euo pipefail
 repo=$(pwd)
 [[ -d "$repo/.lake" ]] || { echo "sandbox.sh: run from the repository root (no .lake)"; exit 2; }
+# order matters: the private /tmp first, then the repository again (read-only; it may live
+# under /tmp), then its writable .lake
 exec bwrap \
   --ro-bind / / \
-  --bind "$repo/.lake" "$repo/.lake" \
   --dev /dev \
   --proc /proc \
   --tmpfs /tmp \
+  --ro-bind "$repo" "$repo" \
+  --bind "$repo/.lake" "$repo/.lake" \
   --unshare-net \
   --unshare-pid \
   --die-with-parent \
