@@ -1,6 +1,7 @@
 import CatsEffectInLean.Model.ParTraverse
 import CatsEffectInLean.Model.WellFormed
 import CatsEffectInLean.Model.Outcomes
+import CatsEffectInLean.Props.Phase6.HarnessPrivacy
 
 /-!
 # `parTraverseN`: result order, success, error and cancel propagation (Phase 6, batch 6.3)
@@ -18,12 +19,15 @@ All statements quantify over all input lists (any length), all limits `n ≥ 1` 
 `GenConcurrent.scala:146`), all fuel values, all `PChoice` schedules (`outcomesP`, preemption
 at any run-loop iteration) and all `HashSet` iteration orders `ord` (the supervision `Set` is a
 `HashSet` from 5 elements; its order comes from identity hashes, so the model takes any
-permutation, `(ord xs).Perm xs`). They state outcomes and result values only, so they need no
-test marker (decision 56). Hypotheses:
+permutation, `(ord xs).Perm xs`). Statements 1-7 state outcomes and result values only, so they
+need no test marker; statement 8 uses the shared harness module (`HarnessPrivacy`, decision 56).
+Hypotheses:
 
-* `WellFormed` of the program (decision 27, statements 1-4): user code is code Scala can write;
-  library closures (`ptIsLib`: the `Bracket`, `Race`, `Timeout` and `ParTraverse` mirrors) may
-  occur in user programs.
+* `WellFormed` of the program (decision 27, statements 1-4 and 8): user code is code Scala can
+  write; library closures (`ptIsLib`: the `Bracket`, `Race`, `Timeout` and `ParTraverse` mirrors)
+  may occur in user programs. The `Lib` is `ptLibDeep` (`limLib` for statement 8): it declares
+  the function fields (`ParTraverse.fnFields`, `TL.tag f`), so `WF.captured` follows a user
+  function that a library closure names by number (decision 56; review batch 7, defect D).
 * Statements 2-7 fix the behaviour of `f` (an ordinary input for each claim).
 
 ## Statements
@@ -31,9 +35,9 @@ test marker (decision 56). Hypotheses:
 1. `parTraverseNOrder`: if the traversal succeeds, its result holds one entry per input, in input
    order: `f` is wrapped by the harness as `a => f(a).map(b => (a, b))`, and the first
    components of the result are exactly the inputs (no lost, no duplicated, no reordered entry).
-   Review 7: believed false as stated, because `WellFormed` lets `f` reach the per-input result
-   `Deferred` through a number field of its closure id. It waits for track Res's `WellFormed`
-   fix (decision 56); the statement is not changed here.
+   Review 7, defect D: with the shallow `Lib` (`ptIsLib`) a user `f` could capture the per-input
+   result `Deferred` through a number field of its closure id and forge the result. With
+   `ptLibDeep` that `f` is not well formed (`Proofs/Phase6/PrivacyExamples.lean`).
 2. `parTraverseNPureSucceeds`: if `f(a) = IO.pure(g(a))`, every run that stops ends `Succeeded`
    with `as.map(g)`: no deadlock, no error, the right order.
 3. `parTraverseNErrorAborts`: if `f(a0)` raises `e` and every other `f(a)` never completes, and
@@ -56,6 +60,7 @@ than the first `n`, and two errors at once.
    permit): every run that stops ends `Errored(e)` with an `e` that one of the inputs raises.
 7. `parTraverseNCancelAbortsGen`: the same with `canceled` in place of the error and no error:
    every run that stops ends `Canceled`.
+8. `parTraverseNAtMostN`: at most `n` actions run at once (harness below).
 -/
 
 namespace CatsEffectInLean.Props.Phase6.ParTraverse
@@ -96,6 +101,17 @@ def TL.ofId? (id : Nat) : Option TL :=
     | _ => none
   else none
 
+/-- `Lib.fields` of the statements: the mirror's function fields (`ParTraverse.fnFields`) and the
+user function `f` of the harness closure `TL.tag f`. `TL.pairWith a` holds an input value (data). -/
+def ptFields (c : Val) : List Nat :=
+  ParTraverse.fnFields c ++
+  (match ofCloVal c with
+   | some (42, 0, [.nat f]) => [f]
+   | _ => [])
+
+/-- The `Lib` of the statements with function fields (decision 56; review batch 7, defect D). -/
+def ptLibDeep : Lib := { ok := ptIsLib, fields := ptFields }
+
 /-- User code `u` with the tagging closures. -/
 def tagged (u : UserEnv) : UserEnv where
   call id a refs := u.call id a refs
@@ -119,7 +135,7 @@ def fstOf : Val → Val
 def parTraverseNOrder : Prop :=
   ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat),
     1 ≤ n → f % 2 = 0 →
-    WellFormed ptIsLib [] (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) →
+    WellFormed ptLibDeep [] (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) →
     ∀ o, outcomesP {} counterMaskModel (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) o →
       ∀ v, o.summary = .done (.succeeded v) → (unlistV v).map (·.map fstOf) = some as
 
@@ -128,7 +144,7 @@ def parTraverseNPureSucceeds : Prop :=
   ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (g : Val → Val),
     1 ≤ n → f % 2 = 0 →
     (∀ a v, u.callV f a v = { out := .prog (.pure (g a)) }) →
-    WellFormed ptIsLib [] (env ord u) (parTraverseNIO n as f) →
+    WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) →
     ∀ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o →
       o.summary = .done (.succeeded (listV (as.map g)))
 
@@ -137,7 +153,7 @@ def parTraverseNErrorAborts : Prop :=
   ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val) (e : Err),
     1 ≤ n → f % 2 = 0 → a0 ∈ as.take n → e.kind = .nonFatal →
     (∀ a v, u.callV f a v = { out := .prog (if a = a0 then .error e else Timeout.neverIO) }) →
-    WellFormed ptIsLib [] (env ord u) (parTraverseNIO n as f) →
+    WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) →
     ∀ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o →
       o.summary = .done (.errored e)
 
@@ -146,7 +162,7 @@ def parTraverseNCancelAborts : Prop :=
   ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val),
     1 ≤ n → f % 2 = 0 → a0 ∈ as.take n →
     (∀ a v, u.callV f a v = { out := .prog (if a = a0 then .canceled else Timeout.neverIO) }) →
-    WellFormed ptIsLib [] (env ord u) (parTraverseNIO n as f) →
+    WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) →
     ∀ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o →
       o.summary = .done .canceled
 
@@ -240,5 +256,155 @@ def parTraverseNCancelAbortsGen : Prop :=
     (∃ i, ∃ h : i < as.length, (bh as[i]).2 = .canc ∧ nevers bh (as.take i) < n) →
     ∀ o, outcomesP {} counterMaskModel (env ord (behaved bh)) (parTraverseNIO n as BL.body.id) o →
       o.summary = .done .canceled
+
+/-! ## Statement 8: at most `n` actions at once (harness namespace 44, decision 56)
+
+Scaladoc `GenConcurrent.scala:132-133`: "The first n actions will be started first, with
+subsequent actions starting in order as each one completes", so at most `n` actions run at once.
+
+The harness (`HarnessPrivacy`): the root first allocates the counter cell `Ref` 0 (the token; the
+heap is empty at the start), then runs `parTraverseN(n)(as)(f')` with
+`f'(a) = IO.uncancelable(poll => enter *> poll(IO.pure(a).flatMap(g)).attempt.onCancel(exit)
+  .flatMap(x => exit *> x.liftTo[IO]))`: `enter` and `exit` count the running actions of user
+function `g` in the cell `(running, highest)`. Every closure that holds the cell is outside the
+`Lib`, so user code cannot name it, and user code cannot write the cell (`UserPrivate`,
+`WellFormed`). The claim: in every run that stops, the highest count is at most `n`. -/
+
+def lns : Nat := 44
+
+/-- The limit harness lambdas (test harness, not user code, not Cats Effect code). -/
+inductive CL where
+  /-- The thunk `Ref.unsafe((0, 0))`: the counter cell (the token). -/
+  | newCell
+  /-- `cell => parTraverseN(n)(as)(f')`. -/
+  | afterCell (n : Nat) (as : Val) (g : Nat)
+  /-- `f'`: `a => IO.uncancelable(...)`. -/
+  | body (c g : Nat)
+  /-- `poll => enter *> ...`. -/
+  | unc (c : Nat) (a : Val) (g : Nat)
+  /-- The thunk `enter`: `(r, h) => (r + 1, max(h, r + 1))`. -/
+  | enter (c : Nat)
+  /-- `_ => poll(IO.pure(a).flatMap(g)).attempt.onCancel(exit).flatMap(fin)`. -/
+  | run (c : Nat) (a : Val) (g m s : Nat)
+  /-- The thunk `exit`: `(r, h) => (r - 1, h)`. -/
+  | exit (c : Nat)
+  /-- `x => exit *> rethrow(x)`. -/
+  | fin (c : Nat)
+  /-- `_ => x.liftTo[IO]`. -/
+  | rethrow (c : Nat) (x : Val)
+  deriving DecidableEq, Repr
+
+def CL.toVal : CL → Val
+  | .newCell => cloVal lns 0 []
+  | .afterCell n as g => cloVal lns 1 [.nat n, as, .nat g]
+  | .body c g => cloVal lns 2 [.ref c, .nat g]
+  | .unc c a g => cloVal lns 3 [.ref c, a, .nat g]
+  | .enter c => cloVal lns 4 [.ref c]
+  | .run c a g m s => cloVal lns 5 [.ref c, a, .nat g, .poll m s]
+  | .exit c => cloVal lns 6 [.ref c]
+  | .fin c => cloVal lns 7 [.ref c]
+  | .rethrow c x => cloVal lns 8 [.ref c, x]
+
+def CL.ofFields : Nat → List Val → Option CL
+  | 0, [] => some .newCell
+  | 1, [.nat n, as, .nat g] => some (.afterCell n as g)
+  | 2, [.ref c, .nat g] => some (.body c g)
+  | 3, [.ref c, a, .nat g] => some (.unc c a g)
+  | 4, [.ref c] => some (.enter c)
+  | 5, [.ref c, a, .nat g, .poll m s] => some (.run c a g m s)
+  | 6, [.ref c] => some (.exit c)
+  | 7, [.ref c] => some (.fin c)
+  | 8, [.ref c, x] => some (.rethrow c x)
+  | _, _ => none
+
+def CL.id (l : CL) : Nat := 2 * valToNat l.toVal + 1
+def CL.fn (l : CL) : Fn := .user l.id
+
+def CL.ofId? (id : Nat) : Option CL :=
+  if isLibId id then
+    match (cloOfId id).bind ofCloVal with
+    | some (k, tag, fs) => if k == lns then CL.ofFields tag fs else none
+    | none => none
+  else none
+
+/-- The function field `g` (the user function). `n` is a count, `a`, `as`, `x` are values. -/
+def CL.fnIds : CL → List Nat
+  | .afterCell _ _ g | .body _ g | .unc _ _ g | .run _ _ g _ _ => [g]
+  | _ => []
+
+/-- The counter cell `(running, highest)`. -/
+def cntOf (v : View) (c : Nat) : Nat × Nat :=
+  match v.refs[c]? with
+  | some (.pair (.nat r) (.nat h)) => (r, h)
+  | _ => (0, 0)
+
+def CL.call (l : CL) (arg : Val) (v : View) : UserResult :=
+  match l, arg with
+  | .newCell, _ => { effects := [.allocRef (.pair (.nat 0) (.nat 0))], out := .ret (.ref v.refs.length) }
+  | .afterCell n as g, .ref c => { out := .prog (parTraverseNIO n (listOf as) (CL.body c g).id) }
+  | .body c g, a => { out := .prog (.uncancelable (CL.unc c a g).fn) }
+  | .unc c a g, .poll m s => { out := .prog (.flatMap (.delay (CL.enter c).fn) (CL.run c a g m s).fn) }
+  | .enter c, _ =>
+    let (r, h) := cntOf v c
+    { effects := [.writeRef c (.pair (.nat (r + 1)) (.nat (max h (r + 1))))], out := .ret .unit }
+  | .run c a g m s, _ =>
+    { out := .prog (.flatMap (.onCancel (.attempt (IO.applyPoll (.flatMap (.pure a) (.user g)) m s))
+        (.delay (CL.exit c).fn)) (CL.fin c).fn) }
+  | .exit c, _ =>
+    let (r, h) := cntOf v c
+    { effects := [.writeRef c (.pair (.nat (r - 1)) (.nat h))], out := .ret .unit }
+  | .fin c, x => { out := .prog (.flatMap (.delay (CL.exit c).fn) (CL.rethrow c x).fn) }
+  | .rethrow _ x, _ =>
+    match x with
+    | .left (.err e) => { out := .prog (.error e) }
+    | .right b => { out := .prog (.pure b) }
+    | _ => { out := .throw { code := illCode, kind := .fatal } }
+  | _, _ => { out := .throw { code := illCode, kind := .fatal } }
+
+/-- User code `u` with the limit harness. -/
+def limited (u : UserEnv) : UserEnv where
+  call id a refs := match CL.ofId? id with
+    | some l => l.call a { refs }
+    | none => u.call id a refs
+  callV id a v := match CL.ofId? id with
+    | some l => l.call a v
+    | none => u.callV id a v
+
+/-- The harness closures that a program may name: `newCell` and `afterCell` (no token). -/
+def CL.public : CL → Bool
+  | .newCell | .afterCell _ _ _ => true
+  | _ => false
+
+/-- The `Lib` of statement 8: `ptLibDeep` and the public harness closures; function fields of
+both. -/
+def limLib : Lib :=
+  { ok := fun id => ptIsLib id || ((CL.ofId? id).map CL.public).getD false,
+    fields := fun c => ptFields c ++
+      (match ofCloVal c with
+       | some (k, tag, fs) => if k == lns then ((CL.ofFields tag fs).map CL.fnIds).getD [] else []
+       | none => []) }
+
+/-- The token: the counter cell `Ref` 0. -/
+def limToks : List Handle := [.ref 0]
+
+/-- The root: allocate the counter cell, then run `parTraverseN(n)(as)(f')`. -/
+def limitRoot (n : Nat) (as : List Val) (g : Nat) : IO :=
+  .flatMap (.delay CL.newCell.fn) (CL.afterCell n (listV as) g).fn
+
+/-- The highest count in the final heap. -/
+def highest (o : Obs) : Option Nat :=
+  match (o.refs[0]? : Option Val) with
+  | some (.pair _ (.nat h)) => some h
+  | _ => none
+
+/-- Statement 8: at most `n` actions run at once. -/
+def parTraverseNAtMostN : Prop :=
+  ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) →
+  ∀ (u : UserEnv) (n : Nat) (as : List Val) (g : Nat),
+    1 ≤ n → g % 2 = 0 →
+    HarnessPrivacy.UserPrivate (env ord (limited u)) limToks →
+    WellFormed limLib [] (env ord (limited u)) (limitRoot n as g) →
+    ∀ o, outcomesP {} counterMaskModel (env ord (limited u)) (limitRoot n as g) o →
+      ∃ h, highest o = some h ∧ h ≤ n
 
 end CatsEffectInLean.Props.Phase6.ParTraverse

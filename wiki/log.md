@@ -250,6 +250,12 @@
 - Updated: raw harness privacy note (parTraverseN user function as number field; deep Lib rejects it)
 - Raw: raw/cats-effect/2026-11-14-harness-privacy-notes.md
 
+<<<<<<< HEAD
 ## [2026-11-14] ingest | Track Res: audit check lib-fields, named id-free libraries
 - Updated: Registry and audit (check 9 lib-fields), Outcome sets (Lib.idFree), raw harness privacy note (follow-up)
 - Raw: raw/cats-effect/2026-11-14-harness-privacy-notes.md
+=======
+## [2026-11-14] update | parTraverseN: deep Lib and statement 8
+- Updated: parTraverseN model (ptLibDeep with ParTraverse.fnFields incl. srcAction codes; defect D closed; statement 8 atMostN with HarnessPrivacy; witness and kernel-checked wrong function), index
+- Raw: raw/cats-effect/2026-11-14-partraverse-deep-lib.md
+>>>>>>> worktree-agent-afe83b8ca61de1bd2

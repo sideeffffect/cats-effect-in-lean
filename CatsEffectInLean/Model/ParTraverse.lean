@@ -398,6 +398,38 @@ def ioOf : Val → IO
       | none => .error { code := illCode, kind := .fatal }
     | _ => .error { code := illCode, kind := .fatal }
 
+/-! ## Function fields (decision 56, `Lib.fields`)
+
+The number fields of these closures that hold a closure id: `f` (the user function) of `k1`, `k2`,
+`k3`, `travM2`, `elemSel`, `uncK`, `resK`, `thenStart`, `callF`; and `f` of the source code
+`srcAction f a`, which other mirrors keep as a closure field (`Bracket` `Src.ext`, `Race` and
+`Timeout` sources). The other number fields are data: `n` of `k1`, `k2` is the limit (a count);
+`ns` and the tag of each code are the encoding. Handles (`p s q r t w`, polls) are `Val` handles,
+which `captured` sees without `fields`. -/
+
+/-- The user function fields of a closure. -/
+def PT.fnIds : PT → List Nat
+  | .k1 _ _ f | .k2 _ _ f _ | .k3 _ f _ _ | .travM2 f _ _ _ _ | .elemSel f _ _ _ _ | .uncK f _ _ _ _
+  | .resK f _ _ _ _ _ _ | .thenStart f _ _ _ _ _ | .callF f _ => [f]
+  | _ => []
+
+/-- The function id in a source code `srcAction f a` (also under `Bracket`'s `Src.ext`, `.left`). -/
+def srcFnIds (x : Val) : List Nat :=
+  let y := match x with
+    | .left s => s
+    | s => s
+  match ofCloVal y with
+  | some (41, 80, [.nat f, _]) => [f]
+  | _ => []
+
+/-- `Lib.fields` of this mirror and the mirrors it uses: the `PT` function fields, the function
+ids of `srcAction` codes in any closure field, and `Bracket.fnFields`. -/
+def fnFields (c : Val) : List Nat :=
+  (match ofCloVal c with
+   | some (k, tag, fs) =>
+     (if k == ns then ((PT.ofFields tag fs).map PT.fnIds).getD [] else []) ++ fs.flatMap srcFnIds
+   | none => []) ++ Bracket.fnFields c
+
 /-! ## The closures -/
 
 private def ret (v : Val) : UserResult := { out := .ret v }
