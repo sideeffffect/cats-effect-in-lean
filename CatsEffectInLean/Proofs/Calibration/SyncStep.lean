@@ -170,22 +170,22 @@ theorem stepped_ne (fuel : Nat) (cs : List SoloChoice) :
 
 /-! ## The witness is well-formed -/
 
-theorem captured_small : WF.captured 0 = [] ∧ WF.captured 2 = [] ∧ WF.captured 4 = [] := by
+theorem captured_small : Codec.cloOfId 0 = none ∧ Codec.cloOfId 2 = none ∧ Codec.cloOfId 4 = none := by
   decide +kernel
 
 /-- The start program passes `progOK` (decidable). -/
-theorem cx_prog : WF.progOK (fun _ => false) ((refHandles cxRefs).contains ·) cxFa = true := by
+theorem cx_prog : WF.progOK ((fun _ => false : Nat → Bool) : Lib) ((refHandles cxRefs).contains ·) cxFa = true := by
   decide +kernel
 
 /-- Each user function of `cxEnv` passes `CallOK`: it ignores the view; its effects and its
 result use only `Ref` cell 0, which is in `H0`. -/
 theorem cx_calls (id : Nat) (arg : Val) (v : View) :
-    WF.CallOK (fun _ => false) (refHandles cxRefs) cxEnv id arg v := by
+    WF.CallOK ((fun _ => false : Nat → Bool) : Lib) (refHandles cxRefs) cxEnv id arg v := by
   obtain ⟨c0, c2, c4⟩ := captured_small
   refine ⟨fun w _ => ?_, ?_⟩
   · rcases id with _ | _ | _ | _ | _ | id <;> rfl
   · rcases id with _ | _ | _ | _ | _ | id <;>
-      simp [WF.ResultOK, WF.EffectsOK, WF.OutOK, cxEnv, WF.progOK, WF.fnOK, WF.sub, c2, c4,
+      simp [WF.ResultOK, WF.EffectsOK, WF.OutOK, cxEnv, WF.progOK, WF.fnOK, WF.capOK_coe, WF.sub, c2, c4,
         Val.handles]
     exact WF.reach_of_mem (by simp [refHandles, cxRefs])
 
@@ -201,7 +201,7 @@ theorem cx_opaque : WF.PollOpaque cxEnv := by
     simp [cxEnv, WF.rnResult, WF.rnIO, WF.rnFn, WF.rnEffect, WF.rnVal,
       WF.rnId_of_all σ 2 (by decide +kernel), WF.rnId_of_all σ 4 (by decide +kernel)]
 
-theorem cx_wellFormed : WellFormed (fun _ => false) (refHandles cxRefs) cxEnv cxFa :=
+theorem cx_wellFormed : WellFormed ((fun _ => false : Nat → Bool) : Lib) (refHandles cxRefs) cxEnv cxFa :=
   ⟨cx_prog, fun id _ arg v => cx_calls id arg v, cx_opaque⟩
 
 /-- The witness raises and throws no error at all, so it is in the non-fatal domain. -/

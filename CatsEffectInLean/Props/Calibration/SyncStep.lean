@@ -127,7 +127,7 @@ def StepIdentityFor (stepped : Nat → List SoloChoice → Obs) (env : UserEnv) 
 def syncStepIdentitySyncIO : Prop :=
   ∀ (env : UserEnv) (fa : IO) (limit : Int) (refs : List Val),
     initialRefsOK refs = true →
-    WellFormed (fun _ => false) (refHandles refs) env fa →
+    WellFormed ((fun _ => false : Nat → Bool) : Lib) (refHandles refs) env fa →
     NonFatalOnly env fa →
     StepIdentityFor (steppedObs env fa limit refs) env fa refs
 

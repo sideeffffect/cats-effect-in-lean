@@ -104,19 +104,55 @@ def Val.handles : Val → List Handle
   | .cont s => [.cont s]
   | _ => []
 
+/-- The library of a model (decision 56): `ok id` says that odd id `id` is a mirrored library
+lambda; `fields c` gives the closure ids that a library closure value `c` keeps in number fields
+(its function fields, for example `use` of `Bracket.BLam.thenUse use a`). A library that keeps no
+closure id in a number field has `fields = fun _ => []`. A plain `Nat → Bool` is such a library
+(the coercion). -/
+structure Lib where
+  ok : Nat → Bool
+  fields : Val → List Nat := fun _ => []
+
+instance : Coe (Nat → Bool) Lib := ⟨fun f => { ok := f }⟩
+
 namespace WF
 
 open Codec
 
-/-- The handles that the closure with id `id` captured (`Model/Codec.lean`): the handles in
-its closure value, or none if `id / 2` is not a code. -/
-def captured (id : Nat) : List Handle :=
-  match cloOfId id with
-  | some c => c.handles
-  | none => []
-
 /-- Are all handles of `hs` held (`mem`)? -/
 def sub (mem : Handle → Bool) (hs : List Handle) : Bool := hs.all mem
+
+/-- The depth bound of `capturedD`: a closure field that names a closure whose field names a
+closure ... Real chains are short: a code is much larger than the numbers in it (`valToNat` of
+`nat 0` is 98), so a chain of depth `d` needs a number with more than `2 ^ d` bits. -/
+def capDepth : Nat := 64
+
+/-- The handles that the closure with id `id` captured (`Model/Codec.lean`, decision 56): the
+handles in its closure value, and, through each function field (`lib.fields`), the handles that
+the named closure captured, recursively. `none`: the depth bound is reached (the closure is then
+rejected, `capOK`). A closure that names another closure in a field holds that closure, so it
+holds what that closure captured (review batch 6: a `Bracket` leaf that captured a `Ref`, named
+by number in `BLam.thenUse`). -/
+def capturedD (lib : Lib) : Nat → Nat → Option (List Handle)
+  | 0, _ => none
+  | d + 1, id =>
+    match cloOfId id with
+    | some c => (lib.fields c).foldr (fun j acc =>
+        match capturedD lib d j, acc with
+        | some a, some b => some (a ++ b)
+        | _, _ => none) (some c.handles)
+    | none => some []
+
+/-- The captured handles of closure `id` (empty if the depth bound is reached; used as held
+handles of the closure itself, `CallOK`). -/
+def captured (lib : Lib) (id : Nat) : List Handle := (capturedD lib capDepth id).getD []
+
+/-- A program may name closure `id` only if all its captured handles are held, and the depth
+bound is not reached. -/
+def capOK (lib : Lib) (mem : Handle → Bool) (id : Nat) : Bool :=
+  match capturedD lib capDepth id with
+  | some hs => sub mem hs
+  | none => false
 
 /-- Clause 3 for runtime closures: only the ones that public operations build, with held
 handles. -/
@@ -132,12 +168,12 @@ def rtOK (mem : Handle → Bool) : RtFn → Bool
   | _ => false
 
 /-- Clause 3: a function in a program that user code built. -/
-def fnOK (lib : Nat → Bool) (mem : Handle → Bool) : Fn → Bool
-  | .user id => (id % 2 == 0 || lib id) && sub mem (captured id)
+def fnOK (lib : Lib) (mem : Handle → Bool) : Fn → Bool
+  | .user id => (id % 2 == 0 || lib.ok id) && capOK lib mem id
   | .rt k => rtOK mem k
 
 /-- Clauses 1-3: a program that user code built, with held handles `mem`. -/
-def progOK (lib : Nat → Bool) (mem : Handle → Bool) : IO → Bool
+def progOK (lib : Lib) (mem : Handle → Bool) : IO → Bool
   | .pure v => sub mem v.handles
   | .error _ | .realTime | .monotonic | .readEC | .canceled | .cede | .sleep _
   | .ioTrace | .readRT => true
@@ -176,7 +212,7 @@ open Classical in
 noncomputable def memOf (R : Handle → Prop) : Handle → Bool := fun h => decide (R h)
 
 /-- Clause 5 for the output. -/
-def OutOK (lib : Nat → Bool) (R : Handle → Prop) : UserOut → Prop
+def OutOK (lib : Lib) (R : Handle → Prop) : UserOut → Prop
   | .ret x => ∀ h ∈ x.handles, R h
   | .prog p => progOK lib (memOf R) p = true
   | .throw _ => True
@@ -184,7 +220,7 @@ def OutOK (lib : Nat → Bool) (R : Handle → Prop) : UserOut → Prop
 /-- Clause 5: the effects in order, then the output. `nr`, `nd`: the ids of the next new `Ref`
 and `Deferred` (`UserEffect.allocRef`, `allocDeferred`). A new cell is held after its
 allocation. -/
-def EffectsOK (lib : Nat → Bool) (out : UserOut) :
+def EffectsOK (lib : Lib) (out : UserOut) :
     (R : Handle → Prop) → (nr nd : Nat) → List UserEffect → Prop
   | R, _, _, [] => OutOK lib R out
   | R, nr, nd, .writeRef i x :: es =>
@@ -201,14 +237,14 @@ def EffectsOK (lib : Nat → Bool) (out : UserOut) :
   | R, nr, nd, .report _ :: es => EffectsOK lib out R nr nd es
 
 /-- Clause 5 for one call result in view `v`. -/
-def ResultOK (lib : Nat → Bool) (R : Handle → Prop) (v : View) (r : UserResult) : Prop :=
+def ResultOK (lib : Lib) (R : Handle → Prop) (v : View) (r : UserResult) : Prop :=
   EffectsOK lib r.out R v.refs.length v.deferreds.length r.effects
 
 /-- Clauses 4 and 5 for the call of user function `id` on `arg` in view `v`. `H0`: the handles
 of the scope of the whole program. -/
-def CallOK (lib : Nat → Bool) (H0 : List Handle) (env : UserEnv) (id : Nat) (arg : Val)
+def CallOK (lib : Lib) (H0 : List Handle) (env : UserEnv) (id : Nat) (arg : Val)
     (v : View) : Prop :=
-  let R := Reach v (H0 ++ arg.handles ++ captured id)
+  let R := Reach v (H0 ++ arg.handles ++ captured lib id)
   (∀ w, Agree R v w → env.callV id arg w = env.callV id arg v) ∧
   ResultOK lib R v (env.callV id arg v)
 
@@ -323,19 +359,21 @@ end WF
 
 /-- Programs and user code that Scala can express (decision 27; clauses in the module doc).
 
-* `lib id`: odd id `id` is a library closure of the model (a mirrored Cats Effect lambda).
+* `lib.ok id`: odd id `id` is a library closure of the model (a mirrored Cats Effect lambda);
+  `lib.fields`: its function fields (decision 56). A `Nat → Bool` is a library without
+  function fields.
 * `H0`: the handles in the scope of the whole program (for example `Ref` cells that exist
   before it starts). Empty for a program that runs alone.
 * The start program `p` passes `progOK` with `H0` (decidable).
 * Each user function (even id) passes `CallOK` for each argument and each heap view.
 * User code treats `Poll` values as opaque (`PollOpaque`, clause 6). -/
-def WellFormed (lib : Nat → Bool) (H0 : List Handle) (env : UserEnv) (p : IO) : Prop :=
+def WellFormed (lib : Lib) (H0 : List Handle) (env : UserEnv) (p : IO) : Prop :=
   WF.progOK lib (H0.contains ·) p = true ∧
   (∀ id, id % 2 = 0 → ∀ (arg : Val) (v : View), WF.CallOK lib H0 env id arg v) ∧
   WF.PollOpaque env
 
 /-- `WellFormed` for plain `IO` programs: no library closures, no handles before the start. -/
-abbrev WellFormedIO (env : UserEnv) (p : IO) : Prop := WellFormed (fun _ => false) [] env p
+abbrev WellFormedIO (env : UserEnv) (p : IO) : Prop := WellFormed ((fun _ => false : Nat → Bool) : Lib) [] env p
 
 namespace WF
 
@@ -357,19 +395,38 @@ theorem cloOfId_userFn (c : Val) : cloOfId (2 * valToNat c) = some c := by
   simp only [cloOfId]
   rw [show (2 * valToNat c) / 2 = valToNat c by omega, natToVal_valToNat]
 
-theorem captured_libFn (c : Val) : captured (2 * valToNat c + 1) = c.handles := by
-  simp [captured, cloOfId_libFn]
+/-- A library without function fields: the captured handles are the closure value's handles. -/
+theorem capturedD_coe (f : Nat → Bool) (d id : Nat) :
+    capturedD (f : Lib) (d + 1) id = some (match cloOfId id with | some c => c.handles | none => []) := by
+  simp only [capturedD]
+  split <;> rfl
 
-theorem captured_userFn (c : Val) : captured (2 * valToNat c) = c.handles := by
-  simp [captured, cloOfId_userFn]
+theorem captured_coe (f : Nat → Bool) (id : Nat) :
+    captured (f : Lib) id = (match cloOfId id with | some c => c.handles | none => []) := by
+  simp [captured, capDepth, capturedD_coe]
+
+theorem capOK_coe (f : Nat → Bool) (mem : Handle → Bool) (id : Nat) :
+    capOK (f : Lib) mem id = sub mem (match cloOfId id with | some c => c.handles | none => []) := by
+  simp [capOK, capDepth, capturedD_coe]
+
+/-- A closure without captured handles (library without function fields) passes `capOK`. -/
+theorem capOK_coe_of_nil (f : Nat → Bool) (mem : Handle → Bool) (id : Nat)
+    (h : (match cloOfId id with | some c => c.handles | none => []) = []) : capOK (f : Lib) mem id = true := by
+  rw [capOK_coe, h]; rfl
+
+theorem captured_libFn (f : Nat → Bool) (c : Val) : captured (f : Lib) (2 * valToNat c + 1) = c.handles := by
+  simp [captured_coe, cloOfId_libFn]
+
+theorem captured_userFn (f : Nat → Bool) (c : Val) : captured (f : Lib) (2 * valToNat c) = c.handles := by
+  simp [captured_coe, cloOfId_userFn]
 
 theorem fnOK_userFn (lib : Nat → Bool) (mem : Handle → Bool) (c : Val) :
-    fnOK lib mem (userFn c) = sub mem c.handles := by
-  simp [fnOK, userFn, captured_userFn]
+    fnOK (lib : Lib) mem (userFn c) = sub mem c.handles := by
+  simp [fnOK, userFn, capOK_coe, cloOfId_userFn]
 
 theorem fnOK_libFn (lib : Nat → Bool) (mem : Handle → Bool) (c : Val) :
-    fnOK lib mem (libFn c) = (lib (2 * valToNat c + 1) && sub mem c.handles) := by
-  simp only [fnOK, libFn, captured_libFn]
+    fnOK (lib : Lib) mem (libFn c) = (lib (2 * valToNat c + 1) && sub mem c.handles) := by
+  simp only [fnOK, libFn, capOK_coe, cloOfId_libFn]
   rw [show (2 * valToNat c + 1) % 2 = 1 by omega]
   rfl
 

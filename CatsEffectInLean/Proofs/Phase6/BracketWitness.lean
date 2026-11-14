@@ -163,7 +163,8 @@ theorem gEnv_even (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) : gEnv.call
   show gDisp id a v = _
   simp [gDisp, BLam.ofId?_even hid, gUser]
 
-theorem captured2 : WF.captured 2 = [] := by decide +kernel
+theorem captured2 (mem : Handle → Bool) : WF.capOK (isLib : Lib) mem 2 = true := by
+  rw [WF.capOK_coe, show Codec.cloOfId 2 = none by decide]; rfl
 
 theorem gR_ok (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK isLib R v (gR n) := by
   match n with

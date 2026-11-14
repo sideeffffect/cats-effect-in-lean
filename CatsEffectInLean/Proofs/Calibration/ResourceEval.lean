@@ -83,8 +83,9 @@ theorem not_eqvP : ¬ EqvP {} counterMaskModel r.toEnv alloc (IOI.uncancelable (
 
 /-! ### The witness is well-formed -/
 
-theorem ids_ok : isLib 279459022985 = true ∧ WF.captured 279459022985 = [] ∧
-    WF.captured 0 = [] ∧ WF.captured 2 = [] := by
+theorem ids_ok : isLib 279459022985 = true ∧
+    (match Codec.cloOfId 279459022985 with | some c => c.handles | none => []) = [] ∧
+    Codec.cloOfId 0 = none ∧ Codec.cloOfId 2 = none := by
   decide +kernel
 
 /-- User code (even ids) of `r.toEnv` passes `CallOK`: it ignores the view, has no effects, and
@@ -97,10 +98,12 @@ theorem r_calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
   refine ⟨fun w _ => ?_, ?_⟩
   · rw [he, he]
     rcases id / 2 with _ | _ | k <;> rfl
-  · rw [he]
+  · have hX : ∀ mem, WF.capOK (isLib : Lib) mem 279459022985 = true :=
+      fun mem => WF.capOK_coe_of_nil isLib mem _ hc
+    rw [he]
     rcases id / 2 with _ | _ | k <;>
       simp [user, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK, WF.sub, alloc, fa,
-        IOI.uncancelable, uid, hl, hc, hc0]
+        IOI.uncancelable, uid, hl, hX, WF.capOK_coe, hc0]
 
 theorem r_opaque : WF.PollOpaque r.toEnv := by
   obtain ⟨hl, hc, hc0, hc2⟩ := ids_ok

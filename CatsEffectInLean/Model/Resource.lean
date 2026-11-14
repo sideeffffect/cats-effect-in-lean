@@ -404,7 +404,7 @@ def isLib (id : Nat) : Bool := isLibId id && ((cloOfId id).bind Clo.ofVal).isSom
 user functions are user functions of `REnv.user` (id `k` is `uid k` in programs), its `Eval`
 programs pass `WF.progOK`. `make` names closed programs (`REnv.acquire`, `REnv.release`). -/
 def Res.ok (mem : Handle → Bool) : Res → Bool
-  | .allocate (.user k) => WF.sub mem (WF.captured (2 * k))
+  | .allocate (.user k) => WF.capOK (isLib : Lib) mem (2 * k)
   | .allocate (.make _ _) => true
   | .bind source _ => Res.ok mem source
   | .pure a => WF.sub mem a.handles
