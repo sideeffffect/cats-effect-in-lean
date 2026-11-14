@@ -38,7 +38,6 @@ F = {
     "emit": seq(emit(V("a")), op("pure", v=V("a"))),
     "cede": seq(emit(V("a")), CEDE, op("map", e=op("pure", v=V("a")), fn=2)),
     "sleep": seq(op("sleep", ms=1), op("pure", v=V("a"))),
-    "raise2": op("case", on={"t": "left", "v": UNIT}, l="u", lk=seq(CEDE, op("pure", v=V("a"))), r="w", rk=op("raise", code=2)),
     "raise": seq(emit(V("a")), op("raise", code=7)),
     "canceled": seq(emit(V("a")), op("canceled"), op("pure", v=V("a"))),
 }
@@ -50,9 +49,9 @@ for fk in ("pure", "emit", "cede", "sleep"):
 for fk in ("raise", "canceled"):
     for n in (1, 2, 3):
         case(f"pt-{fk}-n{n}", pt(n, XS[3], F[fk]))
-# error only for element 2
-case("pt-err-one", pt(2, XS[3], op("bind", x="b", e=op("map", e=op("pure", v=V("a")), fn=7),
-                                    k=op("case", on={"t": "left", "v": UNIT}, l="u", lk=op("pure", v=V("a")), r="w", rk=CEDE))))
+# every element raises its own code (`map(pure a, raise)`): which error wins
+for n in (1, 2, 4):
+    case(f"pt-err-codes-n{n}", pt(n, XS[4], op("seq", ps=[CEDE, op("map", e=op("pure", v=V("a")), fn=3)])))
 # a parent cancels the traversal
 for c in range(4):
     case(f"pt-parent-{c}", bind("f", op("start", e=pt(2, XS[3], F["cede"])),

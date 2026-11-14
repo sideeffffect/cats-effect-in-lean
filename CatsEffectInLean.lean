@@ -71,3 +71,6 @@ import CatsEffectInLean.Proofs.Phase6.ResourceWitness
 import CatsEffectInLean.Proofs.Phase6.ResourceBoth
 import CatsEffectInLean.Proofs.Phase6.RaceWitness
 import CatsEffectInLean.Proofs.Phase6.MemoizeSat
+import CatsEffectInLean.Model.ParTraverse
+import CatsEffectInLean.Props.Phase6.ParTraverse
+import CatsEffectInLean.Proofs.Phase6.ParTraverseWitness

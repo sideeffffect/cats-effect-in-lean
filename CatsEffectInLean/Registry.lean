@@ -15,6 +15,7 @@ import CatsEffectInLean.Props.Phase6.Memoize
 import CatsEffectInLean.Proofs.Phase6.MemoizeStuck
 import CatsEffectInLean.Props.Phase6.Resource
 import CatsEffectInLean.Proofs.Phase6.ResourceBoth
+import CatsEffectInLean.Props.Phase6.ParTraverse
 
 /-!
 # Property registry
@@ -369,7 +370,39 @@ def registry : List Entry := [
       for 4 programs fa; the over-masking Eval (wrong function) breaks it for IO.canceled \
       (test/Phase6/ResourceSmoke.lean, part 3). Believed true: a masked root never ends \
       Canceled, and alloc keeps every Canceled run of fa. Open: needs that invariant over \
-      Step/SchedP." }
+      Step/SchedP." },
+  -- Phase 6, batch 6.3 (parTraverseN; Props/Phase6/ParTraverse.lean)
+  { id := "core.IO.parTraverseN.resultOrder"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNOrder
+    status := .«open»
+    note := "If parTraverseN(n)(as)(f) succeeds, the result holds one entry per input in input order \
+      (f tagged by the harness as a => f(a).map(b => (a, b)); no lost, duplicated or \
+      reordered entry). All user code, n >= 1, all schedules; model limit: at most 4 inputs \
+      (Scala Set1..Set4, not HashSet). Satisfiable: Proofs.Phase6.ParTraverseWitness.\
+      parTraverseNOrder_satisfiable. Smoke: lake exe ptsmoke (random schedules; a reversed \
+      result breaks it). Open: needs an invariant over Step/SchedP for all f." },
+  { id := "core.IO.parTraverseN.pureSucceeds"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNPureSucceeds
+    status := .«open»
+    note := "For f(a) = IO.pure(g(a)), every run that stops ends Succeeded(as.map(g)): no deadlock, \
+      no error, input order. Satisfiable (parTraverseNPureSucceeds_satisfiable). Smoke: \
+      ptsmoke (a dropped result breaks it). Open: needs a liveness and value invariant." },
+  { id := "core.IO.parTraverseN.errorAborts"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNErrorAborts
+    status := .«open»
+    note := "If f(a0) raises e, a0 is among the first n inputs and every other f(a) never completes, \
+      every run that stops ends Errored(e) (Scaladoc K/GC:139-140: errors abort the \
+      sequence). Satisfiable (parTraverseNErrorAborts_satisfiable). Smoke: ptsmoke (no \
+      cancelAll in the error branch breaks it). Open." },
+  { id := "core.IO.parTraverseN.cancelAborts"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNCancelAborts
+    status := .«open»
+    note := "The same for a self-cancel f(a0) = IO.canceled: every run that stops ends Canceled. \
+      Satisfiable (parTraverseNCancelAborts_satisfiable). Smoke: ptsmoke. Open." }
 ]
 
 end CatsEffectInLean
