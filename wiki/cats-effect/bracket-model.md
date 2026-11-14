@@ -62,7 +62,7 @@ The new form: the test program is a harness (`henv`, closures `HLam`, namespace 
 
 Why open: a proof for all programs needs a simulation or a state invariant over `Sched.tickP` and all of `Step.lean`. Not done.
 
-Earlier caveat (track Res, 2026-11-10): `MarkersOnly` also restricted odd (library) ids, so the old invariants could be vacuous. Review batch 4 confirmed it. Resolved by the harness restatement above (no `MarkersOnly` any more).
+Earlier caveat (track Res, 2026-11-10): `MarkersOnly` also restricted odd (library) ids, so the old invariants could be vacuous. Review batch 4 confirmed it. Resolved by the harness restatement above (no `MarkersOnly` any more) Track Res uses a deep name check instead (`Props/Phase6/HarnessNames.lean`, `NoForge`), which also stops forwarding through library closure fields.
 
 ## Difftest (format v2)
 
