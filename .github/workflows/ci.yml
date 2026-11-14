@@ -133,12 +133,14 @@ jobs:
   heavy-proofs:
     # Heavy proofs (decision 55): lean_lib HeavyProofs, registry CatsEffectInLean/RegistryHeavy.lean.
     # Not in the default target, so the `lean` job (60 min) does not build them. Runs on every
-    # push and pull request. Builds the modules one Lean process at a time (largest `decide`
-    # about 8 GB), audits both registries in full (`lake exe audit_heavy`: theorem types, axioms,
-    # and the inventory rows that the main audit defers), checks the axioms of the heavy
-    # theorems, and replays them with leanchecker. Local run (2026-11-10): build about 30 min,
-    # replay about 38 min.
-    name: Heavy proofs (sequential build, full audit, kernel replay)
+    # push and pull request. `scripts/check_heavy_proofs.sh`: derives the heavy module and
+    # theorem lists from `heavyModules`/`registryHeavy` (fails if the lakefile roots differ);
+    # builds each heavy module in the bwrap sandbox (only `.lake` writable, no network; review
+    # batch 7); checks that nothing outside the heavy artifacts and the work tree changed; runs a
+    # copy of `audit_heavy` built before the heavy build (both registries in full, deferred
+    # inventory rows included); `#print axioms` of every heavy theorem; leanchecker per heavy
+    # module. Local run (2026-11-14): see the decision 55 note.
+    name: Heavy proofs (sandboxed sequential build, full audit, kernel replay)
     runs-on: ubuntu-26.04
     timeout-minutes: 150
     steps:
@@ -146,7 +148,12 @@ jobs:
       - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
         with:
           auto-config: "false"
-      - name: Build heavy proofs one module at a time, audit both registries, axioms, replay
+      - name: Allow bwrap user namespaces
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          sudo scripts/setup-bwrap-apparmor.sh
+      - name: Build heavy proofs in the sandbox, audit both registries, axioms, replay
         run: scripts/check_heavy_proofs.sh
 
   inventory:

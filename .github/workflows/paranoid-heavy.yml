@@ -1,11 +1,20 @@
 name: Paranoid kernel check (heavy proofs)
 
 # Decision 55: the heavy proofs (lean_lib HeavyProofs) are not in the default target, so the
-# weekly `paranoid.yml` (`lake check --paranoid`) does not see them. This run exports the heavy
-# modules with `leanexport` and replays the export through all bundled kernels
-# (`lake check --from-export --paranoid`). Estimate: one default-kernel replay takes about
-# 38 min locally, so six kernels may need about 4 h or more; the timeout is close to the
-# GitHub-hosted maximum (360 min). If it does not fit, see QUESTIONS.md.
+# weekly `paranoid.yml` (`lake check --paranoid`) does not see them. This run builds them in the
+# bwrap sandbox (scripts/check_heavy_proofs.sh with SKIP_REPLAY=1), exports every heavy module
+# with `leanexport` and replays the export through all bundled kernels
+# (`lake check --from-export --paranoid`).
+#
+# Export scope (checked 2026-11-14, review batch 7 gap 4): `leanexport M` writes M and all its
+# imports; `leanexport A B` writes the union. The export of the law root alone already holds all
+# 49 chunk theorems (362 MB, 43,690 theorems and 17,122 definitions including Init and Lean).
+# This run still passes the full heavy module list (derived, not hand-written), so a future heavy
+# root that the others do not import is covered too.
+#
+# Run time not measured: one default-kernel replay of the heavy modules took about 30 min
+# locally, so six kernels may need about 3-4 h; the timeout is close to the GitHub-hosted
+# maximum (360 min). See QUESTIONS.md Q4.
 on:
   schedule:
     - cron: "41 3 * * 0" # Sundays 03:41 UTC
@@ -31,12 +40,15 @@ jobs:
           sudo apt-get install -y -qq bubblewrap
           sudo scripts/setup-bwrap-apparmor.sh
 
-      - name: Build heavy proofs (one module at a time) and audit
-        run: SKIP_REPLAY=1 scripts/check_heavy_proofs.sh
+      - name: Build heavy proofs in the sandbox and audit
+        run: SKIP_REPLAY=1 HEAVY_MODULES_OUT="$RUNNER_TEMP/heavy-modules.txt" scripts/check_heavy_proofs.sh
 
-      - name: Export and replay through all kernels
+      - name: Export every heavy module and replay through all kernels
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
-          lake env leanexport CatsEffectInLean.Proofs.Phase6.RaceLaw > "$RUNNER_TEMP/heavy.ndjson"
+          mapfile -t mods < "$RUNNER_TEMP/heavy-modules.txt"
+          scripts/sandbox.sh "$(command -v lake)" env leanexport "${mods[@]}" > "$RUNNER_TEMP/heavy.ndjson"
           ls -l "$RUNNER_TEMP/heavy.ndjson"
+          echo "declarations (def/thm/inductive/opaque/axiom):"
+          grep -c -E '^\{"(def|thm|inductive|opaque|axiom)"' "$RUNNER_TEMP/heavy.ndjson" || true
           lake check --from-export "$RUNNER_TEMP/heavy.ndjson" --paranoid

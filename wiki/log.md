@@ -212,3 +212,7 @@
 ## [2026-11-10] ingest | Decision 55: heavy proofs lib, heavy registry, heavy CI job
 - Raw: raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md
 - Updated: Registry and audit (heavy proofs section, self-test), Certificate checks (CI layout)
+
+## [2026-11-14] ingest | Review batch 7 fixes for decision 55 (sandbox, derived lists, export scope)
+- Raw: raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md (section "Review batch 7 fixes")
+- Updated: Registry and audit (heavy job steps, export scope, leanexport gotcha)

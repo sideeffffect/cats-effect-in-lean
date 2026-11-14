@@ -17,6 +17,14 @@
 - CI: new job `heavy-proofs` in `ci.yml` (150 min). New scheduled workflow `paranoid-heavy.yml` (weekly, 350 min): `leanexport` of the heavy root and `lake check --from-export --paranoid`. The weekly `paranoid.yml` (180 min) does not see the heavy lib; six kernels over the heavy lib are estimated at about 4 h, so they do not fit into 180 min.
 - Open points for the user: QUESTIONS.md Q4 (make `heavy-proofs` a required check; paranoid run may not fit 350 min).
 
+## Review batch 7 fixes (2026-11-14, `review/2026-11-14-review-batch-7.md`)
+
+1. Sandbox: `scripts/sandbox.sh` (bwrap: `--ro-bind / /`, writable `.lake`, private `/tmp`, `--unshare-net`). `check_heavy_proofs.sh` builds `audit_heavy` and the default target first, copies the binary out of `.lake`, hashes `.lake/build`, builds each heavy module in the sandbox, then fails if a hashed file outside the heavy artifacts or the git work tree changed, and runs the copy. The axiom check and `leanchecker` also run in the sandbox. CI jobs `heavy-proofs` and `paranoid-heavy` install bwrap first.
+2. Derived lists: `tools/HeavyList.lean` prints `heavyModules` and the `registryHeavy` theorems; `scripts/heavy_closure.py` gives the import closure of the roots minus the default target (imports first) and fails if the lakefile roots differ, a root is in the default target, or a module has no file. The axiom output is joined before it is parsed (wrapped lists).
+3. Export scope: `leanexport M` includes all imports; `leanexport A B` gives the union (declaration counts: `Basic` 57,668, `Model.Val` 57,871, both 57,872). The law root export holds all 49 chunk theorems. `paranoid-heavy.yml` exports the whole derived module list in one call and prints the size and declaration count.
+4. Citation `Proofs/Phase6/RaceLaw.lean:7` (and the generator) now `GenSpawnLaws.scala:146-147`.
+5. Minor: self-test case `heavy_bad_axiom_full`.
+
 ## Measurements (local, 16 cores)
 
 - Heavy build (49 chunks in 10 chained modules): about 30 min, peak RSS 8.3 GB per Lean process.

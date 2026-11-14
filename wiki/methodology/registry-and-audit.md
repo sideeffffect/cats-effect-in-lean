@@ -59,10 +59,16 @@ Proofs that take more than about 5 minutes are in lean_lib `HeavyProofs` (not a 
 
 - `RegistryHeavy.lean` is light and in the default target. It names heavy theorems with a single backtick and the full name, because it does not import them.
 - Main CI job (`lake exe audit`): every check of `Registry.lean`. Heavy entries get every check that needs no heavy module: id, rows, `prop` (exists, `def`, `Prop`, module, axioms), status/theorem/bug consistency, bug file. Ids are unique across both registries. The inventory cross-check uses both registries; a `modelled` row that only a heavy entry settles is **deferred** (counted in the output, not accepted).
-- Heavy CI job `heavy-proofs` (`scripts/check_heavy_proofs.sh`, 150 min, every push): builds the heavy modules one `lake build` per module, `lake exe audit_heavy` (both registries in full, full inventory cross-check, deferred rows included), explicit `#print axioms`, and `leanchecker` per heavy module. Local run: 61 min, peak RSS 8.5 GB.
+- Heavy CI job `heavy-proofs` (`scripts/check_heavy_proofs.sh`, 150 min, every push), after review batch 7:
+  - builds the default target and `audit_heavy` first (as the main job), copies the `audit_heavy` binary out of `.lake`, and hashes every file under `.lake/build`;
+  - derives the heavy module list (import closure of `heavyModules` minus the default target, `scripts/heavy_closure.py`, fails if the `lakefile` roots differ) and the theorem list (`tools/HeavyList.lean` prints `heavyModules` and the `registryHeavy` theorems); no hand-written list;
+  - builds each heavy module in the bwrap sandbox (`scripts/sandbox.sh`: read-only file system except `.lake`, private `/tmp`, no network), like `lake check`;
+  - fails if any hashed build file outside the heavy module artifacts or the git work tree changed;
+  - runs the copied `audit_heavy` (both registries in full, full inventory cross-check, deferred rows included), `#print axioms` of every heavy theorem (output joined before parsing), and `leanchecker` per heavy module, the last two in the sandbox.
+  - Local run: 61 min with a full rebuild, peak RSS 8.5 GB (2026-11-10).
 - So every check of the single registry still runs on every push, in one of the two jobs. The design needs `heavy-proofs` to block merges like `lean` (QUESTIONS.md Q4).
-- Paranoid: the weekly `paranoid.yml` covers only the default target. `paranoid-heavy.yml` (weekly, 350 min) exports the heavy root with `leanexport` and runs `lake check --from-export --paranoid`. Estimated about 4 h; not measured.
-- Gotcha: `leanchecker M` replays only the declarations of module `M`, not its imports (root of the law: 23 s; one chunk module: about 3 min). Replay each heavy module.
+- Paranoid: the weekly `paranoid.yml` covers only the default target. `paranoid-heavy.yml` (weekly, 350 min) builds in the sandbox, exports every derived heavy module with one sandboxed `leanexport` call and runs `lake check --from-export --paranoid`. Export scope (measured 2026-11-14): `leanexport M` writes `M` and all its imports, `leanexport A B` the union; the law root alone holds all 49 chunk theorems (362 MB; 43,690 theorems, 17,122 definitions with Init and Lean; 17 s, 1.0 GB). Run time not measured; estimate 3-4 h.
+- Gotcha: `leanchecker M` replays only the declarations of module `M`, not its imports (root of the law: 23 s; one chunk module: about 3 min). Replay each heavy module. `leanexport M`, in contrast, includes the imports.
 - Today: one heavy entry, `laws.GenSpawnLaws.uncancelableRaceNotInherited.IO` (49-chunk certificate check, [Certificate checks](../lean/certificate-checker.md)).
 
 ## Self-test
