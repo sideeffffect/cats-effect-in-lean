@@ -31,6 +31,9 @@ test marker (decision 56). Hypotheses:
 1. `parTraverseNOrder`: if the traversal succeeds, its result holds one entry per input, in input
    order: `f` is wrapped by the harness as `a => f(a).map(b => (a, b))`, and the first
    components of the result are exactly the inputs (no lost, no duplicated, no reordered entry).
+   Review 7: believed false as stated, because `WellFormed` lets `f` reach the per-input result
+   `Deferred` through a number field of its closure id. It waits for track Res's `WellFormed`
+   fix (decision 56); the statement is not changed here.
 2. `parTraverseNPureSucceeds`: if `f(a) = IO.pure(g(a))`, every run that stops ends `Succeeded`
    with `as.map(g)`: no deadlock, no error, the right order.
 3. `parTraverseNErrorAborts`: if `f(a0)` raises `e` and every other `f(a)` never completes, and

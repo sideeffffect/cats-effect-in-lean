@@ -5,14 +5,14 @@
 
 ## Overview
 
-Phase 6, batch 6.3. `IO.parTraverseN(n)(ta)(f)` calls the kernel default `GenConcurrent#parTraverseN` with the `IO` operations; there is no `IO` override, so no twin. The mirror covers `List` inputs of at most 4 elements (model limit: Scala's `Set1`..`Set4`). The difftest agrees on all checked cases. Four properties are registered `open`, each with a satisfiability witness and a random-schedule smoke test.
+Phase 6, batch 6.3. `IO.parTraverseN(n)(ta)(f)` calls the kernel default `GenConcurrent#parTraverseN` with the `IO` operations; there is no `IO` override, so no twin. The mirror covers `List` inputs of any length. The supervision `Set` is `Set1`..`Set4` (insertion order) up to 4 elements and a `HashSet` from 5; the `HashSet` order comes from identity hashes, so it is an input `ho` of the mirror and the statements quantify over every permutation (review 7). The difftest agrees on all checked cases (inputs of at most 4 elements, so the `HashSet` branch is not differentially tested). Seven properties are registered `open`, each with a satisfiability witness and a random-schedule smoke test.
 
 ## Files
 
 | File | Content |
 |---|---|
 | `Model/ParTraverse.lean` | Mirror: closures `PT` (namespace 41), descriptors of `IO` values, `MiniSemaphore`, `SyncRef`, `IODeferred.tryGet`, cats `traverse`/`sequence`/`parTraverse_` |
-| `Props/Phase6/ParTraverse.lean` | 4 statements; `ptIsLib`; the tagging harness `TL` (namespace 42) |
+| `Props/Phase6/ParTraverse.lean` | 7 statements; `ptIsLib`; the tagging harness `TL` (namespace 42); the behaviour harness `BL` (namespace 43) |
 | `Proofs/Phase6/ParTraverseWitness.lean` | Satisfiability witnesses (decision 53), kernel-checked runs |
 | `tools/PtSmoke/Main.lean` | `lake exe ptsmoke`: random schedules, hypotheses checked, wrong-function tests |
 
@@ -22,6 +22,8 @@ Phase 6, batch 6.3. `IO.parTraverseN(n)(ta)(f)` calls the kernel default `GenCon
 - `f(a)` runs inside the child fiber (`F.unit >> f(a)`), via the user function call.
 - Scala precedence: `update *> tryGet flatMap {...}` is `(update *> tryGet) flatMap {...}`. The first mirror got this wrong; the difftest with small runtime thresholds found it.
 - Check of term shapes: printing the real `IO` tree by reflection (raw note).
+- Scala `Set`: `Set4 + new` gives a `HashSet`; `HashSet - x` stays a `HashSet`. Only `cancelAll` and the final `joinAll` read the order (`toList`). The model encodes a `HashSet` as `.right (listV xs)` and reads it as `ho xs`. Any `ho` over-approximates: a real `HashSet` order is also consistent between a set and its subsets.
+- A model limit must not be a hypothesis of a statement (review 7). The first version had `as.length ≤ 4`; it is gone.
 
 ## Properties
 
@@ -31,8 +33,13 @@ Phase 6, batch 6.3. `IO.parTraverseN(n)(ta)(f)` calls the kernel default `GenCon
 | `core.IO.parTraverseN.pureSucceeds` | open | pure `f`: every stopped run is `Succeeded(as.map(g))` |
 | `core.IO.parTraverseN.errorAborts` | open | one started action raises, the rest never end: `Errored(e)` |
 | `core.IO.parTraverseN.cancelAborts` | open | the same with a self-cancel: `Canceled` |
+| `core.IO.parTraverseN.succeedsGen` | open | behaviour table (cedes, then `pure`): `Succeeded`, input order |
+| `core.IO.parTraverseN.errorAbortsGen` | open | cedes, then `pure`/`raiseError`/`never`; a raising input that gets a permit: `Errored(e)`, `e` raised by an input |
+| `core.IO.parTraverseN.cancelAbortsGen` | open | the same with `canceled`: `Canceled` |
 
-Smoke: 11,200 stopped runs, 0 violations; reversed result, dropped result and "no `cancelAll`" break the claims. Not stated yet: "at most N concurrent" (needs a test marker and the shared privacy module of decision 56) and "no leaked fiber".
+`resultOrder` is believed false as stated (review 7): `WellFormed` lets `f` reach the per-input result `Deferred` through a number field of its closure id. It waits for track Res's `WellFormed` fix (decision 56). Statements 5-7 use a harness `f` with no user code, so they need no `WellFormed` hypothesis. The behaviour table covers siblings that complete, an action that suspends first, an error in an action that starts after the first `n`, and two errors at once.
+
+Smoke (`lake exe ptsmoke 100`, three `HashSet` orders, inputs up to 6): see the log entry of review 7 for the counts; reversed result, dropped result and "no `cancelAll`" break the claims. Not stated yet: "at most N concurrent" (needs a test marker and the shared privacy module of decision 56) and "no leaked fiber". The smoke test checks the limit: `f` counts the running actions in a `Ref`; the maximum stays `≤ n`, and a semaphore with 1000 permits breaks it.
 
 ## Difftest
 
