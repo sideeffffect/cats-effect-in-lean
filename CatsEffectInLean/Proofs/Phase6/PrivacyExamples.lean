@@ -113,4 +113,49 @@ example : WF.progOK Bracket.lib (fun _ => false) (.flatMap (.pure .unit) (BLam.t
 
 end TrackG
 
+/-! ## Review batch 7 (track G, `parTraverseN`, defect D): a user function stored as a number
+
+`parTraverseNIO n as f` names the library closure `k1 n as f` = `cloVal 41 2 [.nat n, as, .nat f]`
+(`Model/ParTraverse.lean:196`, `:311`, branch `review7`). The user function `f` is only a number
+field, so a shallow `captured` never checks the handles that `f` captured: a well-formed `f` that
+captured the element's internal result `Deferred` could complete it with a forged value. The fix is
+in `WellFormed` (decision 56): a `Lib` declares its function fields and `WF.captured` follows them.
+The model file is track G's and not on this branch, so the example uses the same closure shape with
+a `Lib` that declares `k1`'s field `f` as a function field (what `ParTraverse.lean` must declare). -/
+
+section ParTraverseShape
+open CatsEffectInLean.Model.Codec
+
+/-- The `k1` closure shape of `parTraverseNIO` (namespace 41, tag 2). -/
+def isK1 (c : Val) : Bool :=
+  match ofCloVal c with
+  | some (41, 2, [.nat _, _, .nat _]) => true
+  | _ => false
+
+/-- A `Lib` with `k1` as library closure, and its field `f` as a function field. -/
+def k1Lib : Lib :=
+  { ok := fun id => isLibId id && ((cloOfId id).map isK1).getD false,
+    fields := fun c => match ofCloVal c with
+      | some (41, 2, [.nat _, _, .nat f]) => [f]
+      | _ => [] }
+
+/-- The forging `f` of the review: a user closure that captured `Deferred` 5 (the element's result). -/
+def forgingF : Nat := 2 * valToNat (.deferred 5)
+
+/-- `parTraverseNIO 1 [0] forgingF` (root shape: a new `Deferred`, then `k1`). -/
+def ptRoot : IO :=
+  .flatMap (.pure .unit) (libFn (cloVal 41 2 [.nat 1, listV [.nat 0], .nat forgingF]))
+
+/-- The shallow capture (no function fields) accepts it: the gap of review batch 7. -/
+example : WF.progOK ({ ok := k1Lib.ok } : Lib) (fun _ => false) ptRoot = true := by decide +kernel
+
+/-- The deep capture rejects it: `f`'s captured `Deferred` 5 is not held by the root. -/
+example : WF.progOK k1Lib (fun _ => false) ptRoot = false := by decide +kernel
+
+/-- An honest `f` (captures nothing) is still accepted. -/
+example : WF.progOK k1Lib (fun _ => false)
+    (.flatMap (.pure .unit) (libFn (cloVal 41 2 [.nat 1, listV [.nat 0], .nat 14]))) = true := by decide +kernel
+
+end ParTraverseShape
+
 end CatsEffectInLean.Proofs.Phase6.PrivacyExamples
