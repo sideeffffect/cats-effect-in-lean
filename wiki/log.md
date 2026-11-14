@@ -257,3 +257,8 @@
 ## [2026-11-14] update | parTraverseN: deep Lib and statement 8
 - Updated: parTraverseN model (ptLibDeep with ParTraverse.fnFields incl. srcAction codes; defect D closed; statement 8 atMostN with HarnessPrivacy; witness and kernel-checked wrong function), index
 - Raw: raw/cats-effect/2026-11-14-partraverse-deep-lib.md
+
+## [2026-11-14] ingest | Track Res: Lib.fields probe check
+- Updated: Resource use/both (probe check, 2 defects fixed), Outcome sets (Lib fields check), index
+- Raw: raw/cats-effect/2026-11-14-lib-fields-probe-notes.md
+
