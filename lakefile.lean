@@ -74,3 +74,9 @@ lean_lib HeavyProofs where
 lean_exe audit_heavy where
   srcDir := "tools"
   root := `Audit.MainHeavy
+
+-- Random-schedule smoke test of the `parTraverseN` statements (Phase 6, batch 6.3).
+-- `lake exe ptsmoke [runs]`. Test code, not part of the library.
+lean_exe ptsmoke where
+  srcDir := "tools"
+  root := `PtSmoke.Main

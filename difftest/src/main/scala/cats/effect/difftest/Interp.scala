@@ -293,6 +293,10 @@ final class Interp(h: Harness):
     case Prog.RUse(r, x, k) => res(r, env).use(v => run(k, env + (x -> Bound.V(v))))
     case Prog.RAllocated(r, x, k) =>
       res(r, env).allocated.flatMap { case (a, rel) => run(k, env + (x -> Bound.V(a))).flatMap(b => rel.as(b)) }
+    // ---- format v2 (batch 6.3): `IO.parTraverseN` (IO.scala:1593-1594)
+    case Prog.ParTraverseN(n, xs, x, f) =>
+      IO.parTraverseN(n)(xs.map(atom(_, env)))(a => run(f, env + (x -> Bound.V(a))))
+        .map(bs => bs.foldRight(VUnit: Val)((b, acc) => VPair(b, acc)))
 
   /** `(a, oc) => ocVal(oc).flatMap(o => IO.delay(emit fin) *> run(rel, env + x + y).void)` (format v2). */
   private def caseRelease(op: String, x: String, y: String, rel: Prog, tag: Long, env: Env)

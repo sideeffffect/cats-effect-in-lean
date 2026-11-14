@@ -223,3 +223,8 @@
 ## [2026-11-14] ingest | Decision 56: harness privacy by construction or proof
 - Updated: Agent workflow (harness privacy section)
 - Raw: raw/project-decisions/2026-11-14-decision-56-harness-privacy.md
+
+## [2026-11-14] ingest | Batch 6.3: parTraverseN
+- Created: parTraverseN model
+- Updated: Difftest program format (op `parTraverseN`), index
+- Raw: raw/cats-effect/2026-11-14-partraverse-notes.md

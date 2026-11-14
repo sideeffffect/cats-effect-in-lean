@@ -1134,7 +1134,7 @@ core.IO.none,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1568,to
 core.IO.some,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1576,todo,,
 core.IO.parTraverse,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1581,todo,,
 core.IO.parTraverse_,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1587,todo,,
-core.IO.parTraverseN,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1593,todo,,
+core.IO.parTraverseN,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1593,todo,,core.IO.parTraverseN.resultOrder;core.IO.parTraverseN.pureSucceeds;core.IO.parTraverseN.errorAborts;core.IO.parTraverseN.cancelAborts
 core.IO.parTraverseN_,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1599,todo,,
 core.IO.parSequence,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1605,todo,,
 core.IO.parSequence_,core,method,core/shared/src/main/scala/cats/effect/IO.scala,1611,todo,,
@@ -1868,7 +1868,7 @@ kernel.GenConcurrent.memoize,kernel,method,kernel/shared/src/main/scala/cats/eff
 kernel.GenConcurrent.parReplicateAN,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,117,todo,,
 kernel.GenConcurrent.parSequenceN,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,123,todo,,
 kernel.GenConcurrent.parSequenceN_,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,129,todo,,
-kernel.GenConcurrent.parTraverseN,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,145,todo,,
+kernel.GenConcurrent.parTraverseN,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,145,todo,,core.IO.parTraverseN.resultOrder;core.IO.parTraverseN.pureSucceeds;core.IO.parTraverseN.errorAborts;core.IO.parTraverseN.cancelAborts
 kernel.GenConcurrent.parTraverseN_,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,263,todo,,
 kernel.GenConcurrent.racePair,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,339,todo,,
 kernel.GenConcurrent.apply,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,370,todo,,
@@ -2040,10 +2040,10 @@ kernel.GenTemporal.KleisliTemporal.F,kernel,method,kernel/shared/src/main/scala/
 kernel.GenTemporal.KleisliTemporal.C,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenTemporal.scala,398,excluded,internal: private helper; modelled as part of its public caller,
 kernel.GenTemporal.KleisliTemporal.delegate,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenTemporal.scala,400,excluded,internal: private helper; modelled as part of its public caller,
 kernel.GenTemporal.KleisliTemporal.sleep,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenTemporal.scala,403,excluded,"out-of-scope: monad-transformer instance (OptionT, EitherT, Kleisli, ...); user decision Q1 (2026-11-10): ignore monad transformers",
-kernel.MiniSemaphore.acquire,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MiniSemaphore.scala,30,todo,,
-kernel.MiniSemaphore.release,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MiniSemaphore.scala,31,todo,,
+kernel.MiniSemaphore.acquire,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MiniSemaphore.scala,30,todo,,core.IO.parTraverseN.resultOrder;core.IO.parTraverseN.pureSucceeds;core.IO.parTraverseN.errorAborts;core.IO.parTraverseN.cancelAborts
+kernel.MiniSemaphore.release,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MiniSemaphore.scala,31,todo,,core.IO.parTraverseN.resultOrder;core.IO.parTraverseN.pureSucceeds;core.IO.parTraverseN.errorAborts;core.IO.parTraverseN.cancelAborts
 kernel.MiniSemaphore.withPermit,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MiniSemaphore.scala,33,todo,,
-kernel.MiniSemaphore.apply,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MiniSemaphore.scala,41,todo,,
+kernel.MiniSemaphore.apply,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MiniSemaphore.scala,41,todo,,core.IO.parTraverseN.resultOrder;core.IO.parTraverseN.pureSucceeds;core.IO.parTraverseN.errorAborts;core.IO.parTraverseN.cancelAborts
 kernel.MonadCancel.F,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,211,excluded,internal: private helper; modelled as part of its public caller,
 kernel.MonadCancel.rootCancelScope,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,219,todo,,
 kernel.MonadCancel.forceR,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/MonadCancel.scala,224,todo,,

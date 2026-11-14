@@ -104,6 +104,11 @@ WEIGHTS = {
     'tpl_memo': 0.4, 'memoGet': 4,
     # format v2 (track Res)
     'rUse': 0.5, 'rAllocated': 0.4, 'res_both': 2.0, 'tpl_resBoth': 0.5,
+    # format v2 (batch 6.3): `parTraverseN` (lists of at most 4 elements). Not a production of
+    # `composite_opts` (a new option shifts the shared RNG and pushed `race` below its selftest
+    # minimum); `gen_case` appends it with its own RNG (`p_par_traverse`). Weights here only
+    # scale how often the two shapes are chosen there (`--boost` in opcount.py).
+    'tpl_parTraverse': 1.2, 'tpl_parTraverseCancel': 0.6,
 }
 
 # Other knobs (probabilities and ranges).
@@ -126,7 +131,8 @@ CONFIG = {
     'p_syncstep': 0.09,        # the root is `syncStep(prog, limit)`
     'p_queue_type': 0.1,       # bind_type gives a queue type
     # preempt coverage (Phase 5 gate caveat 3): small IORuntimeConfig thresholds
-    'p_runtime': 0.25,         # replay case gets a `runtime` field (auto-yield every few iterations)
+    'p_runtime': 0.25,
+    'p_par_traverse': 0.08,    # batch 6.3: append a `parTraverseN` part (own RNG, see gen_case)         # replay case gets a `runtime` field (auto-yield every few iterations)
 }
 
 
@@ -779,6 +785,30 @@ class Gen:
             rel = {'op': 'seq', 'ps': [self.mark(MARK_REL, self.rids), rel]}
         return {'op': 'rMake', 'acq': self.prog(t, self.res_env(env), sa, ctx), 'x': x, 'rel': rel}
 
+    def g_par_traverse(self, env, size, ctx):
+        """`parTraverseN(n)(xs)(x => f)`: 0..4 elements of a literal type (or variables of it),
+        limit 1..5, `f` an arbitrary program of a small type (it can suspend, raise or cancel)."""
+        a = self.pick([(3, NAT), (1, UNIT), (1, BOOL)])
+        k = self.pick([(1, 0), (2, 1), (3, 2), (3, 3), (3, 4)])
+        xs = [self.atom(a, env) for _ in range(k)]
+        x = self.fresh('x', env)
+        n = self.pick([(4, 1), (4, 2), (2, 3), (1, 5)])
+        f = self.prog(self.small_type(), {**env, x: ('val', a)}, max(1, size), self.child_ctx(ctx))
+        return {'op': 'parTraverseN', 'n': n, 'xs': xs, 'x': x, 'f': f}
+
+    def tpl_par_traverse(self, t, env, size, ctx, cancel):
+        sp, sk = self.split_size(size, 2)
+        p = self.g_par_traverse(env, sp, ctx)
+        if not cancel:
+            return {'op': 'seq', 'ps': [p, self.prog(t, env, sk, ctx)]}
+        fv = self.fresh('x')
+        env2 = {**env, fv: ('val', fiber(UNIT))}
+        ps = [{'op': 'cede'} for _ in range(self.pick([(2, 0), (2, 1), (2, 2), (1, 4)]))]
+        ps.append({'op': 'cancel', 'f': {'t': 'var', 'x': fv}})
+        ps.append(self.prog(t, env2, sk, ctx))
+        return {'op': 'bind', 'x': fv, 'e': {'op': 'start', 'e': {'op': 'map', 'e': p, 'fn': 1}},
+                'k': {'op': 'seq', 'ps': ps}}
+
     def tpl_resource(self, t, env, size, ctx):
         """allocatedCase(rFlatMap(rMake(acq, x, rel), y, rest)): the rest often waits, fails or is
         canceled, so the release `rel(ExitCase)` runs (`Resource.scala:507-510`)."""
@@ -1368,6 +1398,18 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
         cct = rr.choice([1, 1, 2, 4])
         case['runtime'] = {'cancelationCheckThreshold': cct,
                            'autoYieldThreshold': cct * rr.randint(2 if cct == 1 else 1, 8)}
+    # Batch 6.3: append `parTraverseN` (plain, or in a child that the parent cancels). Own RNG,
+    # so the rest of the case does not change; the probability scales with the template weights.
+    pr = random.Random(f"difftest-partraverse:{seed}:{i}")
+    w = g.w
+    pp = g.c['p_par_traverse'] * (w['tpl_parTraverse'] + w['tpl_parTraverseCancel']) / 1.8
+    if prog.get('op') != 'syncStep' and pr.random() < pp:
+        g2 = Gen(pr, weights, config)
+        g2.names = 10000
+        cancel = pr.random() * (w['tpl_parTraverse'] + w['tpl_parTraverseCancel']) < w['tpl_parTraverseCancel']
+        extra = g2.tpl_par_traverse(UNIT, {}, pr.randint(3, 12), {}, cancel)
+        prog = {'op': 'seq', 'ps': [prog, extra]}
+        check_prog(prog)
     case['prog'] = prog
     return case
 

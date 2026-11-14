@@ -73,3 +73,6 @@ import CatsEffectInLean.Proofs.Phase6.RaceWitness
 import CatsEffectInLean.Proofs.Phase6.MemoizeSat
 import CatsEffectInLean.Proofs.Lemmas.CertP
 import CatsEffectInLean.RegistryHeavy
+import CatsEffectInLean.Model.ParTraverse
+import CatsEffectInLean.Props.Phase6.ParTraverse
+import CatsEffectInLean.Proofs.Phase6.ParTraverseWitness

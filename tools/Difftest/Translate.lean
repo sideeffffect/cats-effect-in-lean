@@ -4,6 +4,7 @@ import CatsEffectInLean.Model.Resource
 import CatsEffectInLean.Model.Timeout
 import CatsEffectInLean.Model.Race
 import CatsEffectInLean.Model.Bracket
+import CatsEffectInLean.Model.ParTraverse
 import CatsEffectInLean.Model.Memoize
 import CatsEffectInLean.Model.ResourceUse
 import CatsEffectInLean.Std.Queue
@@ -431,6 +432,11 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
         ResourceUse.OnRel.apply.toVal Resource.loopFuel res []).2 with
     | .ok io => pure io
     | .error _ => throw .typeError
+  -- format v2 (batch 6.3): `IO.parTraverseN(n)(xs)(x => I(f)).map(list)` (`IO.scala:1593-1594`,
+  -- mirror `Model/ParTraverse.lean`); the atoms are read now
+  | .parTraverseN k xs _, node, env, _ => do
+    let vs ← xs.mapM (atomVal env)
+    pure (.map (ParTraverse.parTraverseNIO k vs (cloId node .ptF env)) (clo node .ptList []))
   -- `I_R(r).allocated.flatMap { case (x, rel) => I(k).flatMap(b => rel.as(b)) }`
   -- (`Resource.scala:550-552`); `I_R(r)` is the code `ruRes` (`UEnv.resOf`)
   | .rAllocated r _, node, env, _ => do
