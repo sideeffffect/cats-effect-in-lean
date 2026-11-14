@@ -24,11 +24,11 @@
 
 - The kernel caches every term it evaluates, per declaration. Replaying 4,441 states costs 21 s / 3.7 GB; the edges of 100 states add 0.5–6 GB (more for later, larger states). The state comparison is cheap; computing the successors is the cost.
 - So split the edge check: `certChunk io is succ a n` (states `a .. a+n-1`), composed by `edgesUpTo_zero`, `edgesUpTo_chunk`, `certExact_of_edgesUpTo`. Chunks may have any size.
-- Memory is per declaration. Put several chunks in one module, and chain the modules by imports so that `lake` does not run them in parallel.
+- Memory is per declaration. Put several chunks in one module. Since decision 57 the chunk modules import only the definitions module, so CI builds them in parallel jobs (one per runner); on one machine build them one Lean process at a time (`scripts/check_heavy_proofs.sh`), not with a plain parallel `lake build HeavyProofs` (each needs up to about 8 GB).
 - Size chunks from a profile (100 states at a few offsets). The law `uncancelableRaceNotInherited` uses 49 chunks (up to 250 states early, about 50 late; each declaration at most about 7.5 GB).
 - `decide_cbv` on a chunk fails at once with a recursion-depth error; use `decide +kernel`.
 - The tree shape (DFS tree vs BFS tree) does not change the cost much.
-- CI cost of the law (measured 2026-11-10): `lake build` of the 10 chained chunk modules about 30 min (about 3 min each, peak RSS 8.3 GB per process); `lake check` (leanchecker replay) about 38 min, peak about 7.4 GB. So the law is in lean_lib `HeavyProofs` with its own registry and CI job (decision 55, [Registry and audit](../methodology/registry-and-audit.md)).
+- CI cost of the law (measured 2026-11-10): `lake build` of the 10 chunk modules (then chained) about 30 min (about 3 min each, peak RSS 8.3 GB per process); `lake check` (leanchecker replay) about 38 min, peak about 7.4 GB. So the law is in lean_lib `HeavyProofs` with its own registry and CI job (decision 55, [Registry and audit](../methodology/registry-and-audit.md)).
 
 ## Results
 
