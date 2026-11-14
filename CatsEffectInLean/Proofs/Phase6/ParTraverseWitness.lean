@@ -146,7 +146,7 @@ theorem neverLib : ptIsLib neverId = true := by decide +kernel
 theorem neverOK (mem : Handle → Bool) : WF.progOK ptIsLib mem Timeout.neverIO = true := by
   have h : Timeout.neverIO = .ioCont (.user neverId) := rfl
   rw [h]
-  simp [WF.progOK, WF.fnOK, neverCaptured, neverLib, WF.sub]
+  simp [WF.progOK, WF.fnOK, neverCaptured, neverLib]
 
 theorem aOpaque (x : IO) (hx : ∀ σ : WF.PollRen, WF.rnIO σ x = x) : WF.PollOpaque (env (au x)) := by
   intro σ hσ id hid arg v
