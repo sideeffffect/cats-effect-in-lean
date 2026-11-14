@@ -23,7 +23,7 @@
 // 3. The default runtime (multi-threaded), 20,000 runs: count of runs where markB did not run.
 // 4. `fixedBoth` (a possible fix, not Cats Effect code): run both chains with `attempt`, then
 //    raise the first error. Same TestControl seeds; expected 0.
-// The last line is REPRODUCED CE-0020 if (1) finds at least one seed.
+// The last line is REPRODUCED CE-0020 if (1) finds at least one seed and (4) finds none.
 
 package cats.effect.repro0020 {
 
@@ -115,6 +115,7 @@ object Repro {
     println(s"3. Resource#both, default runtime, 20000 runs: release of B skipped in $m3 runs")
     val (m4, f4) = missedSeeds(fixed, n)
     println(s"4. fixed twin (attempt both chains), same seeds: release of B skipped in $m4 seeds (first: $f4)")
-    println(if (m1 > 0) "REPRODUCED CE-0020" else "NOT REPRODUCED CE-0020")
+    // REPRODUCED only if v3.7.1 skips a release and the fixed copy never does (decision 39)
+    println(if (m1 > 0 && m4 == 0) "REPRODUCED CE-0020" else "NOT REPRODUCED CE-0020")
   }
 }

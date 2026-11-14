@@ -1,6 +1,6 @@
 id: CE-0020
 title: "Resource#both: an error in the finalizers of one side can cancel the finalizers of the other side; that resource is never released"
-status: draft  # found in Phase 6 track Res (2026-11-10); Lean refutation done, waits for review
+status: draft  # found in Phase 6 track Res (2026-11-10); review batch 5: bug real, statement fixed (harness names, NoForge); re-review
 priority: medium
 kind: invariant-violation
 area: kernel
@@ -26,7 +26,7 @@ likelihood: >
   Medium. It needs (1) a release that raises an error on one side of `both` / `parMapN` /
   `parTupled` on Resource, and (2) a schedule where the parent fiber runs the cancel before the
   other finalizer fiber starts. On the default runtime this happens in about 1.5-1.8 % of runs
-  of the minimal program (306 to 360 of 20,000 runs); under TestControl in 332 of 1,000 seeds.
+  of the minimal program (306 to 382 of 20,000 runs); under TestControl in 332 of 1,000 seeds.
   Releases that raise are common (close() of a socket or a file). The visible effect is a
   resource that is never released, with no error for it.
 maybe_intended: >
@@ -41,24 +41,26 @@ output:
   v3.7.1: |
     1. Resource#both, TestControl seeds 0..999: release of B skipped in 332 seeds (first: Some(0))
     2. parTupled (Parallel[Resource]), same seeds: release of B skipped in 332 seeds (first: Some(0))
-    3. Resource#both, default runtime, 20000 runs: release of B skipped in 360 runs
+    3. Resource#both, default runtime, 20000 runs: release of B skipped in 319 runs
     4. fixed twin (attempt both chains), same seeds: release of B skipped in 0 seeds (first: None)
     REPRODUCED CE-0020
   # series/3.x = 3.7.1-89-de84c01 (publishLocal; origin/series/3.x head de84c01f76 on 2026-11-10)
   series/3.x: |
     1. Resource#both, TestControl seeds 0..999: release of B skipped in 332 seeds (first: Some(0))
     2. parTupled (Parallel[Resource]), same seeds: release of B skipped in 332 seeds (first: Some(0))
-    3. Resource#both, default runtime, 20000 runs: release of B skipped in 306 runs
+    3. Resource#both, default runtime, 20000 runs: release of B skipped in 345 runs
     4. fixed twin (attempt both chains), same seeds: release of B skipped in 0 seeds (first: None)
     REPRODUCED CE-0020
   # series/3.7.x = 3.7.1-15-2f94201 (publishLocal; origin/series/3.7.x head 2f9420145f, includes fix PR #4630)
   series/3.7.x: |
     1. Resource#both, TestControl seeds 0..999: release of B skipped in 332 seeds (first: Some(0))
     2. parTupled (Parallel[Resource]), same seeds: release of B skipped in 332 seeds (first: Some(0))
-    3. Resource#both, default runtime, 20000 runs: release of B skipped in 360 runs
+    3. Resource#both, default runtime, 20000 runs: release of B skipped in 382 runs
     4. fixed twin (attempt both chains), same seeds: release of B skipped in 0 seeds (first: None)
     REPRODUCED CE-0020
-  # The default-runtime count (line 3) depends on thread timing; it is not deterministic.
+  # The default-runtime count (line 3) depends on thread timing; it is not deterministic (runs of
+  # 2026-11-10: 306-382 of 20,000). The last line is REPRODUCED only if line 1 > 0 and line 4 = 0
+  # (the fixed copy misses no release; review batch 5).
 expected: |
   The release of B runs in every run (lines 1-3 report 0), as in the fixed twin (line 4). The
   outer `use` still ends with the error of A's release. The last line is NOT REPRODUCED CE-0020.
@@ -98,5 +100,6 @@ duplicates:
 lean:
   property: CatsEffectInLean.Props.Phase6.Resource.bothReleasesBoth
   theorem: CatsEffectInLean.Proofs.Phase6.bothReleasesBoth_refuted
-  fixed_twin: "test/Phase6/ResourceSmoke.lean (#guard, schedule family + random schedules; the fixed twin is ResourceUse.fixedBothRes)"
+  fixed_twin: "CatsEffectInLean/Proofs/Phase6/ResourceBothFixed.lean (TwinChecks, kernel: ResourceUse.fixedBothRes satisfies the conclusion on the hypothesis-satisfying witness input for 120 schedules around the release phase; v3.7.1 violates it there); test/Phase6/ResourceSmoke.lean (#guard: 600 single-deviation + 1,500 random schedules)"
+  hypotheses: "Harness names are not forgeable (NoForge, Props/Phase6/HarnessNames.lean deep check of closure fields; review batch 5). All hypotheses are proven for the witness (Proofs/Phase6/ResourceBoth.lean), which is also the satisfiability witness (decision 53)."
   ordinary_inputs: "The witness is ordinary: two Resource.make, a release that raises, use_ (no exotic input)."

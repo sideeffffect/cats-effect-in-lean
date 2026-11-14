@@ -190,4 +190,6 @@
 - Updated: Agent workflow (review log: CE-0020 HOLLOW as registered, bug real; use.releaseOnce and flatMap.releaseOrder HOLLOW; eval.preservesCancelable FAITHFUL; UserMarkersOnly forgeable through library closures)
 - Raw: raw/project-decisions/2026-11-10-review-batch-5-notes.md
 
-
+## [2026-11-10] ingest | Track Res: review batch 5 fixes (harness names, witnesses)
+- Updated: Resource use, allocated, both (harness, files, properties, inventory), guarantee and bracket model (caveat points to HarnessNames), index
+- Raw: raw/cats-effect/2026-11-10-track-res-review5-fix-notes.md

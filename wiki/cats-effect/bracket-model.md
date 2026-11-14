@@ -52,7 +52,7 @@ Phase 6, track G. The model mirrors `IO#guarantee`, `IO#guaranteeCase`, `IO#brac
 
 Why open: a proof for all programs needs a simulation or a state invariant over `Sched.tickP` and all of `Step.lean`. Not done.
 
-Caveat (found by track Res, 2026-11-10): `MarkersOnly` also restricts odd (library) ids. A library closure that calls a marker function (for example `bfBody` with a marker field) emits the marker, so the hypothesis can be false for every `LibEnv`. The two invariants may be vacuous; to check in review batch 4. Track Res uses `UserMarkersOnly` (even ids only).
+Caveat (found by track Res, 2026-11-10): `MarkersOnly` also restricts odd (library) ids. A library closure that calls a marker function (for example `bfBody` with a marker field) emits the marker, so the hypothesis can be false for every `LibEnv`. The two invariants may be vacuous; to check in review batch 4. Track Res now uses the deep name check `Props/Phase6/HarnessNames.lean` (`NoForge`), which also stops forwarding through library closure fields; it can be reused here.
 
 ## Difftest (format v2)
 

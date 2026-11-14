@@ -52,7 +52,9 @@ lean_lib TwinChecks where
     `CatsEffectInLean.Proofs.Phase6.BracketFullFixed,
     `CatsEffectInLean.Proofs.Phase6.BracketSmoke,
     -- CE-0030 fixed-twin check (track M, Phase 6)
-    `CatsEffectInLean.Proofs.Phase6.MemoizeFixed]
+    `CatsEffectInLean.Proofs.Phase6.MemoizeFixed,
+    -- CE-0020 fixed-twin check (track Res, Phase 6; review batch 5)
+    `CatsEffectInLean.Proofs.Phase6.ResourceBothFixed]
 
 -- Leak smoke test of track R (Phase 6): exact bounded search (`exploreP`) of `race`, `both`,
 -- `raceOutcome`, `bothOutcome` and `timeout` over a small family of sides, with the leak

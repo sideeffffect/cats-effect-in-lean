@@ -309,28 +309,34 @@ def registry : List Entry := [
     thm := some ``Proofs.Phase6.bothReleasesBoth_refuted
     bug := some "bugs/CE-0020.yaml"
     note := "Invariant: Resource.both(A, B).use(f) (Resource.scala:286-314, use = fold with \
-      IO.bracketFull), sides are marked make; every run that ends: each release runs as often as \
-      its acquire completed. Counterexample: A's release raises; F.both in the makeCase release \
-      cancels the fiber of B's finalizer chain before it starts (one schedule, decide +kernel). \
-      Reproducer: 332/1000 TestControl seeds, about 1.5-1.8 % of default-runtime runs, on 3.7.1, \
-      series/3.x, series/3.7.x. Fixed twin (attempt both chains) has no violation on 2,100 \
-      schedules (test/Phase6/ResourceSmoke.lean)." },
+      IO.bracketFull), sides are marked make, harness names not forgeable (NoForge, \
+      Props/Phase6/HarnessNames.lean; review batch 5 fix); every run that ends: each release runs \
+      as often as its acquire completed. Counterexample: A's release raises; F.both in the makeCase \
+      release cancels the fiber of B's finalizer chain before it starts (one schedule, decide \
+      +kernel); all hypotheses proven (also the satisfiability witness, decision 53). Fixed twin \
+      (attempt both chains) satisfies the conclusion on the same input for 120 schedules \
+      (Proofs/Phase6/ResourceBothFixed.lean, TwinChecks, kernel) and 600 + 1,500 schedules \
+      (smoke); v3.7.1 violates it there. Reproducer: REPRODUCED on 3.7.1, series/3.x, series/3.7.x \
+      (fixed copy misses no release)." },
   { id := "kernel.Resource.use.releaseOnce"
     rows := ["kernel.Resource.use", "kernel.Resource.fold", "kernel.Resource.make"]
     prop := ``Props.Phase6.Resource.useReleaseOnce
     status := .«open»
-    note := "Invariant (decision 50): make(acq)(rel).use(f), directly or in a child that the \
-      parent cancels and joins; release runs exactly once iff acquire completed. Smoke-tested by \
-      #guard (test/Phase6/ResourceSmoke.lean, part 2: 3 releases x 4 bodies x parent/no parent x \
-      900 schedules). Open: needs the bracket state invariant of core.IO.bracket.releaseOnce \
-      (fold puts make under IO.bracketFull)." },
+    note := "Invariant (decision 50): make(acq)(rel).use(f), directly or under the harness \
+      parent (HLam) that cancels and joins; release runs exactly once iff acquire completed; \
+      harness names not forgeable (NoForge). Satisfiability witnesses with and without the parent \
+      (Proofs/Phase6/ResourceWitness.lean, use_sat). Smoke: hypotheses evaluated, 3 releases x 4 \
+      bodies x parent/no parent x 900 schedules (test/Phase6/ResourceSmoke.lean). Open: needs the \
+      bracket state invariant of core.IO.bracket.releaseOnce (fold puts make under \
+      IO.bracketFull)." },
   { id := "kernel.Resource.flatMap.releaseOrder"
     rows := ["kernel.Resource.flatMap", "kernel.Resource.use", "kernel.Resource.fold"]
     prop := ``Props.Phase6.Resource.flatMapReleaseOrder
     status := .«open»
     note := "Invariant: make(A).flatMap(_ => make(B)).use(f): each release iff its acquire, and B \
-      is released before A (LIFO; fold nests bracketFull). Smoke-tested by #guard \
-      (test/Phase6/ResourceSmoke.lean, part 2, 32 configurations x 900 schedules). Open: same \
+      is released before A (LIFO; fold nests bracketFull); harness names not forgeable \
+      (NoForge). Satisfiability witnesses with and without the parent (ResourceWitness.lean, \
+      flat_sat). Smoke: hypotheses evaluated, 24 configurations x 900 schedules. Open: same \
       missing state invariant, for two nested brackets." },
   { id := "kernel.Resource.eval.preservesCancelable"
     rows := ["kernel.Resource.eval", "kernel.Resource.allocatedCase"]
