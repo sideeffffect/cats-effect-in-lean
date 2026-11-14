@@ -262,3 +262,8 @@
 - Updated: Resource use/both (probe check, 2 defects fixed), Outcome sets (Lib fields check), index
 - Raw: raw/cats-effect/2026-11-14-lib-fields-probe-notes.md
 
+
+## [2026-11-15] review | Review batch 8: harness privacy, parTraverseN, heavy CI matrix
+- Updated: Agent workflow (review log, harness privacy finding), index
+- Raw: raw/project-decisions/2026-11-15-review-batch-8-notes.md
+- Review: review/2026-11-15-review-batch-8.md
