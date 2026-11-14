@@ -1,18 +1,18 @@
 # parTraverseN model
 
 > Sources: Cats Effect v3.7.1 (`kernel/.../GenConcurrent.scala:113-249`, `MiniSemaphore.scala:17-92`, `Ref.scala:123-124`, `SyncRef.scala`, `IODeferred.scala:20-80`, `IO.scala:1593-1600`); cats-core 2.13.0 (`list.scala`, `Traverse.scala`, `FlatMap.scala`, `Parallel.scala`); own Phase 6 batch 6.3 work and scala-cli runs, 2026-11-14
-> Raw: [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [parTraverseN notes](../../raw/cats-effect/2026-11-14-partraverse-notes.md); [review 7 fix notes](../../raw/cats-effect/2026-11-14-partraverse-review7.md)
+> Raw: [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [parTraverseN notes](../../raw/cats-effect/2026-11-14-partraverse-notes.md); [review 7 fix notes](../../raw/cats-effect/2026-11-14-partraverse-review7.md); [deep Lib and limit notes](../../raw/cats-effect/2026-11-14-partraverse-deep-lib.md)
 
 ## Overview
 
-Phase 6, batch 6.3. `IO.parTraverseN(n)(ta)(f)` calls the kernel default `GenConcurrent#parTraverseN` with the `IO` operations; there is no `IO` override, so no twin. The mirror covers `List` inputs of any length. The supervision `Set` is `Set1`..`Set4` (insertion order) up to 4 elements and a `HashSet` from 5; the `HashSet` order comes from identity hashes, so it is an input `ho` of the mirror and the statements quantify over every permutation (review 7). The difftest agrees on all checked cases (inputs of at most 4 elements, so the `HashSet` branch is not differentially tested). Seven properties are registered `open`, each with a satisfiability witness and a random-schedule smoke test.
+Phase 6, batch 6.3. `IO.parTraverseN(n)(ta)(f)` calls the kernel default `GenConcurrent#parTraverseN` with the `IO` operations; there is no `IO` override, so no twin. The mirror covers `List` inputs of any length. The supervision `Set` is `Set1`..`Set4` (insertion order) up to 4 elements and a `HashSet` from 5; the `HashSet` order comes from identity hashes, so it is an input `ho` of the mirror and the statements quantify over every permutation (review 7). The difftest agrees on all checked cases (inputs of at most 4 elements, so the `HashSet` branch is not differentially tested). Eight properties are registered `open`, each with a satisfiability witness and a random-schedule smoke test.
 
 ## Files
 
 | File | Content |
 |---|---|
 | `Model/ParTraverse.lean` | Mirror: closures `PT` (namespace 41), descriptors of `IO` values, `MiniSemaphore`, `SyncRef`, `IODeferred.tryGet`, cats `traverse`/`sequence`/`parTraverse_` |
-| `Props/Phase6/ParTraverse.lean` | 7 statements; `ptIsLib`; the tagging harness `TL` (namespace 42); the behaviour harness `BL` (namespace 43) |
+| `Props/Phase6/ParTraverse.lean` | 8 statements; `ptLibDeep`, `limLib`; the limit harness `CL` (namespace 44); `ptIsLib`; the tagging harness `TL` (namespace 42); the behaviour harness `BL` (namespace 43) |
 | `Proofs/Phase6/ParTraverseWitness.lean` | Satisfiability witnesses (decision 53), kernel-checked runs |
 | `tools/PtSmoke/Main.lean` | `lake exe ptsmoke`: random schedules, hypotheses checked, wrong-function tests |
 
@@ -39,9 +39,11 @@ Phase 6, batch 6.3. `IO.parTraverseN(n)(ta)(f)` calls the kernel default `GenCon
 
 Review batch 7 (2026-11-14): all four entries HOLLOW. `resultOrder`: `f` is held as a number in `k1` and `TL.tag`, so `WellFormed` never checks `WF.captured f`; an `f` that captured the internal result `Deferred` completes it with a forged pair (false for every implementation). All four: `as.length ≤ 4` is not a documented precondition (fix: make the `HashSet` order an input). `errorAborts`/`cancelAborts`: siblings fixed to `IO.never` remove completing siblings, late errors and two errors. Many `K/GC`/`K/MS` line citations drift 2-8 lines. [Review](../../review/2026-11-14-review-batch-7.md).
 
-`resultOrder` is believed false as stated (review 7): `WellFormed` lets `f` reach the per-input result `Deferred` through a number field of its closure id. It waits for track Res's `WellFormed` fix (decision 56). Statements 5-7 use a harness `f` with no user code, so they need no `WellFormed` hypothesis. The behaviour table covers siblings that complete, an action that suspends first, an error in an action that starts after the first `n`, and two errors at once.
+| `core.IO.parTraverseN.atMostN` | open | harness counter (`HarnessPrivacy` token `Ref` 0): highest number of running actions `≤ n` |
 
-Smoke (`lake exe ptsmoke 100`, three `HashSet` orders, inputs up to 6): 55,980 stopped runs, 0 violations; reversed result, dropped result and "no `cancelAll`" break the claims. Not stated yet: "at most N concurrent" (needs a test marker and the shared privacy module of decision 56) and "no leaked fiber". The smoke test checks the limit: `f` counts the running actions in a `Ref`; the maximum stays `≤ n`, and a semaphore with 1000 permits breaks it.
+Defect D of review 7 (`f` reaches the per-input result `Deferred` through a number field of its closure id) is closed by decision 56: statements 1-4 use `ptLibDeep`, whose `fields` are `ParTraverse.fnFields` (the `f` fields of `k1`, `k2`, `k3`, `travM2`, `elemSel`, `uncK`, `resK`, `thenStart`, `callF`; the `f` of each `srcAction` code in any closure field, so also inside `Bracket` `Src.ext`, `Race` and `Timeout` sources; `Bracket.fnFields`) and `f` of `TL.tag f`. Data number fields: the limit `n` of `k1`/`k2`, the cede count of `BL.step`, Race kind/side, Timeout durations, code tags. `PrivacyExamples` checks the forgery (plain, in a `Bracket` source, in a `Race` source): it passes `ptIsLib`, fails `ptLibDeep`. `resultOrder` is now plausible. Statements 5-7 use a harness `f` with no user code, so they need no `WellFormed` hypothesis. The behaviour table covers siblings that complete, an action that suspends first, an error in an action that starts after the first `n`, and two errors at once.
+
+Smoke (`lake exe ptsmoke 100`, three `HashSet` orders, inputs up to 6): 55,980 stopped runs, 0 violations; reversed result, dropped result and "no `cancelAll`" break the claims. Not stated yet: "no leaked fiber". Statement 8 (`atMostN`): `f'(a) = uncancelable(poll => enter *> poll(g(a)).attempt.onCancel(exit).flatMap(x => exit *> rethrow x))`; the masked region makes enter/exit exact under cancelation. The event closures hold the token, so they are outside `limLib`. A semaphore with 1000 permits breaks it (kernel-checked `Limit.wideRun_breaks`, and ptsmoke).
 
 ## Difftest
 

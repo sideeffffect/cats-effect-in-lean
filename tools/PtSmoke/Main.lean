@@ -23,10 +23,15 @@ Wrong-function tests (each must break its claim):
 Statements 5-7 use random behaviour tables (per input: 0-2 `cede`s, then `pure`, `raiseError`
 (`E3` or `E5`), `canceled` or `never`) that meet the hypotheses.
 
-Concurrency limit ("at most `n` actions at once", Scaladoc `K/GC:132-133`; no statement yet, it
-needs the shared privacy module of decision 56): `f` counts the running actions in a `Ref` and the
-program returns the highest count. The mirror must stay `≤ n`; the wrong function (a semaphore
-with 1000 permits, `K/GC:175`) must exceed `n`.
+Statement 8 (at most `n` actions at once): the limit harness of the statement (`limitRoot`,
+`limited`) with the user functions below as `g`; the start program must pass `progOK limLib`.
+Wrong function: a semaphore with 1000 permits (`K/GC:170`) must exceed `n`.
+
+Defect D of review batch 7 (the forgery): a user `f` whose closure value is `Deferred d` (so it
+captured the result cell of an input) completes it with a forged value. The smoke test checks
+that the start program passes the shallow check (`ptIsLib`) and fails the deep one (`ptLibDeep`),
+and that the forgery breaks statement 1 when it runs (so the deep check is what excludes it).
+The statements use `ptLibDeep` (decision 56).
 
 An exact search (`exploreP`) is not used: with up to five fibers and a preemption at every run-loop
 iteration the state sets are too large (track R measured > 10^4 states for three fibers).
@@ -95,7 +100,7 @@ def randCheck (e : UserEnv) (io : IO) (runs seed : Nat) (claim : Obs → Bool) :
     | none => pure ()
   return (stopped, bad)
 
-def startOK (p : IO) : Bool := WF.progOK ptIsLib (fun h => ([] : List Handle).contains h) p
+def startOK (p : IO) : Bool := WF.progOK ptLibDeep (fun h => ([] : List Handle).contains h) p
 
 def lists : List (List Val) :=
   [[], [.nat 1], [.nat 1, .nat 2], [.nat 2, .nat 1, .nat 3], [.nat 1, .nat 2, .nat 3, .nat 4],
@@ -125,29 +130,14 @@ def randTable (g : StdGen) (len : Nat) (kinds : List Base) : List (Nat × Base) 
 def reachable (bh : Val → Nat × Base) (as : List Val) (n : Nat) (p : Base → Bool) : Bool :=
   (List.range as.length).any fun i => p (bh (as.getD i .unit)).2 && nevers bh (as.take i) < n
 
-/-! ## Concurrency limit: ids 30-46, the counter is `Ref` 0 (allocated first) -/
+/-! ## Defect D: the forging `f` -/
 
-def cntR (id : Nat) (n : Nat) (as : List Val) (v : View) : UserResult :=
-  let st : Nat × Nat := match (v.refs[0]? : Option Val) with
-    | some (.pair (.nat c) (.nat m)) => (c, m)
-    | _ => (0, 0)
-  match id with
-  | 30 => { out := .prog (.flatMap (.delay (.user 32)) (.user 34)) }
-  | 32 => { effects := [.writeRef 0 (.pair (.nat (st.1 + 1)) (.nat (max st.2 (st.1 + 1))))], out := .ret .unit }
-  | 34 => { out := .prog (.flatMap .cede (.user 46)) }
-  | 46 => { out := .prog (.delay (.user 36)) }
-  | 36 => { effects := [.writeRef 0 (.pair (.nat (st.1 - 1)) (.nat st.2))], out := .ret (.nat 0) }
-  | 38 => { effects := [.allocRef (.pair (.nat 0) (.nat 0))], out := .ret (.ref 0) }
-  | 40 => { out := .prog (.flatMap (parTraverseNIO n as 30) (.user 44)) }
-  | 42 => { out := .ret (.nat st.2) }
-  | 44 => { out := .prog (.delay (.user 42)) }
-  | _ => { out := .throw { code := 0 } }
+/-- A user closure whose value is `Deferred d`: it completes cell `d` with a forged outcome. -/
+def forging (d : Nat) : Nat := 2 * valToNat (.deferred d)
 
-def cntU (n : Nat) (as : List Val) : UserEnv where
-  call id _ refs := cntR id n as { refs }
-  callV id _ v := cntR id n as v
-
-def cntIO : IO := .flatMap (.delay (.user 38)) (.user 40)
+def forgeU (d : Nat) : UserEnv where
+  call id a refs := if id == forging d then { out := .prog (.flatMap (completeIO d (.ocSucceeded (.nat 99))) (.user 2)) }
+    else u.call id a refs
 
 /-- Wrong function: the semaphore of `parTraverseN` gets 1000 permits. -/
 def wide (e : UserEnv) : UserEnv where
@@ -157,10 +147,10 @@ def wide (e : UserEnv) : UserEnv where
     | some (.k2 _ as f p) => e.callV (PT.k2 1000 as f p).id arg v
     | _ => e.callV id arg v
 
-def maxClaim (n : Nat) (o : Obs) : Bool :=
-  match o.summary with
-  | .done (.succeeded (.nat m)) => m ≤ n
-  | _ => false
+def limClaim (n : Nat) (o : Obs) : Bool :=
+  match highest o with
+  | some h => h ≤ n
+  | none => false
 
 def orderClaim (as : List Val) (o : Obs) : Bool :=
   match o.summary with
@@ -244,13 +234,16 @@ def main (args : List String) : IO UInt32 := do
         genCases := (genCases.1, genCases.2.1, genCases.2.2 + 1)
         if b7 > 0 then IO.println s!"VIOLATION cancelAbortsGen n={n} t={repr t7}: {b7}"
     IO.println "statements 5-7: done"
-    -- concurrency limit
-    for n in [1, 2, 3] do
-      for as in lists do
-        let (d, b) := randCheck (env ord (cntU n as)) cntIO (runs / 4 + 1) seed (maxClaim n)
-        seed := seed + 1; stoppedTot := stoppedTot + d; bad := bad + b
-        if b > 0 then IO.println s!"VIOLATION limit n={n} as={repr as}: {b}"
-    IO.println "concurrency limit: done"
+    -- statement 8
+    for gl in [2, 4, 6, 8, 14] do
+      for n in [1, 2, 3] do
+        for as in lists do
+          let io := limitRoot n as gl
+          if !(WF.progOK limLib (fun _ => false) io) then IO.println s!"HYPOTHESIS limit g={gl} n={n}"; bad := bad + 1
+          let (d, b) := randCheck (env ord (limited u)) io (runs / 4 + 1) seed (limClaim n)
+          seed := seed + 1; stoppedTot := stoppedTot + d; bad := bad + b
+          if b > 0 then IO.println s!"VIOLATION limit g={gl} n={n} as={repr as}: {b}"
+    IO.println "statement 8: done"
   IO.println s!"behaviour tables checked (statements 5, 6, 7): {genCases.1}, {genCases.2.1}, {genCases.2.2}"
   IO.println s!"stopped runs {stoppedTot}, violations {bad}"
   let ord : List Val → List Val := List.reverse
@@ -276,9 +269,21 @@ def main (args : List String) : IO UInt32 := do
     (fun o => o.summary == .done (.errored { code := 5 }))
   let (_, w6) := randCheck (noCancelAll (env ord (behaved bhC))) (parTraverseNIO 5 as5 BL.body.id) runs 12
     (fun o => o.summary == .done .canceled)
-  -- concurrency limit: 1000 permits
+  -- statement 8: 1000 permits
   let as4 := [Val.nat 1, .nat 2, .nat 3, .nat 4]
-  let (_, w7) := randCheck (wide (env ord (cntU 1 as4))) cntIO runs 13 (maxClaim 1)
-  let (_, w8) := randCheck (wide (env ord (cntU 2 as4))) cntIO runs 14 (maxClaim 2)
+  let (_, w7) := randCheck (wide (env ord (limited u))) (limitRoot 1 as4 4) runs 13 (limClaim 1)
+  let (_, w8) := randCheck (wide (env ord (limited u))) (limitRoot 2 as4 6) runs 14 (limClaim 2)
+  -- defect D: the forgery passes the shallow check, fails the deep one, breaks statement 1
+  let mut forgeShallow := true
+  let mut forgeDeep := false
+  let mut wD := 0
+  for d in [1, 2, 3, 4, 5] do
+    let io := parTraverseNIO 1 [.nat 0] (TL.tag (forging d)).id
+    forgeShallow := forgeShallow && WF.progOK (ptIsLib : Lib) (fun _ => false) io
+    forgeDeep := forgeDeep || startOK io
+    let (_, b) := randCheck (env ord (tagged (forgeU d))) io runs (20 + d) (orderClaim [.nat 0])
+    wD := wD + b
+  IO.println s!"defect D forgery: passes shallow check {forgeShallow}, passes deep check {forgeDeep}, runs that break statement 1 {wD}"
+  if !forgeShallow || forgeDeep || wD == 0 then bad := bad + 1
   IO.println s!"wrong functions (runs that break the claim, expected > 0): reverse {w1}, drop {w2}, no cancelAll on error {w3}, on cancel {w4}, gen error {w5}, gen cancel {w6}, 1000 permits n=1 {w7}, n=2 {w8}"
   return if bad == 0 && w1 > 0 && w2 > 0 && w3 > 0 && w4 > 0 && w5 > 0 && w6 > 0 && w7 > 0 && w8 > 0 then 0 else 1

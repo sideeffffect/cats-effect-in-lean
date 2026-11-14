@@ -380,10 +380,11 @@ def registry : List Entry := [
       reordered entry). All user code. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
       HashSet from 5 elements; any permutation, review 7). Satisfiable: \
       Proofs.Phase6.ParTraverseWitness.parTraverseNOrder_satisfiable. Smoke: lake exe ptsmoke \
-      (a reversed result breaks it). Review 7: believed FALSE as stated: WellFormed lets f \
-      capture the per-input result Deferred through a number field of its closure id and \
-      complete it with a wrong value. Not fixed here: it depends on track Res's WellFormed \
-      deep-capture and privacy fix (decision 56); re-check this row when that lands. Open." },
+      (a reversed result breaks it). Review 7 defect D (f captures the per-input result \
+      Deferred via a number field of its closure id) is closed: the statement now uses \
+      ptLibDeep (decision 56 deep captured; function fields of PT, srcAction codes, Bracket, \
+      TL.tag). PrivacyExamples: the forgery (also hidden in a Bracket or Race source) passes \
+      ptIsLib and fails ptLibDeep; ptsmoke: it breaks the claim when run. Plausible. Open." },
   { id := "core.IO.parTraverseN.pureSucceeds"
     rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
     prop := ``Props.Phase6.ParTraverse.parTraverseNPureSucceeds
@@ -438,8 +439,18 @@ def registry : List Entry := [
     note := "The same with IO.canceled in place of the error and no error: every run that stops ends \
       Canceled. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
       HashSet from 5 elements; any permutation, review 7). Satisfiable (parTraverseNCancelAbortsGen_satisfiable). Smoke: \
-      ptsmoke. Open. Not stated yet: at most n actions at once (needs the decision-56 privacy \
-      module); ptsmoke checks it, and 1000 permits break it." }
+      ptsmoke. Open." },
+  { id := "core.IO.parTraverseN.atMostN"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNAtMostN
+    status := .«open»
+    note := "At most n actions run at once (Scaladoc K/GC:132-133): the harness (HarnessPrivacy, \
+      decision 56; token = counter Ref 0) counts the running g(a) inside \
+      uncancelable(poll => enter *> poll(g(a)).attempt.onCancel(exit) ...); in every run \
+      that stops the highest count is <= n. All user code (UserPrivate, WellFormed limLib), \
+      n >= 1, all inputs, schedules and HashSet orders. Satisfiable \
+      (Limit.parTraverseNAtMostN_satisfiable: n = 1 reached). Wrong function: 1000 permits \
+      reaches 2 > 1 (Limit.wideRun_breaks, kernel-checked; ptsmoke). Open." }
 ]
 
 end CatsEffectInLean

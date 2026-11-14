@@ -249,3 +249,7 @@
 ## [2026-11-14] ingest | Track Res: review batch 7 defect D regression (parTraverseN)
 - Updated: raw harness privacy note (parTraverseN user function as number field; deep Lib rejects it)
 - Raw: raw/cats-effect/2026-11-14-harness-privacy-notes.md
+
+## [2026-11-14] update | parTraverseN: deep Lib and statement 8
+- Updated: parTraverseN model (ptLibDeep with ParTraverse.fnFields incl. srcAction codes; defect D closed; statement 8 atMostN with HarnessPrivacy; witness and kernel-checked wrong function), index
+- Raw: raw/cats-effect/2026-11-14-partraverse-deep-lib.md

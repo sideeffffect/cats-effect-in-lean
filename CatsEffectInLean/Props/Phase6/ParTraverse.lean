@@ -19,12 +19,15 @@ All statements quantify over all input lists (any length), all limits `n ≥ 1` 
 `GenConcurrent.scala:146`), all fuel values, all `PChoice` schedules (`outcomesP`, preemption
 at any run-loop iteration) and all `HashSet` iteration orders `ord` (the supervision `Set` is a
 `HashSet` from 5 elements; its order comes from identity hashes, so the model takes any
-permutation, `(ord xs).Perm xs`). They state outcomes and result values only, so they need no
-test marker (decision 56). Hypotheses:
+permutation, `(ord xs).Perm xs`). Statements 1-7 state outcomes and result values only, so they
+need no test marker; statement 8 uses the shared harness module (`HarnessPrivacy`, decision 56).
+Hypotheses:
 
-* `WellFormed` of the program (decision 27, statements 1-4): user code is code Scala can write;
-  library closures (`ptIsLib`: the `Bracket`, `Race`, `Timeout` and `ParTraverse` mirrors) may
-  occur in user programs.
+* `WellFormed` of the program (decision 27, statements 1-4 and 8): user code is code Scala can
+  write; library closures (`ptIsLib`: the `Bracket`, `Race`, `Timeout` and `ParTraverse` mirrors)
+  may occur in user programs. The `Lib` is `ptLibDeep` (`limLib` for statement 8): it declares
+  the function fields (`ParTraverse.fnFields`, `TL.tag f`), so `WF.captured` follows a user
+  function that a library closure names by number (decision 56; review batch 7, defect D).
 * Statements 2-7 fix the behaviour of `f` (an ordinary input for each claim).
 
 ## Statements
@@ -32,9 +35,9 @@ test marker (decision 56). Hypotheses:
 1. `parTraverseNOrder`: if the traversal succeeds, its result holds one entry per input, in input
    order: `f` is wrapped by the harness as `a => f(a).map(b => (a, b))`, and the first
    components of the result are exactly the inputs (no lost, no duplicated, no reordered entry).
-   Review 7: believed false as stated, because `WellFormed` lets `f` reach the per-input result
-   `Deferred` through a number field of its closure id. It waits for track Res's `WellFormed`
-   fix (decision 56); the statement is not changed here.
+   Review 7, defect D: with the shallow `Lib` (`ptIsLib`) a user `f` could capture the per-input
+   result `Deferred` through a number field of its closure id and forge the result. With
+   `ptLibDeep` that `f` is not well formed (`Proofs/Phase6/PrivacyExamples.lean`).
 2. `parTraverseNPureSucceeds`: if `f(a) = IO.pure(g(a))`, every run that stops ends `Succeeded`
    with `as.map(g)`: no deadlock, no error, the right order.
 3. `parTraverseNErrorAborts`: if `f(a0)` raises `e` and every other `f(a)` never completes, and
@@ -57,6 +60,7 @@ than the first `n`, and two errors at once.
    permit): every run that stops ends `Errored(e)` with an `e` that one of the inputs raises.
 7. `parTraverseNCancelAbortsGen`: the same with `canceled` in place of the error and no error:
    every run that stops ends `Canceled`.
+8. `parTraverseNAtMostN`: at most `n` actions run at once (harness below).
 -/
 
 namespace CatsEffectInLean.Props.Phase6.ParTraverse
