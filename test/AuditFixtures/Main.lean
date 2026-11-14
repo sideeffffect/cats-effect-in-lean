@@ -72,6 +72,12 @@ def cases : List (String × Audit.Config) := [
   ("open_modelled", config [addZero, subAddCancel, addComm]
     (csv := dir / "inventory-open-modelled.csv")),
   ("duplicate_id", config [addZero, subAddCancel, addComm, addZero]),
+  -- decision 56: a `Lib` without function fields needs a `libNote`
+  ("fieldless_lib", config [addZero, subAddCancel, addComm, { addComm with id := "fx.idFree", prop := ``Props.idFreeLib }]),
+  ("fieldless_lib_lit", config [addZero, subAddCancel, addComm, { addComm with id := "fx.lit", prop := ``Props.litLib }]),
+  ("fieldless_lib_via", config [addZero, subAddCancel, addComm, { addComm with id := "fx.via", prop := ``Props.viaDef }]),
+  ("fieldless_lib_noted", config [addZero, subAddCancel, addComm,
+    { addComm with id := "fx.idFree", prop := ``Props.idFreeLib, libNote := "no closures" }]),
   -- Heavy registry (decision 55). Main job (`verifyHeavy := false`): the row settled only by a
   -- heavy entry is deferred, not accepted; the heavy job (`true`) checks it in full.
   ("heavy_good_main", heavyCfg addCommHeavy false),

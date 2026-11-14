@@ -138,7 +138,7 @@ abbrev RP (p : PLam) (arg : Val) (v : View) : Handle → Prop :=
   WF.Reach v ([] ++ arg.handles ++ p.toVal.handles)
 
 theorem progOK_drain (R : Handle → Prop) (q : Nat) (hq : R (.ref q)) :
-    ∀ n, WF.progOK isLib (WF.memOf R) (drain q n) = true
+    ∀ n, WF.progOK queueLib (WF.memOf R) (drain q n) = true
   | 0 => rfl
   | n + 1 => by
     simp [drain, WF.progOK, Std.Queue.tryTakeIO, fnOK_qlam, PLam.fn, WF.fnOK_userFn, WF.sub,
@@ -147,7 +147,7 @@ theorem progOK_drain (R : Handle → Prop) (q : Nat) (hq : R (.ref q)) :
 /-- Each program closure passes `CallOK` (with its closure value as the captured handles). -/
 theorem call_ok (p : PLam) (arg : Val) (v : View) :
     (∀ w, WF.Agree (RP p arg v) v w → call p arg w = call p arg v) ∧
-    WF.ResultOK isLib (RP p arg v) v (call p arg v) := by
+    WF.ResultOK queueLib (RP p arg v) v (call p arg v) := by
   have hb : ∀ h, h ∈ arg.handles ∨ h ∈ p.toVal.handles → RP p arg v h :=
     fun h hh => WF.Reach.base (by simpa using hh)
   cases p with
@@ -212,7 +212,7 @@ theorem call_ok (p : PLam) (arg : Val) (v : View) :
 
 /-- Each user function (even id) of `env` passes `CallOK`. -/
 theorem env_calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
-    WF.CallOK isLib [] env id arg v := by
+    WF.CallOK queueLib [] env id arg v := by
   have hlib : isLibId id = false := by simp [isLibId]; omega
   have hE : ∀ w, env.callV id arg w = Props.Calibration.QueueTimeout.dispatch id arg w :=
     fun _ => rfl
@@ -220,7 +220,7 @@ theorem env_calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
       (∀ w, Props.Calibration.QueueTimeout.dispatch id arg w = illTyped) →
       (∀ w, WF.Agree R v w → Props.Calibration.QueueTimeout.dispatch id arg w =
         Props.Calibration.QueueTimeout.dispatch id arg v) ∧
-      WF.ResultOK isLib R v (Props.Calibration.QueueTimeout.dispatch id arg v) := by
+      WF.ResultOK queueLib R v (Props.Calibration.QueueTimeout.dispatch id arg v) := by
     intro R hd
     refine ⟨fun w _ => by rw [hd w, hd v], ?_⟩
     simp [hd, illTyped, WF.ResultOK, WF.EffectsOK, WF.OutOK]
@@ -356,7 +356,7 @@ theorem env_opaque : WF.PollOpaque env := by
         · simp [Props.Calibration.QueueTimeout.dispatch, hc, ho, hlib, hk, illTyped, WF.rnResult]
 
 /-- The witness program (one element `42`, timeout `1000`, sleep `1`) is well-formed. -/
-theorem cx_wellFormed : WellFormed isLib [] env (progA [42] 1000 1) :=
+theorem cx_wellFormed : WellFormed queueLib [] env (progA [42] 1000 1) :=
   ⟨by decide +kernel, fun id hid arg v => env_calls id hid arg v, env_opaque⟩
 
 /-- CE-0003: `Queue.take.timeout` in a canceled fiber loses an element. -/

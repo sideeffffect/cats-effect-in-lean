@@ -113,7 +113,15 @@ structure Lib where
   ok : Nat → Bool
   fields : Val → List Nat := fun _ => []
 
-instance : Coe (Nat → Bool) Lib := ⟨fun f => { ok := f }⟩
+/-- A library whose closures keep **no** closure id in a number field (an explicit claim, decision
+56). A registered statement that uses it (directly, through the coercion below, or through any
+definition) must give a written justification in its registry entry (`Entry.libNote`); the audit
+fails otherwise (`lake exe audit`, check `lib-fields`). So a statement cannot fall back to the
+shallow capture silently. -/
+@[reducible] def Lib.idFree (ok : Nat → Bool) : Lib := { ok := ok }
+
+/-- A `Nat → Bool` is a library without function fields (`Lib.idFree`); the audit sees it. -/
+instance : Coe (Nat → Bool) Lib := ⟨Lib.idFree⟩
 
 namespace WF
 
@@ -373,7 +381,7 @@ def WellFormed (lib : Lib) (H0 : List Handle) (env : UserEnv) (p : IO) : Prop :=
   WF.PollOpaque env
 
 /-- `WellFormed` for plain `IO` programs: no library closures, no handles before the start. -/
-abbrev WellFormedIO (env : UserEnv) (p : IO) : Prop := WellFormed ((fun _ => false : Nat → Bool) : Lib) [] env p
+abbrev WellFormedIO (env : UserEnv) (p : IO) : Prop := WellFormed (Lib.idFree fun _ => false) [] env p
 
 namespace WF
 

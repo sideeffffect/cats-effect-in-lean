@@ -58,7 +58,7 @@ theorem callV_even (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
     bracketLeaf?, Bracket.BLam.ofId?_even hid, timeoutOf?, TLam.ofId?, h1, u]
 
 theorem calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
-    WF.CallOK isLib [] (env fa u) id arg v := by
+    WF.CallOK memoLib [] (env fa u) id arg v := by
   refine ⟨fun w _ => ?_, ?_⟩
   · rw [callV_even id hid, callV_even id hid]
   · rw [callV_even id hid]; simp [userR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
@@ -69,7 +69,7 @@ theorem env_opaque : WF.PollOpaque (env fa u) := by
   intro σ _ k hk
   simp at hk
 
-theorem fa_wf : WellFormed isLib [] (env fa u) fa :=
+theorem fa_wf : WellFormed memoLib [] (env fa u) fa :=
   ⟨by decide, fun id hid arg v => calls id hid arg v, env_opaque⟩
 
 /-! ### Fixed-twin check (decision 39) -/

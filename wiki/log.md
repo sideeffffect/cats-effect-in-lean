@@ -249,3 +249,7 @@
 ## [2026-11-14] ingest | Track Res: review batch 7 defect D regression (parTraverseN)
 - Updated: raw harness privacy note (parTraverseN user function as number field; deep Lib rejects it)
 - Raw: raw/cats-effect/2026-11-14-harness-privacy-notes.md
+
+## [2026-11-14] ingest | Track Res: audit check lib-fields, named id-free libraries
+- Updated: Registry and audit (check 9 lib-fields), Outcome sets (Lib.idFree), raw harness privacy note (follow-up)
+- Raw: raw/cats-effect/2026-11-14-harness-privacy-notes.md
