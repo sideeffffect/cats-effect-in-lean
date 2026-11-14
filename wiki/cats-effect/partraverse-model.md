@@ -1,7 +1,7 @@
 # parTraverseN model
 
 > Sources: Cats Effect v3.7.1 (`kernel/.../GenConcurrent.scala:113-251`, `MiniSemaphore.scala:17-88`, `Ref.scala:123-124`, `SyncRef.scala`, `IODeferred.scala:20-80`, `IO.scala:1593-1600`); cats-core 2.13.0 (`list.scala`, `Traverse.scala`, `FlatMap.scala`, `Parallel.scala`); own Phase 6 batch 6.3 work and scala-cli runs, 2026-11-14
-> Raw: [parTraverseN notes](../../raw/cats-effect/2026-11-14-partraverse-notes.md)
+> Raw: [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [parTraverseN notes](../../raw/cats-effect/2026-11-14-partraverse-notes.md)
 
 ## Overview
 
@@ -31,6 +31,8 @@ Phase 6, batch 6.3. `IO.parTraverseN(n)(ta)(f)` calls the kernel default `GenCon
 | `core.IO.parTraverseN.pureSucceeds` | open | pure `f`: every stopped run is `Succeeded(as.map(g))` |
 | `core.IO.parTraverseN.errorAborts` | open | one started action raises, the rest never end: `Errored(e)` |
 | `core.IO.parTraverseN.cancelAborts` | open | the same with a self-cancel: `Canceled` |
+
+Review batch 7 (2026-11-14): all four entries HOLLOW. `resultOrder`: `f` is held as a number in `k1` and `TL.tag`, so `WellFormed` never checks `WF.captured f`; an `f` that captured the internal result `Deferred` completes it with a forged pair (false for every implementation). All four: `as.length ≤ 4` is not a documented precondition (fix: make the `HashSet` order an input). `errorAborts`/`cancelAborts`: siblings fixed to `IO.never` remove completing siblings, late errors and two errors. Many `K/GC`/`K/MS` line citations drift 2-8 lines. [Review](../../review/2026-11-14-review-batch-7.md).
 
 Smoke: 11,200 stopped runs, 0 violations; reversed result, dropped result and "no `cancelAll`" break the claims. Not stated yet: "at most N concurrent" (needs a test marker and the shared privacy module of decision 56) and "no leaked fiber".
 

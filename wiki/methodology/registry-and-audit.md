@@ -1,7 +1,7 @@
 # Registry and audit
 
 > Sources: own work: `CatsEffectInLean/Registry.lean`, `tools/Audit/Core.lean`, `scripts/test_audit.sh`, Lean v4.35.0 (2026-11-10)
-> Raw: [Decision 55: heavy proofs](../../raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md); [Registry and audit notes](../../raw/project-decisions/2026-11-10-registry-audit-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
+> Raw: [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [Decision 55: heavy proofs](../../raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md); [Registry and audit notes](../../raw/project-decisions/2026-11-10-registry-audit-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
 
 ## Overview
 
@@ -63,6 +63,7 @@ Proofs that take more than about 5 minutes are in lean_lib `HeavyProofs` (not a 
 - So every check of the single registry still runs on every push, in one of the two jobs. The design needs `heavy-proofs` to block merges like `lean` (QUESTIONS.md Q4).
 - Paranoid: the weekly `paranoid.yml` covers only the default target. `paranoid-heavy.yml` (weekly, 350 min) exports the heavy root with `leanexport` and runs `lake check --from-export --paranoid`. Estimated about 4 h; not measured.
 - Gotcha: `leanchecker M` replays only the declarations of module `M`, not its imports (root of the law: 23 s; one chunk module: about 3 min). Replay each heavy module.
+- Review batch 7 (2026-11-14): the split keeps every check on every push, but has gaps: (1) the heavy modules build with plain `lake build`, outside the bwrap sandbox of `lake check`, so build-time code could change the audit tool or the inventory before `audit_heavy` runs; (2) the main audit passes with a deferred row, so `heavy-proofs` must be a required check (Q4); (3) `check_heavy_proofs.sh` hard-codes the module list and the `#print axioms` list (a new heavy module would not be replayed by `leanchecker`); (4) `paranoid-heavy.yml` exports only the root module, scope not verified. [Review](../../review/2026-11-14-review-batch-7.md).
 - Today: one heavy entry, `laws.GenSpawnLaws.uncancelableRaceNotInherited.IO` (49-chunk certificate check, [Certificate checks](../lean/certificate-checker.md)).
 
 ## Self-test

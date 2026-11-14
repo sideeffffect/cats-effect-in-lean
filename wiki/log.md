@@ -228,3 +228,7 @@
 - Created: parTraverseN model
 - Updated: Difftest program format (op `parTraverseN`), index
 - Raw: raw/cats-effect/2026-11-14-partraverse-notes.md
+
+## [2026-11-14] ingest | Review batch 7: parTraverseN and heavy-proof CI split
+- Updated: Agent workflow (review log), Registry and audit (CI split gaps), parTraverseN model (review result), index
+- Raw: raw/project-decisions/2026-11-14-review-batch-7-notes.md

@@ -13,7 +13,7 @@ How this project works: synthesis, agent loop, difftest design. Start here.
 | [Differential testing](methodology/differential-testing.md) | Lean-vs-CE difftest harness, generator, driver, results; v1 ops ≥ 65,960 agreeing cases each; preempt coverage via small runtime thresholds; triage bins | 2026-11-10 |
 | [Difftest program format v0](methodology/difftest-program-format.md) | JSON AST v0 (values, ops → exact IO terms, user-fn table, trace events); Scala runner modes replay/testcontrol; commands, limits | 2026-11-10 |
 | [Inventory](methodology/inventory.md) | inventory/inventory.csv: columns, scope, exclusion rules, how to regenerate, counts (3,255 rows) | 2026-11-10 |
-| [Registry and audit](methodology/registry-and-audit.md) | Registry Entry fields; audit checks exact theorem type, axioms, module prefixes, bug record, inventory cross-check; self-test fixtures; CI | 2026-11-10 |
+| [Registry and audit](methodology/registry-and-audit.md) | Registry Entry fields; audit checks exact theorem type, axioms, module prefixes, bug record, inventory cross-check; self-test fixtures; CI | 2026-11-14 |
 
 ## cats-effect
 
