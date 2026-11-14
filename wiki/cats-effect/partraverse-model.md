@@ -1,7 +1,7 @@
 # parTraverseN model
 
 > Sources: Cats Effect v3.7.1 (`kernel/.../GenConcurrent.scala:113-249`, `MiniSemaphore.scala:17-92`, `Ref.scala:123-124`, `SyncRef.scala`, `IODeferred.scala:20-80`, `IO.scala:1593-1600`); cats-core 2.13.0 (`list.scala`, `Traverse.scala`, `FlatMap.scala`, `Parallel.scala`); own Phase 6 batch 6.3 work and scala-cli runs, 2026-11-14
-> Raw: [parTraverseN notes](../../raw/cats-effect/2026-11-14-partraverse-notes.md)
+> Raw: [parTraverseN notes](../../raw/cats-effect/2026-11-14-partraverse-notes.md), [review 7 notes](../../raw/cats-effect/2026-11-14-partraverse-review7.md)
 
 ## Overview
 
@@ -39,7 +39,7 @@ Phase 6, batch 6.3. `IO.parTraverseN(n)(ta)(f)` calls the kernel default `GenCon
 
 `resultOrder` is believed false as stated (review 7): `WellFormed` lets `f` reach the per-input result `Deferred` through a number field of its closure id. It waits for track Res's `WellFormed` fix (decision 56). Statements 5-7 use a harness `f` with no user code, so they need no `WellFormed` hypothesis. The behaviour table covers siblings that complete, an action that suspends first, an error in an action that starts after the first `n`, and two errors at once.
 
-Smoke (`lake exe ptsmoke 100`, three `HashSet` orders, inputs up to 6): see the log entry of review 7 for the counts; reversed result, dropped result and "no `cancelAll`" break the claims. Not stated yet: "at most N concurrent" (needs a test marker and the shared privacy module of decision 56) and "no leaked fiber". The smoke test checks the limit: `f` counts the running actions in a `Ref`; the maximum stays `≤ n`, and a semaphore with 1000 permits breaks it.
+Smoke (`lake exe ptsmoke 100`, three `HashSet` orders, inputs up to 6): 55,980 stopped runs, 0 violations; reversed result, dropped result and "no `cancelAll`" break the claims. Not stated yet: "at most N concurrent" (needs a test marker and the shared privacy module of decision 56) and "no leaked fiber". The smoke test checks the limit: `f` counts the running actions in a `Ref`; the maximum stays `≤ n`, and a semaphore with 1000 permits breaks it.
 
 ## Difftest
 
