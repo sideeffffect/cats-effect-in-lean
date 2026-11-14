@@ -54,6 +54,9 @@ V2M_MIN = 0.01
 # Format v2 (track Res): `use`, `allocated`, `Resource.both` (static count)
 V2RES_OPS = ('rUse', 'rAllocated', 'rBoth')
 V2RES_MIN = 0.02
+# Format v2 (batch 6.3)
+V2PT_OPS = ('parTraverseN',)
+V2PT_MIN = 0.02
 
 
 def check(cond, msg):
@@ -65,7 +68,7 @@ def check(cond, msg):
 def main():
     t0 = time.time()
     # 1. type checker
-    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race', 'bracket', 'memoize', 'resuse')
+    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race', 'bracket', 'memoize', 'resuse', 'partraverse')
              for x in (drive.REPO / f'difftest/cases/{f}.jsonl').read_text().splitlines() if x.strip()]
     check(all(well_typed(c['prog']) for c in basic), f"type checker accepts all {len(basic)} golden cases")
     N1 = {'t': 'nat', 'v': 1}
@@ -130,6 +133,9 @@ def main():
     v2rcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2RES_OPS}
     lowr = {op: f for op, f in v2rcov.items() if f < V2RES_MIN}
     check(not lowr, f"each format v2 op of track Res in >= {V2RES_MIN:.0%} of {N} cases {lowr}")
+    v2pcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2PT_OPS}
+    lowp = {op: f for op, f in v2pcov.items() if f < V2PT_MIN}
+    check(not lowp, f"each format v2 op of batch 6.3 in >= {V2PT_MIN:.0%} of {N} cases {lowp}")
 
     # 3 + 4. Scala runs: no generator bug, deterministic
     tcs = [gen.to_testcontrol(c, t) for c in a[:N // 2] for t in (1, 2)]

@@ -1,5 +1,6 @@
 import CatsEffectInLean.Proofs.Phase6.ResourceWitness
 import CatsEffectInLean.Proofs.Phase6.BracketWitness
+import CatsEffectInLean.Props.Phase6.ParTraverse
 
 /-!
 # Regression: the forgeries of review batches 4-6 are rejected (decision 56)
@@ -115,47 +116,53 @@ end TrackG
 
 /-! ## Review batch 7 (track G, `parTraverseN`, defect D): a user function stored as a number
 
-`parTraverseNIO n as f` names the library closure `k1 n as f` = `cloVal 41 2 [.nat n, as, .nat f]`
-(`Model/ParTraverse.lean:196`, `:311`, branch `review7`). The user function `f` is only a number
-field, so a shallow `captured` never checks the handles that `f` captured: a well-formed `f` that
-captured the element's internal result `Deferred` could complete it with a forged value. The fix is
-in `WellFormed` (decision 56): a `Lib` declares its function fields and `WF.captured` follows them.
-The model file is track G's and not on this branch, so the example uses the same closure shape with
-a `Lib` that declares `k1`'s field `f` as a function field (what `ParTraverse.lean` must declare). -/
+`parTraverseNIO n as f` names the library closure `PT.k1 n as f` (`Model/ParTraverse.lean`); the
+user function is only a number field (through the harness closure `TL.tag f` of statement 1). With
+a `Lib` without function fields (`ptIsLib`, as the statement `parTraverseNOrder` uses it now), the
+handles that `f` captured are never checked: a well-formed `f` that captured the element's result
+`Deferred` can complete it with a forged value. With the deep `captured` (decision 56) and a `Lib`
+that declares the function fields of `PT` and `TL`, the forgery is rejected. The statement of track
+G must use such a `Lib` (`ptLibDeep` below is the declaration). -/
 
-section ParTraverseShape
+section ParTraverseD
 open CatsEffectInLean.Model.Codec
+open CatsEffectInLean.Model.ParTraverse
+open CatsEffectInLean.Props.Phase6.ParTraverse
 
-/-- The `k1` closure shape of `parTraverseNIO` (namespace 41, tag 2). -/
-def isK1 (c : Val) : Bool :=
-  match ofCloVal c with
-  | some (41, 2, [.nat _, _, .nat _]) => true
-  | _ => false
+/-- The user function fields of the `ParTraverse` closures. -/
+def PT.fnIds : PT → List Nat
+  | .k1 _ _ f | .k2 _ _ f _ | .k3 _ f _ _ | .travM2 f _ _ _ _ | .elemSel f _ _ _ _ | .uncK f _ _ _ _
+  | .resK f _ _ _ _ _ _ | .thenStart f _ _ _ _ _ | .callF f _ => [f]
+  | _ => []
 
-/-- A `Lib` with `k1` as library closure, and its field `f` as a function field. -/
-def k1Lib : Lib :=
-  { ok := fun id => isLibId id && ((cloOfId id).map isK1).getD false,
-    fields := fun c => match ofCloVal c with
-      | some (41, 2, [.nat _, _, .nat f]) => [f]
-      | _ => [] }
+/-- `Lib.fields` for the closures of `parTraverseNOrder`: `PT`, `TL.tag`, and `Bracket`. -/
+def ptFields (c : Val) : List Nat :=
+  (match ofCloVal c with
+   | some (k, tag, fs) => if k == ParTraverse.ns then ((PT.ofFields tag fs).map PT.fnIds).getD [] else []
+   | none => []) ++
+  (match ofCloVal c with
+   | some (42, 0, [.nat f]) => [f]
+   | _ => []) ++ Bracket.fnFields c
 
-/-- The forging `f` of the review: a user closure that captured `Deferred` 5 (the element's result). -/
+/-- The `Lib` of `parTraverseNOrder` with function fields (decision 56). -/
+def ptLibDeep : Lib := { ok := ptIsLib, fields := ptFields }
+
+/-- The forging `f` of review batch 7: a user closure that captured `Deferred` 5. -/
 def forgingF : Nat := 2 * valToNat (.deferred 5)
 
-/-- `parTraverseNIO 1 [0] forgingF` (root shape: a new `Deferred`, then `k1`). -/
-def ptRoot : IO :=
-  .flatMap (.pure .unit) (libFn (cloVal 41 2 [.nat 1, listV [.nat 0], .nat forgingF]))
+/-- The root of the forgery: `parTraverseNIO 1 [0] (TL.tag f)`. -/
+def ptRoot : IO := parTraverseNIO 1 [.nat 0] (TL.tag forgingF).id
 
-/-- The shallow capture (no function fields) accepts it: the gap of review batch 7. -/
-example : WF.progOK ({ ok := k1Lib.ok } : Lib) (fun _ => false) ptRoot = true := by decide +kernel
+/-- With `ptIsLib` (no function fields) the root passes `progOK`: the gap. -/
+example : WF.progOK (ptIsLib : Lib) (fun _ => false) ptRoot = true := by decide +kernel
 
-/-- The deep capture rejects it: `f`'s captured `Deferred` 5 is not held by the root. -/
-example : WF.progOK k1Lib (fun _ => false) ptRoot = false := by decide +kernel
+/-- With the deep `Lib` it is rejected: `f`'s captured `Deferred` 5 is not held. -/
+example : WF.progOK ptLibDeep (fun _ => false) ptRoot = false := by decide +kernel
 
-/-- An honest `f` (captures nothing) is still accepted. -/
-example : WF.progOK k1Lib (fun _ => false)
-    (.flatMap (.pure .unit) (libFn (cloVal 41 2 [.nat 1, listV [.nat 0], .nat 14]))) = true := by decide +kernel
+/-- An honest `f` (no captured handle) is still accepted. -/
+example : WF.progOK ptLibDeep (fun _ => false) (parTraverseNIO 1 [.nat 0] (TL.tag 14).id) = true := by
+  decide +kernel
 
-end ParTraverseShape
+end ParTraverseD
 
 end CatsEffectInLean.Proofs.Phase6.PrivacyExamples

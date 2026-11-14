@@ -13,7 +13,7 @@ How this project works: synthesis, agent loop, difftest design. Start here.
 | [Differential testing](methodology/differential-testing.md) | Lean-vs-CE difftest harness, generator, driver, results; v1 ops ≥ 65,960 agreeing cases each; preempt coverage via small runtime thresholds; triage bins | 2026-11-10 |
 | [Difftest program format v0](methodology/difftest-program-format.md) | JSON AST v0 (values, ops → exact IO terms, user-fn table, trace events); Scala runner modes replay/testcontrol; commands, limits | 2026-11-10 |
 | [Inventory](methodology/inventory.md) | inventory/inventory.csv: columns, scope, exclusion rules, how to regenerate, counts (3,255 rows) | 2026-11-10 |
-| [Registry and audit](methodology/registry-and-audit.md) | Registry Entry fields; audit checks exact theorem type, axioms, module prefixes, bug record, inventory cross-check; self-test fixtures; CI | 2026-11-10 |
+| [Registry and audit](methodology/registry-and-audit.md) | Registry Entry fields; audit checks exact theorem type, axioms, module prefixes, bug record, inventory cross-check; self-test fixtures; CI | 2026-11-14 |
 
 ## cats-effect
 
@@ -33,6 +33,7 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [SyncIO and syncStep model](cats-effect/syncio-and-syncstep-model.md) | SyncIO run loop and SyncStep.interpret (G = SyncIO) mirror; syncStepIdentitySyncIO refuted (CE-0001, reproducer case 4) | 2026-11-10 |
 | [Resource model and CE-0002](cats-effect/resource-model.md) | Resource ADT + allocatedCase mirror (F = IO), closure-id codec; resourceEvalPreservesUncancelable refuted (CE-0002, reproducer case C); use/both in ResourceUse | 2026-11-10 |
 | [guarantee and bracket model, CE-0005](cats-effect/bracket-model.md) | IO#guarantee/guaranteeCase/bracket*/IO.bracketFull + kernel twins mirror; UserEffect.report; difftest v2; bracketFull twin refuted (CE-0005), 4 open | 2026-11-14 |
+| [parTraverseN model](cats-effect/partraverse-model.md) | Kernel default parTraverseN with IO ops (no twin), difftest op, 4 open properties with witnesses and smoke; Scala infix-precedence gotcha | 2026-11-14 |
 | [Queue and timeout model](cats-effect/queue-model.md) | UnboundedAsyncQueue + IO#timeout/timeoutTo/never mirror; takeTimeoutNoLostElement refuted by the FIFO schedule (CE-0003) | 2026-11-10 |
 | [memoize model and CE-0030](cats-effect/memoize-model.md) | IO#memoize = kernel GenConcurrent#memoize mirror (no twin); difftest ops memoize/memoGet; CE-0030 refuted (masked `canceled *> never` hangs a racing get), 2 open | 2026-11-10 |
 | [Resource use, allocated, both, and CE-0020](cats-effect/resource-use-both-model.md) | fold/use/allocated/rel2/both mirror (`ResourceUse`), difftest v2 rUse/rAllocated/rBoth (≥51k each), CE-0020 refuted (both skips a release), 3 open; harness privacy by construction (`HarnessPrivacy`, decision 56), satisfiability witnesses | 2026-11-14 |
@@ -47,7 +48,7 @@ Formal modeling approaches for effect systems and concurrency.
 | [Modeling approaches for CE3 in Lean](semantics/modeling-approaches.md) | Small-step + scheduler recommended; ITrees, dejafu, Marlow 2001 compared | 2026-11-10 |
 | [Fairness and liveness](semantics/fairness-and-liveness.md) | Schedule = Nat → Choice; Fair/Terminates definitions; CE 512/1024 thresholds; ranking, decide, lasso refutations | 2026-11-10 |
 | [Outcome sets, Eqv and the IO laws](semantics/outcome-equivalence.md) | outcomes/Eqv over pick schedules (trace, refs, reports); bounded enumerator + soundness; IO ops without a typed instance; 2 IO laws proven, 2 open; auto-yield finding | 2026-11-10 |
-| [Race no-leak invariant and frame lemmas](semantics/race-invariant.md) | Invariant design for the 5 open race entries (NL, S, F3, F4, P1/P2, H, C(r)); F1/F2 frame lemmas proven for all runs; law LHS 4,441 states | 2026-11-10 |
+| [Race no-leak invariant and frame lemmas](semantics/race-invariant.md) | Invariant design for the 4 open race leak/winner entries (NL, S, F3, F4, P1/P2, H, C(r)); F1/F1b/F2 frame lemmas proven for all runs; law proven by certificate | 2026-11-10 |
 
 ## lean
 
@@ -58,6 +59,7 @@ Lean 4 toolchain facts and proof hygiene.
 | [Lean v4.35.0 toolchain](lean/toolchain-v4-35.md) | lake check (+ bwrap/AppArmor failure), vcgen, native_decide axioms, recursion styles | 2026-11-10 |
 | [Proof hygiene and agent tooling](lean/proof-hygiene-and-agent-tooling.md) | Forbidden tactics, axiom audit, CI gates (incl. this repo's CI), lean-lsp-mcp, lean4-skills, Plausible | 2026-11-10 |
 | [Kernel evaluation of the model](lean/kernel-evaluation.md) | Toy spike: decide +kernel for runs/witnesses (5k steps in 6 s), decide_cbv memoizes schedule enumeration; design rules | 2026-11-10 |
+| [Certificate checks of closed state sets](lean/certificate-checker.md) | CertP: untrusted BFS generator + linear kernel check (tree replay, edge indices), chunking (EdgesUpTo), cost per state; proves uncancelableRaceNotInherited | 2026-11-10 |
 
 ## precedents
 

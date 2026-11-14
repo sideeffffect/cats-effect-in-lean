@@ -70,6 +70,28 @@ expect_fail unnamed_modelled  "inventory row core.Fx.unnamed: status modelled, b
 expect_fail open_modelled     "inventory row core.Fx.addComm: status modelled, but no named registry entry is proven or refuted"
 expect_fail duplicate_id      "duplicate entry id fx.addZero"
 
+# Heavy registry (decision 55)
+expect_pass_msg() {
+  local name=$1 msg=$2 out
+  if ! out=$(lake exe audit_fixture "$name" 2>&1); then
+    echo "FAIL $name: expected pass, got:"; echo "$out"; fails=$((fails + 1))
+  elif ! grep -qF -- "$msg" <<<"$out"; then
+    echo "FAIL $name: passed, but without the message '$msg':"; echo "$out"; fails=$((fails + 1))
+  else
+    echo "ok   $name (passed: $msg)"
+  fi
+}
+expect_pass_msg heavy_good_main          "1 modelled row(s) deferred to the heavy audit"
+expect_pass_msg heavy_good_full          "Heavy registry: 1 entries, checked in full."
+# the main job does not import heavy theorems: a missing one is deferred, and the full run catches it
+expect_pass_msg heavy_missing_thm_main   "1 modelled row(s) deferred to the heavy audit"
+expect_fail heavy_missing_thm_full       "theorem \`AuditFixtures.Proofs.noSuchTheorem\` does not exist"
+expect_fail heavy_wrong_type_full        "expected exactly \`AuditFixtures.Props.addComm\`"
+expect_fail heavy_no_thm_main            "status CatsEffectInLean.Status.proven, but no theorem is given"
+expect_fail heavy_not_def_main           "is not a \`def\`"
+expect_fail heavy_open_modelled_main     "inventory row core.Fx.addComm: status modelled, but no named registry entry is proven or refuted"
+expect_fail heavy_duplicate_id           "duplicate entry id fx.addZero"
+
 if [ "$fails" -ne 0 ]; then
   echo "FAIL: $fails audit self-test case(s) failed."
   exit 1

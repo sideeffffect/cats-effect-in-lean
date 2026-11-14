@@ -116,6 +116,14 @@ New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decod
 
 - Lean: `Model/Race.lean` terms; sources are `raceSrcA`/`raceSrcB` codes rebuilt by `Env.srcIO` with the snapshot. Generator: type-directed productions plus `tpl_comb` and `tpl_combCancel` (decision 50). Counts: `difftest/py/opcount.py` ([race and both model](../cats-effect/race-both-model.md)).
 
+### Format v2 op of batch 6.3
+
+| op | fields | term |
+|----|--------|------|
+| `parTraverseN` | `n` (1..1000), `xs`: list of atoms, `x`, `f` | `IO.parTraverseN(n)(⟦xs⟧)(a => I(f)[x := a]).map(list)`; the list result is right-nested pairs ending in unit |
+
+- Lean: `Model/ParTraverse.lean` (`parTraverseNIO`); lambdas `ptF`, `ptList`. The generator (`tpl_parTraverse`, `tpl_parTraverseCancel`) uses at most 4 inputs (the mirror's `Set1`..`Set4` limit). See [parTraverseN model](../cats-effect/partraverse-model.md).
+
 ### Format v2 ops of track G (same version, same `checkNoV2` gate)
 
 | op | fields | term |

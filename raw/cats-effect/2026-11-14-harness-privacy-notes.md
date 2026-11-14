@@ -31,3 +31,8 @@
 - `simp` with `capturedD` and the literal depth 64 loops; use `rw [show capDepth = 63 + 1 from rfl, capturedD, h]`.
 - `WF.progOK (fun _ => false) ...` needs a type ascription for the coercion: `((fun _ => false : Nat → Bool) : Lib)`.
 - Unfolding a `Lib` constant in `simp` breaks rewriting with lemmas stated for it; keep it folded and give `lib.ok id = true` facts.
+
+## Review batch 7, defect D (parTraverseN)
+
+- `PT.k1 n as f` keeps the user function `f` as a number field; `parTraverseNOrder` uses `ptIsLib` (a `Lib` without fields), so a well-formed `f` that captured the element's result `Deferred` passes. With the deep `captured` and a `Lib` that declares the `PT`/`TL.tag` function fields (`PrivacyExamples.ptLibDeep`), the forgery is rejected (regression `example`s, kernel). Track G must switch the statement to such a `Lib` (its file; not edited here).
+- `ParTraverseWitness.neverCaptured` adapted to the new `WF.capOK`.

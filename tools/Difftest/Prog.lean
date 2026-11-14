@@ -175,6 +175,9 @@ inductive Prog where
   | rAllocated (res k : Prog)
   /-- Resource node: `I_R(a).both(I_R(b)).map { case (x, y) => pair x y }`. -/
   | rBoth (a b : Prog)
+  -- format v2 (batch 6.3)
+  /-- `IO.parTraverseN(n)(xs)(x => I(f)).map(list)`; `f` binds `x`. -/
+  | parTraverseN (n : Nat) (xs : List Atom) (f : Prog)
   deriving DecidableEq, Repr
 
 /-- Number of nodes. Nodes are numbered in pre-order from 0; the children of a node with
@@ -185,7 +188,8 @@ def Prog.size : Prog → Nat
   | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k
   | .rUse e k | .rAllocated e k | .rBoth e k => 1 + e.size + k.size
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
-  | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e => 1 + e.size
+  | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
+  | .parTraverseN _ _ e => 1 + e.size
   | .guarantee e k _ => 1 + e.size + k.size
   | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => 1 + a.size + u.size + r.size
   | _ => 1
@@ -201,7 +205,8 @@ def Prog.at? : Prog → Nat → Option Prog
     | .rUse e k | .rAllocated e k | .rBoth e k =>
       if i < e.size then e.at? i else k.at? (i - e.size)
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
-    | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e => e.at? i
+    | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
+    | .parTraverseN _ _ e => e.at? i
     | .guarantee e k _ => if i < e.size then e.at? i else k.at? (i - e.size)
     | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
       if i < a.size then a.at? i
@@ -231,6 +236,7 @@ def Prog.opName : Prog → String
   | .bracketFull .. => "bracketFull"
   | .memoize .. => "memoize" | .memoGet .. => "memoGet"
   | .rUse .. => "rUse" | .rAllocated .. => "rAllocated" | .rBoth .. => "rBoth"
+  | .parTraverseN .. => "parTraverseN"
 
 /-- The two sub-programs of a v2 combinator (`race`, `raceOutcome`, `both`, `bothOutcome`). -/
 def Prog.combArgs? : Prog → Option (Prog × Prog)
@@ -245,7 +251,8 @@ def Prog.ops (p : Prog) : List String :=
     | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k
     | .rUse e k | .rAllocated e k | .rBoth e k => e.ops ++ k.ops
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
-    | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e => e.ops
+    | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
+    | .parTraverseN _ _ e => e.ops
     | .guarantee e k _ => e.ops ++ k.ops
     | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => a.ops ++ u.ops ++ r.ops
     | _ => []
@@ -283,7 +290,8 @@ def Prog.resViewFree : Prog → Bool
   | .race e k | .raceOutcome e k | .both e k | .bothOutcome e k
   | .rUse e k | .rAllocated e k | .rBoth e k => e.resViewFree && k.resViewFree
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
-  | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .memoize e => e.resViewFree
+  | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .memoize e
+  | .parTraverseN _ _ e => e.resViewFree
   | .guarantee e k _ => e.resViewFree && k.resViewFree
   | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
     a.resViewFree && u.resViewFree && r.resViewFree
@@ -327,7 +335,8 @@ def v1Ops : List String :=
    "allocatedCase", "rPure", "rEval", "rMake", "rFlatMap"]
 /-- Ops of format v2 (`Json.V2Ops`): a decode error in a v0 or v1 case. -/
 def v2Ops : List String := ["race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket",
-  "bracketCase", "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth"]
+  "bracketCase", "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth",
+  "parTraverseN"]
 /-- The resource ops. -/
 def resOps : List String := ["rPure", "rEval", "rMake", "rFlatMap", "rBoth"]
 /-- `Json.DefaultMaxSteps` in `Json.scala`. -/
@@ -468,122 +477,133 @@ partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .i
   let fn (k : String) : D Nat := do
     let i ← n k
     if i ≥ userFnCount then fail s!"{ctx}.{k}: unknown user function {i}" else pure i
-  match op with
-  | "pure" => only ["v"]; .pure <$> a "v"
-  | "raise" => only ["code"]; .raise <$> n "code"
-  | "delay" =>
-    only ["fn", "arg"]
-    let f ← fn "fn"
-    let arg ← match get? o "arg" with
-      | some x => atom x scope s!"{ctx}.arg"
-      | none => pure (.lit .unit)
-    pure (.delay f arg)
-  | "bind" =>
-    only ["x", "e", "k"]; let x ← s "x"
-    pure (.bind (← p "e") (← p "k" ((x, .v) :: scope)))
-  | "seq" =>
-    only ["ps"]
-    match ← field o "ps" ctx with
-    | .arr ps =>
-      match ps.toList with
-      | [] => fail s!"{ctx}.ps: expected a non-empty array, got []"
-      | q :: qs =>
-        let first ← decodeProgIn q scope ver
-        qs.foldlM (fun acc r => do pure (Prog.seq acc (← decodeProgIn r scope ver))) first
-    | x => fail s!"{ctx}.ps: expected a non-empty array, got {x.compress}"
-  | "map" => only ["e", "fn"]; pure (.map (← p "e") (← fn "fn"))
-  | "handleErrorWith" =>
-    only ["e", "x", "k"]; let x ← s "x"
-    pure (.handleErrorWith (← p "e") (← p "k" ((x, .v) :: scope)))
-  | "attempt" => only ["e"]; .attempt <$> p "e"
-  | "uncancelable" =>
-    only ["poll", "body"]; let q ← s "poll"
-    .uncancelable <$> p "body" ((q, .p) :: scope)
-  | "poll" =>
-    only ["poll", "e"]; let q ← s "poll"
-    match lookup scope q with
-    | some (i, .p) => pure (.poll i (← p "e"))
-    | _ => fail s!"{ctx}: '{q}' is not a bound poll"
-  | "onCancel" => only ["e", "fin", "tag"]; pure (.onCancel (← p "e") (← p "fin") (← tag))
-  | "guaranteeCase" =>
-    only ["e", "x", "fin", "tag"]; let x ← s "x"
-    pure (.guaranteeCase (← p "e") (← p "fin" ((x, .v) :: scope)) (← tag))
-  | "canceled" => only []; pure .canceled
-  | "cede" => only []; pure .cede
-  | "never" => only []; pure .never
-  | "start" => only ["e"]; .start <$> p "e"
-  | "join" => only ["f"]; .join <$> a "f"
-  | "cancel" => only ["f"]; .cancel <$> a "f"
-  | "racePair" => only ["a", "b"]; pure (.racePair (← p "a") (← p "b"))
-  | "sleep" => only ["ms"]; .sleep <$> n "ms"
-  | "refNew" => only ["v"]; .refNew <$> a "v"
-  | "refGet" => only ["r"]; .refGet <$> a "r"
-  | "refSet" => only ["r", "v"]; pure (.refSet (← a "r") (← a "v"))
-  | "refModify" => only ["r", "fn"]; pure (.refModify (← a "r") (← fn "fn"))
-  | "deferredNew" => only []; pure .deferredNew
-  | "deferredGet" => only ["d"]; .deferredGet <$> a "d"
-  | "deferredComplete" => only ["d", "v"]; pure (.deferredComplete (← a "d") (← a "v"))
-  | "async" =>
-    only ["cbs", "fin", "tag"]
-    let cbs ← match ← field o "cbs" ctx with
-      | .arr cs => cs.toList.mapM cb
-      | x => fail s!"{ctx}.cbs: expected an array, got {x.compress}"
-    match get? o "fin" with
-    | some f => pure (.asyncFin cbs (← decodeProgIn f scope ver) (← tag))
-    | none => pure (.async cbs (← tag))
-  | "case" =>
-    only ["on", "l", "lk", "r", "rk"]; let l ← s "l"; let r ← s "r"
-    pure (.case (← a "on") (← p "lk" ((l, .v) :: scope)) (← p "rk" ((r, .v) :: scope)))
-  | "split" =>
-    only ["on", "a", "b", "k"]; let x ← s "a"; let y ← s "b"
-    pure (.split (← a "on") (← p "k" ((y, .v) :: (x, .v) :: scope)))
-  | "timeout" => only ["e", "ms"]; pure (.timeout (← p "e") (← n "ms"))
-  | "timeoutTo" =>
-    only ["e", "ms", "fb"]; let e ← p "e"; let ms ← n "ms"
-    pure (.timeoutTo e (← p "fb") ms)
-  | "queueNew" => only []; pure .queueNew
-  | "queueOffer" => only ["q", "v"]; pure (.queueOffer (← a "q") (← a "v"))
-  | "queueTake" => only ["q"]; .queueTake <$> a "q"
-  | "queueTryTake" => only ["q"]; .queueTryTake <$> a "q"
-  | "allocatedCase" => only ["res"]; .allocatedCase <$> r "res"
-  | "syncStep" => fail s!"{ctx}: only at the root of a program"
-  | "rPure" => only ["v"]; .rPure <$> a "v"
-  | "rEval" => only ["e"]; .rEval <$> p "e"
-  | "rMake" =>
-    only ["acq", "x", "rel"]; let x ← s "x"
-    pure (.rMake (← p "acq") (← p "rel" ((x, .v) :: scope)))
-  | "rFlatMap" =>
-    only ["res", "x", "k"]; let x ← s "x"
-    pure (.rFlatMap (← r "res") (← r "k" ((x, .v) :: scope)))
-  | "race" => only ["a", "b"]; pure (.race (← p "a") (← p "b"))
-  | "raceOutcome" => only ["a", "b"]; pure (.raceOutcome (← p "a") (← p "b"))
-  | "both" => only ["a", "b"]; pure (.both (← p "a") (← p "b"))
-  | "bothOutcome" => only ["a", "b"]; pure (.bothOutcome (← p "a") (← p "b"))
-  -- format v2
-  | "guarantee" => only ["e", "fin", "tag"]; pure (.guarantee (← p "e") (← p "fin") (← tag))
-  | "bracket" =>
-    only ["acq", "x", "use", "rel", "tag"]; let x ← s "x"
-    pure (.bracket (← p "acq") (← p "use" ((x, .v) :: scope)) (← p "rel" ((x, .v) :: scope)) (← tag))
-  | "bracketCase" =>
-    only ["acq", "x", "use", "y", "rel", "tag"]; let x ← s "x"; let y ← s "y"
-    pure (.bracketCase (← p "acq") (← p "use" ((x, .v) :: scope))
-      (← p "rel" ((y, .v) :: (x, .v) :: scope)) (← tag))
-  | "bracketFull" =>
-    only ["poll", "acq", "x", "use", "y", "rel", "tag"]; let q ← s "poll"; let x ← s "x"; let y ← s "y"
-    pure (.bracketFull (← p "acq" ((q, .p) :: scope)) (← p "use" ((x, .v) :: scope))
-      (← p "rel" ((y, .v) :: (x, .v) :: scope)) (← tag))
-  -- format v2 (track M)
-  | "memoize" => only ["e"]; pure (.memoize (← p "e"))
-  | "memoGet" => only ["m"]; .memoGet <$> a "m"
-  -- format v2 (track Res)
-  | "rUse" =>
-    only ["res", "x", "k"]; let x ← s "x"
-    pure (.rUse (← r "res") (← p "k" ((x, .v) :: scope)))
-  | "rAllocated" =>
-    only ["res", "x", "k"]; let x ← s "x"
-    pure (.rAllocated (← r "res") (← p "k" ((x, .v) :: scope)))
-  | "rBoth" => only ["a", "b"]; pure (.rBoth (← r "a") (← r "b"))
-  | _ => fail s!"unknown op '{op}'"
+  -- format v2 (batch 6.3): handled before the big `match` (adding an alternative there made the
+  -- pattern-match compiler fail on the string literals)
+  if op == "parTraverseN" then do
+    only ["n", "xs", "x", "f"]; let x ← s "x"
+    let k ← n "n"
+    if k < 1 || k > 1000 then fail s!"{ctx}.n: expected 1..1000, got {k}"
+    let xs ← match ← field o "xs" ctx with
+      | .arr vs => vs.toList.mapM (fun j => atom j scope s!"{ctx}.xs")
+      | v => fail s!"{ctx}.xs: expected an array, got {v.compress}"
+    pure (.parTraverseN k xs (← p "f" ((x, .v) :: scope)))
+  else
+    match op with
+    | "pure" => only ["v"]; .pure <$> a "v"
+    | "raise" => only ["code"]; .raise <$> n "code"
+    | "delay" =>
+      only ["fn", "arg"]
+      let f ← fn "fn"
+      let arg ← match get? o "arg" with
+        | some x => atom x scope s!"{ctx}.arg"
+        | none => pure (.lit .unit)
+      pure (.delay f arg)
+    | "bind" =>
+      only ["x", "e", "k"]; let x ← s "x"
+      pure (.bind (← p "e") (← p "k" ((x, .v) :: scope)))
+    | "seq" =>
+      only ["ps"]
+      match ← field o "ps" ctx with
+      | .arr ps =>
+        match ps.toList with
+        | [] => fail s!"{ctx}.ps: expected a non-empty array, got []"
+        | q :: qs =>
+          let first ← decodeProgIn q scope ver
+          qs.foldlM (fun acc r => do pure (Prog.seq acc (← decodeProgIn r scope ver))) first
+      | x => fail s!"{ctx}.ps: expected a non-empty array, got {x.compress}"
+    | "map" => only ["e", "fn"]; pure (.map (← p "e") (← fn "fn"))
+    | "handleErrorWith" =>
+      only ["e", "x", "k"]; let x ← s "x"
+      pure (.handleErrorWith (← p "e") (← p "k" ((x, .v) :: scope)))
+    | "attempt" => only ["e"]; .attempt <$> p "e"
+    | "uncancelable" =>
+      only ["poll", "body"]; let q ← s "poll"
+      .uncancelable <$> p "body" ((q, .p) :: scope)
+    | "poll" =>
+      only ["poll", "e"]; let q ← s "poll"
+      match lookup scope q with
+      | some (i, .p) => pure (.poll i (← p "e"))
+      | _ => fail s!"{ctx}: '{q}' is not a bound poll"
+    | "onCancel" => only ["e", "fin", "tag"]; pure (.onCancel (← p "e") (← p "fin") (← tag))
+    | "guaranteeCase" =>
+      only ["e", "x", "fin", "tag"]; let x ← s "x"
+      pure (.guaranteeCase (← p "e") (← p "fin" ((x, .v) :: scope)) (← tag))
+    | "canceled" => only []; pure .canceled
+    | "cede" => only []; pure .cede
+    | "never" => only []; pure .never
+    | "start" => only ["e"]; .start <$> p "e"
+    | "join" => only ["f"]; .join <$> a "f"
+    | "cancel" => only ["f"]; .cancel <$> a "f"
+    | "racePair" => only ["a", "b"]; pure (.racePair (← p "a") (← p "b"))
+    | "sleep" => only ["ms"]; .sleep <$> n "ms"
+    | "refNew" => only ["v"]; .refNew <$> a "v"
+    | "refGet" => only ["r"]; .refGet <$> a "r"
+    | "refSet" => only ["r", "v"]; pure (.refSet (← a "r") (← a "v"))
+    | "refModify" => only ["r", "fn"]; pure (.refModify (← a "r") (← fn "fn"))
+    | "deferredNew" => only []; pure .deferredNew
+    | "deferredGet" => only ["d"]; .deferredGet <$> a "d"
+    | "deferredComplete" => only ["d", "v"]; pure (.deferredComplete (← a "d") (← a "v"))
+    | "async" =>
+      only ["cbs", "fin", "tag"]
+      let cbs ← match ← field o "cbs" ctx with
+        | .arr cs => cs.toList.mapM cb
+        | x => fail s!"{ctx}.cbs: expected an array, got {x.compress}"
+      match get? o "fin" with
+      | some f => pure (.asyncFin cbs (← decodeProgIn f scope ver) (← tag))
+      | none => pure (.async cbs (← tag))
+    | "case" =>
+      only ["on", "l", "lk", "r", "rk"]; let l ← s "l"; let r ← s "r"
+      pure (.case (← a "on") (← p "lk" ((l, .v) :: scope)) (← p "rk" ((r, .v) :: scope)))
+    | "split" =>
+      only ["on", "a", "b", "k"]; let x ← s "a"; let y ← s "b"
+      pure (.split (← a "on") (← p "k" ((y, .v) :: (x, .v) :: scope)))
+    | "timeout" => only ["e", "ms"]; pure (.timeout (← p "e") (← n "ms"))
+    | "timeoutTo" =>
+      only ["e", "ms", "fb"]; let e ← p "e"; let ms ← n "ms"
+      pure (.timeoutTo e (← p "fb") ms)
+    | "queueNew" => only []; pure .queueNew
+    | "queueOffer" => only ["q", "v"]; pure (.queueOffer (← a "q") (← a "v"))
+    | "queueTake" => only ["q"]; .queueTake <$> a "q"
+    | "queueTryTake" => only ["q"]; .queueTryTake <$> a "q"
+    | "allocatedCase" => only ["res"]; .allocatedCase <$> r "res"
+    | "syncStep" => fail s!"{ctx}: only at the root of a program"
+    | "rPure" => only ["v"]; .rPure <$> a "v"
+    | "rEval" => only ["e"]; .rEval <$> p "e"
+    | "rMake" =>
+      only ["acq", "x", "rel"]; let x ← s "x"
+      pure (.rMake (← p "acq") (← p "rel" ((x, .v) :: scope)))
+    | "rFlatMap" =>
+      only ["res", "x", "k"]; let x ← s "x"
+      pure (.rFlatMap (← r "res") (← r "k" ((x, .v) :: scope)))
+    | "race" => only ["a", "b"]; pure (.race (← p "a") (← p "b"))
+    | "raceOutcome" => only ["a", "b"]; pure (.raceOutcome (← p "a") (← p "b"))
+    | "both" => only ["a", "b"]; pure (.both (← p "a") (← p "b"))
+    | "bothOutcome" => only ["a", "b"]; pure (.bothOutcome (← p "a") (← p "b"))
+    -- format v2
+    | "guarantee" => only ["e", "fin", "tag"]; pure (.guarantee (← p "e") (← p "fin") (← tag))
+    | "bracket" =>
+      only ["acq", "x", "use", "rel", "tag"]; let x ← s "x"
+      pure (.bracket (← p "acq") (← p "use" ((x, .v) :: scope)) (← p "rel" ((x, .v) :: scope)) (← tag))
+    | "bracketCase" =>
+      only ["acq", "x", "use", "y", "rel", "tag"]; let x ← s "x"; let y ← s "y"
+      pure (.bracketCase (← p "acq") (← p "use" ((x, .v) :: scope))
+        (← p "rel" ((y, .v) :: (x, .v) :: scope)) (← tag))
+    | "bracketFull" =>
+      only ["poll", "acq", "x", "use", "y", "rel", "tag"]; let q ← s "poll"; let x ← s "x"; let y ← s "y"
+      pure (.bracketFull (← p "acq" ((q, .p) :: scope)) (← p "use" ((x, .v) :: scope))
+        (← p "rel" ((y, .v) :: (x, .v) :: scope)) (← tag))
+    -- format v2 (track M)
+    | "memoize" => only ["e"]; pure (.memoize (← p "e"))
+    | "memoGet" => only ["m"]; .memoGet <$> a "m"
+    -- format v2 (track Res)
+    | "rUse" =>
+      only ["res", "x", "k"]; let x ← s "x"
+      pure (.rUse (← r "res") (← p "k" ((x, .v) :: scope)))
+    | "rAllocated" =>
+      only ["res", "x", "k"]; let x ← s "x"
+      pure (.rAllocated (← r "res") (← p "k" ((x, .v) :: scope)))
+    | "rBoth" => only ["a", "b"]; pure (.rBoth (← r "a") (← r "b"))
+    | _ => fail s!"unknown op '{op}'"
 
 /-- Reject a v2 op anywhere in `j` (a case of format v0 or v1; `Json.checkNoV2`). -/
 partial def checkNoV2 : Json → D Unit

@@ -103,7 +103,8 @@ object Json:
 
   /** Ops of format v2 (a decode error in a v0 or v1 case). */
   val V2Ops: Set[String] = Set("race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket", "bracketCase",
-    "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth")
+    "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth",
+    "parTraverseN")
 
   /** Reject a v2 op anywhere in `j` (a case of format v0 or v1). */
   private def checkNoV2(j: Value): Unit = j match
@@ -257,6 +258,15 @@ object Json:
       case "rAllocated" =>
         only("res", "x", "k"); val x = s("x")
         Prog.RAllocated(res(field(o, "res", ctx), scope, v1), x, p("k", scope + (x -> Kind.V)))
+      // ---- format v2 (batch 6.3)
+      case "parTraverseN" =>
+        only("n", "xs", "x", "f"); val x = s("x")
+        val k = n("n")
+        if k < 1 || k > 1000 then fail(s"$ctx.n: expected 1..1000, got $k")
+        val xs = field(o, "xs", ctx) match
+          case ujson.Arr(vs) => vs.toList.map(atom(_, scope, s"$ctx.xs"))
+          case v => fail(s"$ctx.xs: expected an array, got $v")
+        Prog.ParTraverseN(k.toInt, xs, x, p("f", scope + (x -> Kind.V)))
       case "syncStep" => fail(s"$ctx: only at the root of a program")
       case r if ResOps.contains(r) => fail(s"$ctx: a resource op outside a resource position")
       case _ => fail(s"unknown op '$op'")

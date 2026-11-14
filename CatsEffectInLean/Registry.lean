@@ -15,6 +15,7 @@ import CatsEffectInLean.Props.Phase6.Memoize
 import CatsEffectInLean.Proofs.Phase6.MemoizeStuck
 import CatsEffectInLean.Props.Phase6.Resource
 import CatsEffectInLean.Proofs.Phase6.ResourceBoth
+import CatsEffectInLean.Props.Phase6.ParTraverse
 
 /-!
 # Property registry
@@ -179,8 +180,8 @@ def registry : List Entry := [
       lake exe leaksmoke (140,400 random runs, 0 violations; wrong function 'race without \
       cancel' leaks), spikes/race-leak/LeakSmoke.scala on CE 3.7.1 (7,038 completed runs, 0 \
       violations). Open: needs an invariant over Step/SchedP that a racing fiber passes its \
-      combinator only after both children are done; exact search does not scale (>10^4 states). Track P (2026-11-10): not settled. Proven so far: F1/F2 frame lemmas for all runs \
-      (Proofs/Lemmas/Frame.lean: owner_stable, sframe_runSchedStateP). Gap: runtime grammar S, slot-0 \
+      combinator only after both children are done; exact search does not scale (>10^4 states). Track P (2026-11-10): not settled. Proven so far: F1/F1b/F2 frame lemmas for all runs \
+      (Proofs/Lemmas/Frame.lean: owner_stable, result_stable). Gap: runtime grammar S, slot-0 \
       discipline F3, outcome stability F4 with the takeover/join protocols P1/P2, handle secrecy H, \
       and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md)." },
   { id := "core.IO.race.combCanceledNoLeak"
@@ -191,8 +192,8 @@ def registry : List Entry := [
     status := .«open»
     note := "Decision 50 form of combNoLeak: a parent starts the combinator, cancels it and joins \
       it; at root completion fiber 1 has no live race child. Same smoke evidence; open for the \
-      same reason. Track P (2026-11-10): not settled. Proven so far: F1/F2 frame lemmas for all runs \
-      (Proofs/Lemmas/Frame.lean: owner_stable, sframe_runSchedStateP). Gap: runtime grammar S, slot-0 \
+      same reason. Track P (2026-11-10): not settled. Proven so far: F1/F1b/F2 frame lemmas for all runs \
+      (Proofs/Lemmas/Frame.lean: owner_stable, result_stable). Gap: runtime grammar S, slot-0 \
       discipline F3, outcome stability F4 with the takeover/join protocols P1/P2, handle secrecy H, \
       and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md)." },
   { id := "core.IO.timeout.noLeak"
@@ -200,8 +201,8 @@ def registry : List Entry := [
     prop := ``Props.Phase6.Race.timeoutNoLeak
     status := .«open»
     note := "fa.timeout(d), direct and canceled by a parent (decision 50): at root completion the \
-      timeout's racePair (source and sleep) has no live child. Smoke as combNoLeak; open. Track P (2026-11-10): not settled. Proven so far: F1/F2 frame lemmas for all runs \
-      (Proofs/Lemmas/Frame.lean: owner_stable, sframe_runSchedStateP). Gap: runtime grammar S, slot-0 \
+      timeout's racePair (source and sleep) has no live child. Smoke as combNoLeak; open. Track P (2026-11-10): not settled. Proven so far: F1/F1b/F2 frame lemmas for all runs \
+      (Proofs/Lemmas/Frame.lean: owner_stable, result_stable). Gap: runtime grammar S, slot-0 \
       discipline F3, outcome stability F4 with the takeover/join protocols P1/P2, handle secrecy H, \
       and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md)." },
   { id := "core.IO.raceOutcome.isWinnerOutcome"
@@ -210,20 +211,10 @@ def registry : List Entry := [
     status := .«open»
     note := "raceOutcome returns Left(oc) only if fiber 1 (fa) ended with oc, Right(oc) only if \
       fiber 2 (fb) did. Smoke: leaksmoke (0 violations). Open: same invariant argument (needs H, \
-      F4 and the first-write rule of the race ContState). Track P (2026-11-10): not settled. Proven so far: F1/F2 frame lemmas for all runs \
-      (Proofs/Lemmas/Frame.lean: owner_stable, sframe_runSchedStateP). Gap: runtime grammar S, slot-0 \
+      F4 and the first-write rule of the race ContState). Track P (2026-11-10): not settled. Proven so far: F1/F1b/F2 frame lemmas for all runs \
+      (Proofs/Lemmas/Frame.lean: owner_stable, result_stable). Gap: runtime grammar S, slot-0 \
       discipline F3, outcome stability F4 with the takeover/join protocols P1/P2, handle secrecy H, \
       and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md)." },
-  { id := "laws.GenSpawnLaws.uncancelableRaceNotInherited.IO"
-    rows := ["laws.GenSpawnLaws.uncancelableRaceNotInherited", "core.IO.race", "kernel.GenSpawn.race"]
-    prop := ``Props.Phase6.Race.uncancelableRaceNotInherited
-    status := .«open»
-    note := "Closed law (no input) under EqvP. Believed true: random runs of both sides give only \
-      'blocked' (leaksmoke). Open: the exact state set of the left side is too large for \
-      checkEqvP in the kernel (decide +kernel hit the deterministic timeout after 8 min; the \
-      compiled exploreP had 994 states after 800 expansions, not closed). Track P: the full closed \
-      set has 4,441 states (11 halted); checkEqvP dedups by list membership, too slow in the \
-      kernel. Gap: a certificate checker or a quotient by the run-loop counters." },
   -- Phase 6, track G (guarantee, bracket*)
   { id := "core.IO.bracketFull.kernelDefaultTwin"
     rows := ["core.IO.bracketFull", "core.IO.IOAsync.bracketFull", "kernel.MonadCancel.bracketFull"]
@@ -378,7 +369,39 @@ def registry : List Entry := [
       for 4 programs fa; the over-masking Eval (wrong function) breaks it for IO.canceled \
       (test/Phase6/ResourceSmoke.lean, part 3). Believed true: a masked root never ends \
       Canceled, and alloc keeps every Canceled run of fa. Open: needs that invariant over \
-      Step/SchedP." }
+      Step/SchedP." },
+  -- Phase 6, batch 6.3 (parTraverseN; Props/Phase6/ParTraverse.lean)
+  { id := "core.IO.parTraverseN.resultOrder"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNOrder
+    status := .«open»
+    note := "If parTraverseN(n)(as)(f) succeeds, the result holds one entry per input in input order \
+      (f tagged by the harness as a => f(a).map(b => (a, b)); no lost, duplicated or \
+      reordered entry). All user code, n >= 1, all schedules; model limit: at most 4 inputs \
+      (Scala Set1..Set4, not HashSet). Satisfiable: Proofs.Phase6.ParTraverseWitness.\
+      parTraverseNOrder_satisfiable. Smoke: lake exe ptsmoke (random schedules; a reversed \
+      result breaks it). Open: needs an invariant over Step/SchedP for all f." },
+  { id := "core.IO.parTraverseN.pureSucceeds"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNPureSucceeds
+    status := .«open»
+    note := "For f(a) = IO.pure(g(a)), every run that stops ends Succeeded(as.map(g)): no deadlock, \
+      no error, input order. Satisfiable (parTraverseNPureSucceeds_satisfiable). Smoke: \
+      ptsmoke (a dropped result breaks it). Open: needs a liveness and value invariant." },
+  { id := "core.IO.parTraverseN.errorAborts"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNErrorAborts
+    status := .«open»
+    note := "If f(a0) raises e, a0 is among the first n inputs and every other f(a) never completes, \
+      every run that stops ends Errored(e) (Scaladoc K/GC:139-140: errors abort the \
+      sequence). Satisfiable (parTraverseNErrorAborts_satisfiable). Smoke: ptsmoke (no \
+      cancelAll in the error branch breaks it). Open." },
+  { id := "core.IO.parTraverseN.cancelAborts"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNCancelAborts
+    status := .«open»
+    note := "The same for a self-cancel f(a0) = IO.canceled: every run that stops ends Canceled. \
+      Satisfiable (parTraverseNCancelAborts_satisfiable). Smoke: ptsmoke. Open." }
 ]
 
 end CatsEffectInLean

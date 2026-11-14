@@ -207,6 +207,15 @@
 ## [2026-11-10] ingest | Track G review fixes (review batch 4, decisions 53-54)
 - Updated: guarantee and bracket model (restated invariants with harness markers, satisfiability witnesses, smoke with hypotheses), race and both model (GenSpawnLaws citation :146-147)
 
+## [2026-11-10] ingest | Track P round 2: certificate checker, law uncancelableRaceNotInherited proven, F1b
+- Raw: raw/lean-tooling/2026-11-10-certificate-checker-track-p-notes.md
+- Created: Certificate checks of closed state sets
+- Updated: Race no-leak invariant (F1b, law proven), race, both and fiber leaks, Outcome sets (large sets), Kernel evaluation (See Also), index
+
+## [2026-11-10] ingest | Decision 55: heavy proofs lib, heavy registry, heavy CI job
+- Raw: raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md
+- Updated: Registry and audit (heavy proofs section, self-test), Certificate checks (CI layout)
+
 ## [2026-11-14] ingest | Review batch 6 (re-review of 5 track G/Res entries; 5 HOLLOW)
 - Updated: Agent workflow (review log, satisfiable-hypotheses note), guarantee and bracket model, Resource use, allocated, both, index
 - Raw: raw/project-decisions/2026-11-14-review-batch-6-notes.md
@@ -215,6 +224,19 @@
 - Updated: Agent workflow (harness privacy section)
 - Raw: raw/project-decisions/2026-11-14-decision-56-harness-privacy.md
 
+## [2026-11-14] ingest | Batch 6.3: parTraverseN
+- Created: parTraverseN model
+- Updated: Difftest program format (op `parTraverseN`), index
+- Raw: raw/cats-effect/2026-11-14-partraverse-notes.md
+
+## [2026-11-14] ingest | Review batch 7: parTraverseN and heavy-proof CI split
+- Updated: Agent workflow (review log), Registry and audit (CI split gaps), parTraverseN model (review result), index
+- Raw: raw/project-decisions/2026-11-14-review-batch-7-notes.md
+
 ## [2026-11-14] ingest | Track Res: harness privacy by construction (decision 56)
 - Updated: Resource use, allocated, both (harness, files, inventory), guarantee and bracket model (deep captured), Outcome sets (WellFormed Lib), Agent workflow (implementation of decision 56), index
+- Raw: raw/cats-effect/2026-11-14-harness-privacy-notes.md
+
+## [2026-11-14] ingest | Track Res: review batch 7 defect D regression (parTraverseN)
+- Updated: raw harness privacy note (parTraverseN user function as number field; deep Lib rejects it)
 - Raw: raw/cats-effect/2026-11-14-harness-privacy-notes.md

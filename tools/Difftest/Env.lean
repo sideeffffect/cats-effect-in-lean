@@ -371,6 +371,10 @@ def runClo (U : ResourceUse.UEnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) :
     match env with
     | [rel] => prog (.map (ResourceUse.srcU U rel) (clo node .constVal [arg]))
     | _ => DResult.harness
+  -- format v2 (batch 6.3): `x => run(f, env + x)`, called by the mirror inside the fiber
+  | .ptF, .parTraverseN _ _ f => ofTr (tr R f (node + 1) (arg :: env) vw)
+  -- `.map(bs => list)`: the model already holds the list encoding
+  | .ptList, _ => ret arg
   | _, _ => DResult.harness
 
 /-- The difftest closures of program `p`, with trace and failure lists. -/
@@ -419,7 +423,11 @@ def srcIO (p : Prog) (srcV : Val) : IO :=
       | .error e => .error e.toErr
     | none => .error harnessErr
   -- track Res: a source code of the `Resource` mirror (`ResourceUse.USrc`)
-  | _ => if (ResourceUse.USrc.ofVal srcV).isSome then ResourceUse.srcU (uenvOf p) srcV else .error harnessErr
+  | _ =>
+    if (ResourceUse.USrc.ofVal srcV).isSome then ResourceUse.srcU (uenvOf p) srcV
+    -- batch 6.3: a source code of the `parTraverseN` mirror (namespace 41)
+    else if (CatsEffectInLean.Model.Codec.ofCloVal srcV).any (·.1 == ParTraverse.ns) then ParTraverse.ioOf srcV
+    else .error harnessErr
 
 /-- The external sources of `Bracket.call` (format v2): `I(e)` and the finalizer of
 `guarantee`, `I(acq)` of `bracket`/`bracketCase`, each built with the snapshot of the op. -/
@@ -440,7 +448,11 @@ def bracketSrcIO (p : Prog) (srcV : Val) : IO :=
     | .ok io => io
     | .error e => .error e.toErr
   -- track Res: a source code of the `Resource` mirror (`ResourceUse.USrc`)
-  | _ => if (ResourceUse.USrc.ofVal srcV).isSome then ResourceUse.srcU (uenvOf p) srcV else .error harnessErr
+  | _ =>
+    if (ResourceUse.USrc.ofVal srcV).isSome then ResourceUse.srcU (uenvOf p) srcV
+    -- batch 6.3: a source code of the `parTraverseN` mirror (namespace 41)
+    else if (CatsEffectInLean.Model.Codec.ofCloVal srcV).any (·.1 == ParTraverse.ns) then ParTraverse.ioOf srcV
+    else .error harnessErr
 
 /-- A library closure of the mirrors. -/
 inductive LibClo where
@@ -451,6 +463,7 @@ inductive LibClo where
   | bracket (l : Bracket.BLam)
   | memoize (l : Memoize.MLam)
   | ures (l : ResourceUse.ULam)
+  | ptrav (l : ParTraverse.PT)
 
 /-- The library closure of an id that is not a difftest closure id, if exactly one mirror
 decodes it. -/
@@ -469,6 +482,7 @@ def libClo? (id : Nat) : Option LibClo :=
           else if k == Bracket.ns then (Bracket.BLam.ofFields tag fs).map .bracket
           else if k == Memoize.ns then (Memoize.MLam.ofFields tag fs).map .memoize
           else if k == ResourceUse.ns then (ResourceUse.ULam.ofFields tag fs).map .ures
+          else if k == ParTraverse.ns then (ParTraverse.PT.ofFields tag fs).map .ptrav
           else none
         | none => none
       match res, lib with
@@ -493,7 +507,11 @@ def dispatchDt (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
 def dispatchRes (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
   match ResourceUse.ULam.ofId? id with
   | some l => ResourceUse.callU (uenvOf p) (dispatchDt p) l arg vw
-  | none => dispatchDt p id arg vw
+  | none =>
+    -- batch 6.3: the `guaranteeCase` finalizers of `parTraverseN` are `ParTraverse` closures
+    match ParTraverse.PT.ofId? id with
+    | some l => ParTraverse.call (dispatchDt p) l arg vw
+    | none => dispatchDt p id arg vw
 
 /-- All closures of program `p`: difftest closures (with trace and failures) and library
 closures (module doc). -/
@@ -510,6 +528,7 @@ def dispatch (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
     | some (.bracket l) => Bracket.call (dispatchRes p) (bracketSrcIO p) l arg vw
     | some (.ures l) => ResourceUse.callU (uenvOf p) (dispatchDt p) l arg vw
     | some (.memoize l) => Memoize.call (srcIO p) l arg vw
+    | some (.ptrav l) => ParTraverse.call (dispatchDt p) l arg vw
     | none => DResult.harness.toUser
 
 /-- The `Model.UserEnv` of program `p` (see module doc). -/

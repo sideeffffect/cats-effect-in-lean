@@ -57,6 +57,8 @@ Unbounded properties (all schedules, all depths, liveness) still need proofs by 
 
 ## See Also
 
+- [Certificate checks of closed state sets](certificate-checker.md) (linear-time closure check of an untrusted certificate; cost per state in the real model, chunking)
+
 - [Outcome sets, `Eqv` and the IO laws](../semantics/outcome-equivalence.md)
 
 - [Lean v4.35.0 toolchain](toolchain-v4-35.md)
