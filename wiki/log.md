@@ -214,3 +214,7 @@
 ## [2026-11-14] ingest | Decision 56: harness privacy by construction or proof
 - Updated: Agent workflow (harness privacy section)
 - Raw: raw/project-decisions/2026-11-14-decision-56-harness-privacy.md
+
+## [2026-11-14] ingest | Track Res: harness privacy by construction (decision 56)
+- Updated: Resource use, allocated, both (harness, files, inventory), guarantee and bracket model (deep captured), Outcome sets (WellFormed Lib), Agent workflow (implementation of decision 56), index
+- Raw: raw/cats-effect/2026-11-14-harness-privacy-notes.md
