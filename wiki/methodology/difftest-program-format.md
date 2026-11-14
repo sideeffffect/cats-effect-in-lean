@@ -122,7 +122,7 @@ New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decod
 |----|--------|------|
 | `parTraverseN` | `n` (1..1000), `xs`: list of atoms, `x`, `f` | `IO.parTraverseN(n)(⟦xs⟧)(a => I(f)[x := a]).map(list)`; the list result is right-nested pairs ending in unit |
 
-- Lean: `Model/ParTraverse.lean` (`parTraverseNIO`); lambdas `ptF`, `ptList`. The generator (`tpl_parTraverse`, `tpl_parTraverseCancel`) uses at most 4 inputs (the mirror's `Set1`..`Set4` limit). See [parTraverseN model](../cats-effect/partraverse-model.md).
+- Lean: `Model/ParTraverse.lean` (`parTraverseNIO`); lambdas `ptF`, `ptList`. The generator (`tpl_parTraverse`, `tpl_parTraverseCancel`) uses at most 4 inputs: from 5 the supervision set is a `HashSet` whose order the mirror takes as an input (`ho`), and the difftest runs the mirror with `ho = id`. See [parTraverseN model](../cats-effect/partraverse-model.md).
 
 ### Format v2 ops of track G (same version, same `checkNoV2` gate)
 

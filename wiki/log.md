@@ -233,6 +233,15 @@
 - Updated: Agent workflow (review log), Registry and audit (CI split gaps), parTraverseN model (review result), index
 - Raw: raw/project-decisions/2026-11-14-review-batch-7-notes.md
 
+## [2026-11-14] update | Review 7: parTraverseN fixes
+- Updated: parTraverseN model (HashSet order as input `ho`, no `as.length ≤ 4`, statements 5-7 with a behaviour harness, resultOrder waits for decision 56), Difftest program format, index
+- Raw: raw/cats-effect/2026-11-14-partraverse-review7.md
+- Smoke `lake exe ptsmoke 100`: 55,980 stopped runs, 0 violations; behaviour tables 120/84/63; all 8 wrong functions break their claim (1000 permits: 72 and 26 runs of 100)
+
+## [2026-11-14] ingest | Decision 57: heavy-proofs required, split into parallel jobs (user answer Q4)
+- Updated: Registry and audit (heavy proofs section)
+- Raw: raw/project-decisions/2026-11-14-decision-57-required-heavy-checks.md
+
 ## [2026-11-14] ingest | Track Res: harness privacy by construction (decision 56)
 - Updated: Resource use, allocated, both (harness, files, inventory), guarantee and bracket model (deep captured), Outcome sets (WellFormed Lib), Agent workflow (implementation of decision 56), index
 - Raw: raw/cats-effect/2026-11-14-harness-privacy-notes.md

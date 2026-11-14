@@ -6,6 +6,7 @@ Only non-obvious questions that agents cannot decide alone. Answers: `raw/projec
 
 - Question: Should the `Async`/`Sync`/`MonadCancel` instances for monad transformers (`OptionT`, `EitherT`, `Kleisli`, `StateT`, `WriterT`, `IorT`) be in scope before Phase 9?
 - Context: the inventory has 306 rows for them. Historically they had real cancellation bugs (masks and `poll` threading through `F`). They add a large model surface.
+- **Answer (user, 2026-11-14):** "Yes. But if you think it's a good idea, feel free to split it into a separate check. Maybe even multiple checks, if parallelism would help here." Decision 57: `heavy-proofs` becomes a required check. The heavy work and the paranoid replay are split into parallel matrix jobs, with one aggregate job `heavy-proofs` as the stable required name. See `raw/project-decisions/2026-11-14-decision-57-required-heavy-checks.md`.
 - Default until you answer: `excluded` with reason `deferred:`. We revisit after Phase 7.
 
 ## Q2 (2026-11-10): Add `sorryAx` to the forbidden-pattern list? — ANSWERED: yes (done)
