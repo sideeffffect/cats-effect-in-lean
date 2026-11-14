@@ -273,14 +273,20 @@ def registry : List Entry := [
       Counterexample: fa = IO.canceled, one preemption of the second get between state.get and \
       state.flatModifyFull; flatModifyFull returns canceled *> never without poll (masked), so \
       the get waits forever (K/GenConcurrent.scala:91-92). Fixed twin poll(fromEither(..).flatten) \
-      is never blocked with one preemption < 120 (Proofs/Phase6/MemoizeFixed.lean)." },
+      completes on all one-preemption schedules < 120 for 7 fa (canceled, pure, raiseError, \
+      emit >> canceled, start(emit) >> canceled, cede >> canceled with a 2-preemption grid, \
+      uncancelable(_ => canceled)); v3.7.1 is stuck exactly for the self-canceling fa \
+      (Proofs/Phase6/MemoizeFixed.lean). Hypothesis satisfiable: MemoizeStuck.fa_wf; observed \
+      memo cell not forgeable (Proofs/Phase6/MemoizeSat.lean, decision 54)." },
   { id := "core.IO.memoize.getsAgree"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeGetsAgree
     status := .«open»
     note := "Two concurrent gets observe the same outcome when the root completes (all \
       WellFormed fa, all PChoice schedules). Smoke: 9 fa x 400 random schedules, 0 violations; a \
-      memoize without cache breaks it (test/Phase6/MemoizeSmoke.lean). Open: a proof for all fa \
+      memoize without cache breaks it (test/Phase6/MemoizeSmoke.lean). Satisfiability witness \
+      (decision 53): MemoizeSat.getsAgree_sat (fa = IO.cede: a get subscribes during the \
+      evaluation, root completes with a pair). Open: a proof for all fa \
       needs a state invariant over SchedP (memo cell, deferred cell, go fiber outcome)." },
   { id := "core.IO.memoize.atMostOnce"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
@@ -288,7 +294,9 @@ def registry : List Entry := [
     status := .«open»
     note := "Without a cancel from the program, fa starts at most once (counter <= 1 in every \
       reachable state of countedTwoGets). Smoke: 9 fa x 400 random schedules, max 1; a memoize \
-      without cache gives 2 (test/Phase6/MemoizeSmoke.lean). Open: same missing invariant as \
+      without cache gives 2 (test/Phase6/MemoizeSmoke.lean). Satisfiability witness: \
+      MemoizeSat.atMostOnce_sat (counter 1, a get during the evaluation). Counter and memo cell \
+      not forgeable (MemoizeSat.forged_*). Open: same missing invariant as \
       core.IO.memoize.getsAgree (at most one Evaluating transition while no get is canceled)." },
   -- Phase 6, track Res (Resource use/allocated/both)
   { id := "kernel.Resource.both.releaseOnce"
@@ -299,28 +307,34 @@ def registry : List Entry := [
     thm := some ``Proofs.Phase6.bothReleasesBoth_refuted
     bug := some "bugs/CE-0020.yaml"
     note := "Invariant: Resource.both(A, B).use(f) (Resource.scala:286-314, use = fold with \
-      IO.bracketFull), sides are marked make; every run that ends: each release runs as often as \
-      its acquire completed. Counterexample: A's release raises; F.both in the makeCase release \
-      cancels the fiber of B's finalizer chain before it starts (one schedule, decide +kernel). \
-      Reproducer: 332/1000 TestControl seeds, about 1.5-1.8 % of default-runtime runs, on 3.7.1, \
-      series/3.x, series/3.7.x. Fixed twin (attempt both chains) has no violation on 2,100 \
-      schedules (test/Phase6/ResourceSmoke.lean)." },
+      IO.bracketFull), sides are marked make, harness names not forgeable (NoForge, \
+      Props/Phase6/HarnessNames.lean; review batch 5 fix); every run that ends: each release runs \
+      as often as its acquire completed. Counterexample: A's release raises; F.both in the makeCase \
+      release cancels the fiber of B's finalizer chain before it starts (one schedule, decide \
+      +kernel); all hypotheses proven (also the satisfiability witness, decision 53). Fixed twin \
+      (attempt both chains) satisfies the conclusion on the same input for 120 schedules \
+      (Proofs/Phase6/ResourceBothFixed.lean, TwinChecks, kernel) and 600 + 1,500 schedules \
+      (smoke); v3.7.1 violates it there. Reproducer: REPRODUCED on 3.7.1, series/3.x, series/3.7.x \
+      (fixed copy misses no release)." },
   { id := "kernel.Resource.use.releaseOnce"
     rows := ["kernel.Resource.use", "kernel.Resource.fold", "kernel.Resource.make"]
     prop := ``Props.Phase6.Resource.useReleaseOnce
     status := .«open»
-    note := "Invariant (decision 50): make(acq)(rel).use(f), directly or in a child that the \
-      parent cancels and joins; release runs exactly once iff acquire completed. Smoke-tested by \
-      #guard (test/Phase6/ResourceSmoke.lean, part 2: 3 releases x 4 bodies x parent/no parent x \
-      900 schedules). Open: needs the bracket state invariant of core.IO.bracket.releaseOnce \
-      (fold puts make under IO.bracketFull)." },
+    note := "Invariant (decision 50): make(acq)(rel).use(f), directly or under the harness \
+      parent (HLam) that cancels and joins; release runs exactly once iff acquire completed; \
+      harness names not forgeable (NoForge). Satisfiability witnesses with and without the parent \
+      (Proofs/Phase6/ResourceWitness.lean, use_sat). Smoke: hypotheses evaluated, 3 releases x 4 \
+      bodies x parent/no parent x 900 schedules (test/Phase6/ResourceSmoke.lean). Open: needs the \
+      bracket state invariant of core.IO.bracket.releaseOnce (fold puts make under \
+      IO.bracketFull)." },
   { id := "kernel.Resource.flatMap.releaseOrder"
     rows := ["kernel.Resource.flatMap", "kernel.Resource.use", "kernel.Resource.fold"]
     prop := ``Props.Phase6.Resource.flatMapReleaseOrder
     status := .«open»
     note := "Invariant: make(A).flatMap(_ => make(B)).use(f): each release iff its acquire, and B \
-      is released before A (LIFO; fold nests bracketFull). Smoke-tested by #guard \
-      (test/Phase6/ResourceSmoke.lean, part 2, 32 configurations x 900 schedules). Open: same \
+      is released before A (LIFO; fold nests bracketFull); harness names not forgeable \
+      (NoForge). Satisfiability witnesses with and without the parent (ResourceWitness.lean, \
+      flat_sat). Smoke: hypotheses evaluated, 24 configurations x 900 schedules. Open: same \
       missing state invariant, for two nested brackets." },
   { id := "kernel.Resource.eval.preservesCancelable"
     rows := ["kernel.Resource.eval", "kernel.Resource.allocatedCase"]

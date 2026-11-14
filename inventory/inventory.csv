@@ -2271,7 +2271,7 @@ kernel.Resource.onFinalize,kernel,method,kernel/shared/src/main/scala/cats/effec
 kernel.Resource.onFinalizeCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,443,todo,,
 kernel.Resource.allocatedCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,464,modelled,,kernel.Resource.eval.preservesUncancelable
 kernel.Resource.allocated,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,550,todo,,
-kernel.Resource.evalMap,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,558,modelled,,kernel.Resource.both.releaseOnce
+kernel.Resource.evalMap,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,558,todo,,
 kernel.Resource.evalTap,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,565,todo,,
 kernel.Resource.surround,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,572,todo,,
 kernel.Resource.surroundK,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,579,todo,,
@@ -2293,7 +2293,7 @@ kernel.Resource.applyCase,kernel,method,kernel/shared/src/main/scala/cats/effect
 kernel.Resource.applyFull,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,879,todo,,
 kernel.Resource.suspend,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,885,todo,,
 kernel.Resource.make,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,900,todo,,
-kernel.Resource.makeCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,917,modelled,,kernel.Resource.both.releaseOnce
+kernel.Resource.makeCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,917,todo,,
 kernel.Resource.makeFull,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,942,todo,,
 kernel.Resource.makeCaseFull,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,967,todo,,
 kernel.Resource.pure,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,977,modelled,,kernel.Resource.eval.preservesUncancelable
