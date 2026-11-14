@@ -29,12 +29,24 @@ def subAddCancel : Entry :=
 def addComm : Entry :=
   { id := "fx.addComm", rows := ["core.Fx.addComm"], prop := ``Props.addComm, status := .open }
 
+/-- A heavy-registry entry (decision 55). Its theorem is named with a single backtick, as in
+`RegistryHeavy.lean`. -/
+def addCommHeavy : Entry :=
+  { id := "fx.addCommHeavy", rows := ["core.Fx.addComm"], prop := ``Props.addComm
+    status := .proven, thm := `AuditFixtures.Proofs.addComm_proven }
+
 def config (reg : List Entry) (csv := dir / "inventory.csv")
-    (extra : Array Lean.Name := #[]) : Audit.Config :=
+    (extra : Array Lean.Name := #[]) (heavy : List Entry := []) (verifyHeavy := false) :
+    Audit.Config :=
   { imports := #[`AuditFixtures.Proofs] ++ extra
-    registry := reg, csv
+    registry := reg, csv, heavy, verifyHeavy
     propModulePrefix := `AuditFixtures.Props
     thmModulePrefix := `AuditFixtures }
+
+/-- Light registry + heavy registry; the inventory names the heavy entry on a `modelled` row. -/
+def heavyCfg (h : Entry) (verify : Bool) : Audit.Config :=
+  config [addZero, subAddCancel, addComm] (csv := dir / "inventory-heavy.csv") (heavy := [h])
+    (verifyHeavy := verify)
 
 def cases : List (String × Audit.Config) := [
   ("good", config [addZero, subAddCancel, addComm]),
@@ -59,7 +71,18 @@ def cases : List (String × Audit.Config) := [
   -- a `modelled` row that only an `open` entry names (decision 28)
   ("open_modelled", config [addZero, subAddCancel, addComm]
     (csv := dir / "inventory-open-modelled.csv")),
-  ("duplicate_id", config [addZero, subAddCancel, addComm, addZero])
+  ("duplicate_id", config [addZero, subAddCancel, addComm, addZero]),
+  -- Heavy registry (decision 55). Main job (`verifyHeavy := false`): the row settled only by a
+  -- heavy entry is deferred, not accepted; the heavy job (`true`) checks it in full.
+  ("heavy_good_main", heavyCfg addCommHeavy false),
+  ("heavy_good_full", heavyCfg addCommHeavy true),
+  ("heavy_missing_thm_main", heavyCfg { addCommHeavy with thm := `AuditFixtures.Proofs.noSuchTheorem } false),
+  ("heavy_missing_thm_full", heavyCfg { addCommHeavy with thm := `AuditFixtures.Proofs.noSuchTheorem } true),
+  ("heavy_wrong_type_full", heavyCfg { addCommHeavy with thm := `AuditFixtures.Proofs.addZero_proven } true),
+  ("heavy_no_thm_main", heavyCfg { addCommHeavy with thm := none } false),
+  ("heavy_not_def_main", heavyCfg { addCommHeavy with prop := ``Proofs.addComm_proven } false),
+  ("heavy_open_modelled_main", heavyCfg { addCommHeavy with status := .open, thm := none } false),
+  ("heavy_duplicate_id", config [addZero, subAddCancel, addComm] (heavy := [addZero]))
 ]
 
 end AuditFixtures

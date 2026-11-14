@@ -21,3 +21,10 @@ Only non-obvious questions that agents cannot decide alone. Answers: `raw/projec
 - Second part: model user code can name any fiber id (for example the root fiber). Scala code can only use handles it received. We plan to restrict model programs to received handles (a type invariant).
 - Review batch 1 adds: even without an outside cancel, a forked child's emits can interleave differently when the auto-yield position moves.
 - Default until you answer: (a) for law rows, plus the handle restriction, plus a preemption choice at any run-loop iteration in `Eqv` (decision 29), so the auto-yield position is not observable. The auto-yield effect becomes one Phase 8 finding with `maybe_intended: likely`.
+
+## Q4 (2026-11-10): Heavy proofs job (decision 55): required check, and paranoid coverage?
+
+- Question 1: Should the CI job `heavy-proofs` be a required status check for `main` (branch protection)? The main `lean` job defers to it the inventory rows that only a heavy entry settles (today one row: `laws.GenSpawnLaws.uncancelableRaceNotInherited`), and the theorem checks of heavy entries. The two jobs together run every check of the old single registry; but if `heavy-proofs` is not required, a red heavy job would not block a merge, and that would be weaker than before.
+- Question 2: The scheduled `paranoid-heavy.yml` replays the heavy proofs through six kernels (`lake check --from-export --paranoid`). One default-kernel replay takes about 38 min locally, so six kernels may need about 4 h or more; the job timeout is 350 min (GitHub-hosted maximum 360). The export file size is not measured yet. If it does not fit: run it on a self-hosted runner, split it by kernel, or accept only the default-kernel replay (in `heavy-proofs`) for heavy proofs?
+- Context: decision 55 (`raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md`). The law entry is out of the default build either way.
+- Default until you answer: agents treat a red `heavy-proofs` job like a red `lean` job (no merge to `main`); `paranoid-heavy.yml` stays scheduled as is, and its first result decides.
