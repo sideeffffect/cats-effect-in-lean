@@ -104,7 +104,8 @@ WEIGHTS = {
     'tpl_memo': 0.4, 'memoGet': 4,
     # format v2 (track Res)
     'rUse': 0.5, 'rAllocated': 0.4, 'res_both': 2.0, 'tpl_resBoth': 0.5,
-    # format v2 (batch 6.3): `parTraverseN` (lists of at most 4 elements). Not a production of
+    # format v2 (batch 6.3): `parTraverseN` (lists of at most 4 elements: from 5 Scala uses a
+    # `HashSet` with identity-hash order; the Lean side runs the mirror with order `id`). Not a production of
     # `composite_opts` (a new option shifts the shared RNG and pushed `race` below its selftest
     # minimum); `gen_case` appends it with its own RNG (`p_par_traverse`). Weights here only
     # scale how often the two shapes are chosen there (`--boost` in opcount.py).

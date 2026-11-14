@@ -368,31 +368,69 @@ def registry : List Entry := [
     status := .«open»
     note := "If parTraverseN(n)(as)(f) succeeds, the result holds one entry per input in input order \
       (f tagged by the harness as a => f(a).map(b => (a, b)); no lost, duplicated or \
-      reordered entry). All user code, n >= 1, all schedules; model limit: at most 4 inputs \
-      (Scala Set1..Set4, not HashSet). Satisfiable: Proofs.Phase6.ParTraverseWitness.\
-      parTraverseNOrder_satisfiable. Smoke: lake exe ptsmoke (random schedules; a reversed \
-      result breaks it). Open: needs an invariant over Step/SchedP for all f." },
+      reordered entry). All user code. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
+      HashSet from 5 elements; any permutation, review 7). Satisfiable: \
+      Proofs.Phase6.ParTraverseWitness.parTraverseNOrder_satisfiable. Smoke: lake exe ptsmoke \
+      (a reversed result breaks it). Review 7: believed FALSE as stated: WellFormed lets f \
+      capture the per-input result Deferred through a number field of its closure id and \
+      complete it with a wrong value. Not fixed here: it depends on track Res's WellFormed \
+      deep-capture and privacy fix (decision 56); re-check this row when that lands. Open." },
   { id := "core.IO.parTraverseN.pureSucceeds"
     rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
     prop := ``Props.Phase6.ParTraverse.parTraverseNPureSucceeds
     status := .«open»
     note := "For f(a) = IO.pure(g(a)), every run that stops ends Succeeded(as.map(g)): no deadlock, \
-      no error, input order. Satisfiable (parTraverseNPureSucceeds_satisfiable). Smoke: \
-      ptsmoke (a dropped result breaks it). Open: needs a liveness and value invariant." },
+      no error, input order. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
+      HashSet from 5 elements; any permutation, review 7). Satisfiable \
+      (parTraverseNPureSucceeds_satisfiable). Smoke: ptsmoke (a dropped result breaks it). \
+      Open: needs a liveness and value invariant." },
   { id := "core.IO.parTraverseN.errorAborts"
     rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
     prop := ``Props.Phase6.ParTraverse.parTraverseNErrorAborts
     status := .«open»
     note := "If f(a0) raises e, a0 is among the first n inputs and every other f(a) never completes, \
-      every run that stops ends Errored(e) (Scaladoc K/GC:139-140: errors abort the \
-      sequence). Satisfiable (parTraverseNErrorAborts_satisfiable). Smoke: ptsmoke (no \
-      cancelAll in the error branch breaks it). Open." },
+      every run that stops ends Errored(e) (Scaladoc K/GC:137-139: errors abort the \
+      sequence). The sharpest case of errorAbortsGen. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
+      HashSet from 5 elements; any permutation, review 7). Satisfiable \
+      (parTraverseNErrorAborts_satisfiable). Smoke: ptsmoke (no cancelAll in the error branch \
+      breaks it). Open." },
   { id := "core.IO.parTraverseN.cancelAborts"
     rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
     prop := ``Props.Phase6.ParTraverse.parTraverseNCancelAborts
     status := .«open»
-    note := "The same for a self-cancel f(a0) = IO.canceled: every run that stops ends Canceled. \
-      Satisfiable (parTraverseNCancelAborts_satisfiable). Smoke: ptsmoke. Open." }
+    note := "The same for a self-cancel f(a0) = IO.canceled: every run that stops ends Canceled. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
+      HashSet from 5 elements; any permutation, review 7). \
+      Satisfiable (parTraverseNCancelAborts_satisfiable). Smoke: ptsmoke. Open." },
+  { id := "core.IO.parTraverseN.succeedsGen"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNSucceedsGen
+    status := .«open»
+    note := "f(a) = IO.cede k(a) times, then IO.pure(v(a)) (behaviour table, no user code): every run \
+      that stops ends Succeeded with the values in input order. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
+      HashSet from 5 elements; any permutation, review 7). \
+      Satisfiable (parTraverseNSucceedsGen_satisfiable: 5 inputs, HashSet order reverse). \
+      Smoke: ptsmoke (random tables). Open." },
+  { id := "core.IO.parTraverseN.errorAbortsGen"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNErrorAbortsGen
+    status := .«open»
+    note := "Behaviour table with cedes, then pure, raiseError (non-fatal) or never, no cancel: if \
+      some input raises and fewer than n inputs before it never complete (so it gets a \
+      permit), every run that stops ends Errored(e) with an e that an input raises. Covers \
+      siblings that complete, an action that suspends first, an error in an action that \
+      starts later, two errors at once (review 7). All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
+      HashSet from 5 elements; any permutation, review 7). Satisfiable \
+      (parTraverseNErrorAbortsGen_satisfiable). Smoke: ptsmoke (random tables; no cancelAll \
+      breaks it). Open." },
+  { id := "core.IO.parTraverseN.cancelAbortsGen"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNCancelAbortsGen
+    status := .«open»
+    note := "The same with IO.canceled in place of the error and no error: every run that stops ends \
+      Canceled. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
+      HashSet from 5 elements; any permutation, review 7). Satisfiable (parTraverseNCancelAbortsGen_satisfiable). Smoke: \
+      ptsmoke. Open. Not stated yet: at most n actions at once (needs the decision-56 privacy \
+      module); ptsmoke checks it, and 1000 permits break it." }
 ]
 
 end CatsEffectInLean

@@ -510,7 +510,7 @@ def dispatchRes (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
   | none =>
     -- batch 6.3: the `guaranteeCase` finalizers of `parTraverseN` are `ParTraverse` closures
     match ParTraverse.PT.ofId? id with
-    | some l => ParTraverse.call (dispatchDt p) l arg vw
+    | some l => ParTraverse.call _root_.id (dispatchDt p) l arg vw
     | none => dispatchDt p id arg vw
 
 /-- All closures of program `p`: difftest closures (with trace and failures) and library
@@ -528,7 +528,7 @@ def dispatch (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
     | some (.bracket l) => Bracket.call (dispatchRes p) (bracketSrcIO p) l arg vw
     | some (.ures l) => ResourceUse.callU (uenvOf p) (dispatchDt p) l arg vw
     | some (.memoize l) => Memoize.call (srcIO p) l arg vw
-    | some (.ptrav l) => ParTraverse.call (dispatchDt p) l arg vw
+    | some (.ptrav l) => ParTraverse.call _root_.id (dispatchDt p) l arg vw
     | none => DResult.harness.toUser
 
 /-- The `Model.UserEnv` of program `p` (see module doc). -/

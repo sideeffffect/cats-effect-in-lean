@@ -232,3 +232,8 @@
 ## [2026-11-14] ingest | Review batch 7: parTraverseN and heavy-proof CI split
 - Updated: Agent workflow (review log), Registry and audit (CI split gaps), parTraverseN model (review result), index
 - Raw: raw/project-decisions/2026-11-14-review-batch-7-notes.md
+
+## [2026-11-14] update | Review 7: parTraverseN fixes
+- Updated: parTraverseN model (HashSet order as input `ho`, no `as.length ≤ 4`, statements 5-7 with a behaviour harness, resultOrder waits for decision 56), Difftest program format, index
+- Raw: raw/cats-effect/2026-11-14-partraverse-review7.md
+- Smoke `lake exe ptsmoke 100`: 55,980 stopped runs, 0 violations; behaviour tables 120/84/63; all 8 wrong functions break their claim (1000 permits: 72 and 26 runs of 100)
