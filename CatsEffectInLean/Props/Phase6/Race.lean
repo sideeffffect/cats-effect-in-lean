@@ -116,6 +116,12 @@ def parentOf? (id : Nat) : Option PLam :=
 /-- Library closures (`WellFormed`): the race and timeout mirrors. -/
 def isLib (id : Nat) : Bool := (Race.ofId? id).isSome || (timeoutOf? id).isSome
 
+/-- The `WellFormed` library of these statements (decision 56): `Race` and `Timeout` closures.
+They keep no closure id in a number field: their fields are source codes (`Val`s that `srcIO`
+rebuilds), fiber and poll handles, `Kind` and side tags, durations and outcome snapshots
+(`Model/Race.lean` `RLam.toVal`, `Model/Timeout.lean` `TLam.toVal`). So `Lib.idFree` is exact. -/
+@[reducible] def raceLib : Lib := Lib.idFree isLib
+
 /-- Dispatch: mirror closures, then the parent closures, then user code `u`. -/
 def dispatch (fa fb : IO) (u : UserEnv) (id : Nat) (arg : Val) (v : View) : UserResult :=
   match Race.ofId? id with
@@ -151,21 +157,21 @@ the root completes, no child of its `racePair` is alive. All four kernel default
 sides, all user code, all schedules. -/
 def combNoLeak : Prop :=
   ∀ (k : Race.Kind) (u : UserEnv) (fa fb : IO),
-    WellFormed isLib [] (env fa fb u) fa → WellFormed isLib [] (env fa fb u) fb →
+    WellFormed raceLib [] (env fa fb u) fa → WellFormed raceLib [] (env fa fb u) fb →
     NoLeak fa fb u (Race.combIO k src0 src1) 0
 
 /-- Decision 50: a parent starts the combinator in fiber 1, cancels it and joins it. When the
 root completes, fiber 1 has no live race child. -/
 def combCanceledNoLeak : Prop :=
   ∀ (k : Race.Kind) (u : UserEnv) (fa fb : IO),
-    WellFormed isLib [] (env fa fb u) fa → WellFormed isLib [] (env fa fb u) fb →
+    WellFormed raceLib [] (env fa fb u) fa → WellFormed raceLib [] (env fa fb u) fb →
     NoLeak fa fb u (parentIO (Race.combIO k src0 src1)) 1
 
 /-- `fa.timeout(d)` as the root, and (decision 50) in a fiber that a parent cancels: when the
 root completes, the timeout's `racePair` has no live child (the source and the sleep). -/
 def timeoutNoLeak : Prop :=
   ∀ (d : Nat) (u : UserEnv) (fa : IO),
-    WellFormed isLib [] (env fa fa u) fa →
+    WellFormed raceLib [] (env fa fa u) fa →
     NoLeak fa fa u (Timeout.timeoutIO src0 d) 0 ∧
     NoLeak fa fa u (parentIO (Timeout.timeoutIO src0 d)) 1
 
@@ -178,7 +184,7 @@ the root `fa.raceOutcome(fb)` completes with `Succeeded(Left(oc))`, fiber 1 (the
 ended with `oc`; with `Succeeded(Right(oc))`, fiber 2 (the fiber of `fb`) ended with `oc`. -/
 def raceOutcomeIsWinnerOutcome : Prop :=
   ∀ (u : UserEnv) (fa fb : IO),
-    WellFormed isLib [] (env fa fb u) fa → WellFormed isLib [] (env fa fb u) fb →
+    WellFormed raceLib [] (env fa fb u) fa → WellFormed raceLib [] (env fa fb u) fb →
     ∀ (fuel : Nat) (cs : List PChoice) (v : Val),
       let s := run fa fb u fuel cs (Race.raceOutcomeIO src0 src1)
       s.halt = some (.done (.succeeded v)) →

@@ -164,6 +164,13 @@ def timeoutOf? (id : Nat) : Option Timeout.TLam :=
 /-- Library closures (`WellFormed`): the mirror, its leaf closures and the test programs. -/
 def isLib (id : Nat) : Bool := CatsEffectInLean.Model.Memoize.isLib id || (TLam.ofId? id).isSome
 
+/-- The `WellFormed` library of these statements (decision 56): `Memoize` closures, the
+`Bracket` leaves `reportK`/`reportEc`/`reportThunk`/`raiseK`/`asK`, and `Timeout` closures. They
+keep no closure id in a number field: their fields are source codes, `Ref`/`Deferred`/poll
+handles, errors, values and the variant number (`Model/Memoize.lean` `MLam.toVal`; the `Bracket`
+leaves listed hold an error or a value; `TLam.toVal`). So `Lib.idFree` is exact. -/
+@[reducible] def memoLib : Lib := Lib.idFree isLib
+
 private def noUser : Nat → Val → View → UserResult := fun _ _ _ =>
   { out := .throw { code := 999999, kind := .fatal } }
 
@@ -213,20 +220,20 @@ def counter {M : Type} (s : Sched M) : Nat :=
 
 /-- Statement 1 (refuted, CE-0030): a blocked run never has a finished memo. -/
 def memoizeNoStuckGet : Prop :=
-  ∀ (u : UserEnv) (fa : IO), WellFormed isLib [] (env fa u) fa →
+  ∀ (u : UserEnv) (fa : IO), WellFormed memoLib [] (env fa u) fa →
     ∀ (fuel : Nat) (cs : List PChoice),
       (run fa u fuel cs (twoGets 0)).halt = some .blocked →
       memoFinished (run fa u fuel cs (twoGets 0)) 0 = false
 
 /-- Statement 2 (open): two concurrent `get`s observe the same outcome. -/
 def memoizeGetsAgree : Prop :=
-  ∀ (u : UserEnv) (fa : IO), WellFormed isLib [] (env fa u) fa →
+  ∀ (u : UserEnv) (fa : IO), WellFormed memoLib [] (env fa u) fa →
     ∀ (fuel : Nat) (cs : List PChoice) (oa ob : Val),
       (run fa u fuel cs (twoGets 0)).halt = some (.done (.succeeded (.pair oa ob))) → oa = ob
 
 /-- Statement 3 (open): without a cancel from the program, `fa` starts at most once. -/
 def memoizeAtMostOnce : Prop :=
-  ∀ (u : UserEnv) (fa : IO), WellFormed isLib [] (env fa u) fa →
+  ∀ (u : UserEnv) (fa : IO), WellFormed memoLib [] (env fa u) fa →
     ∀ (fuel : Nat) (cs : List PChoice), counter (run fa u fuel cs (countedTwoGets 0)) ≤ 1
 
 end CatsEffectInLean.Props.Phase6.Memoize

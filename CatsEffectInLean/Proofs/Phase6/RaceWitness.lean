@@ -65,7 +65,7 @@ abbrev RP (p : PLam) (arg : Val) (v : View) : Handle → Prop :=
 
 theorem call_ok (p : PLam) (arg : Val) (v : View) :
     (∀ w, WF.Agree (RP p arg v) v w → p.call arg w = p.call arg v) ∧
-    WF.ResultOK isLib (RP p arg v) v (p.call arg v) := by
+    WF.ResultOK raceLib (RP p arg v) v (p.call arg v) := by
   have hb : ∀ h, h ∈ arg.handles ∨ h ∈ p.toVal.handles → RP p arg v h :=
     fun h hh => WF.Reach.base (by simpa using hh)
   cases p with
@@ -95,7 +95,7 @@ theorem call_ok (p : PLam) (arg : Val) (v : View) :
 
 /-- Each user function (even id) of `env fa fb u0` passes `CallOK`. -/
 theorem env_calls (fa fb : IO) (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
-    WF.CallOK isLib [] (env fa fb u0) id arg v := by
+    WF.CallOK raceLib [] (env fa fb u0) id arg v := by
   have hE : ∀ w, (env fa fb u0).callV id arg w = Props.Phase6.Race.dispatch fa fb u0 id arg w := fun _ => rfl
   simp only [WF.CallOK, hE, dispatch_even fa fb id hid]
   cases hp : parentOf? id with
@@ -202,8 +202,8 @@ theorem env_opaque (fa fb : IO) : WF.PollOpaque (env fa fb u0) := by
       | some p => exact call_rn σ p arg v
 
 /-- `WellFormed` of a side whose start program passes `progOK`. -/
-theorem wf_of_progOK (fa fb p : IO) (h : WF.progOK isLib (([] : List Handle).contains ·) p = true) :
-    WellFormed isLib [] (env fa fb u0) p :=
+theorem wf_of_progOK (fa fb p : IO) (h : WF.progOK raceLib (([] : List Handle).contains ·) p = true) :
+    WellFormed raceLib [] (env fa fb u0) p :=
   ⟨h, fun id hid arg v => env_calls fa fb id hid arg v, env_opaque fa fb⟩
 
 /-! ## The witnesses -/
@@ -211,10 +211,10 @@ theorem wf_of_progOK (fa fb p : IO) (h : WF.progOK isLib (([] : List Handle).con
 def pure1 : IO := .pure (.nat 1)
 def nev : IO := Timeout.neverIO
 
-theorem pure1_wf (fa fb : IO) : WellFormed isLib [] (env fa fb u0) pure1 :=
+theorem pure1_wf (fa fb : IO) : WellFormed raceLib [] (env fa fb u0) pure1 :=
   wf_of_progOK fa fb pure1 (by decide +kernel)
 
-theorem nev_wf (fa fb : IO) : WellFormed isLib [] (env fa fb u0) nev :=
+theorem nev_wf (fa fb : IO) : WellFormed raceLib [] (env fa fb u0) nev :=
   wf_of_progOK fa fb nev (by decide +kernel)
 
 /-- The parent's cancel lands while the race runs. -/
@@ -230,7 +230,7 @@ theorem combNoLeak_run :
 root completes after both sides ran and the loser was canceled. -/
 theorem combNoLeak_witness :
     ∃ (k : Race.Kind) (u : UserEnv) (fa fb : IO),
-      WellFormed isLib [] (env fa fb u) fa ∧ WellFormed isLib [] (env fa fb u) fb ∧
+      WellFormed raceLib [] (env fa fb u) fa ∧ WellFormed raceLib [] (env fa fb u) fb ∧
       ∃ (fuel : Nat) (cs : List PChoice),
         (run fa fb u fuel cs (Race.combIO k src0 src1)).rootDone = true ∧
         fiberOutcome (run fa fb u fuel cs (Race.combIO k src0 src1)) 2 = some .canceled :=
@@ -246,7 +246,7 @@ theorem combCanceledNoLeak_run :
 parent's cancel lands while the race runs, and both race children of fiber 1 end `Canceled`. -/
 theorem combCanceledNoLeak_witness :
     ∃ (k : Race.Kind) (u : UserEnv) (fa fb : IO),
-      WellFormed isLib [] (env fa fb u) fa ∧ WellFormed isLib [] (env fa fb u) fb ∧
+      WellFormed raceLib [] (env fa fb u) fa ∧ WellFormed raceLib [] (env fa fb u) fb ∧
       ∃ (fuel : Nat) (cs : List PChoice),
         let s := run fa fb u fuel cs (parentIO (Race.combIO k src0 src1))
         s.rootDone = true ∧ fiberOutcome s 2 = some .canceled ∧ fiberOutcome s 3 = some .canceled :=
@@ -269,7 +269,7 @@ theorem timeout_parent_run :
 race runs (source and sleep canceled). -/
 theorem timeoutNoLeak_witness :
     ∃ (d : Nat) (u : UserEnv) (fa : IO),
-      WellFormed isLib [] (env fa fa u) fa ∧
+      WellFormed raceLib [] (env fa fa u) fa ∧
       (∃ (fuel : Nat) (cs : List PChoice),
         let s := run fa fa u fuel cs (Timeout.timeoutIO src0 d)
         s.halt = some (.done (.errored Timeout.timeoutErr)) ∧ fiberOutcome s 1 = some .canceled) ∧
@@ -290,7 +290,7 @@ root completes with `Succeeded(Left(oc))` (the antecedent of the claim) after th
 canceled. -/
 theorem raceOutcomeIsWinnerOutcome_witness :
     ∃ (u : UserEnv) (fa fb : IO),
-      WellFormed isLib [] (env fa fb u) fa ∧ WellFormed isLib [] (env fa fb u) fb ∧
+      WellFormed raceLib [] (env fa fb u) fa ∧ WellFormed raceLib [] (env fa fb u) fb ∧
       ∃ (fuel : Nat) (cs : List PChoice) (v : Val),
         (run fa fb u fuel cs (Race.raceOutcomeIO src0 src1)).halt = some (.done (.succeeded v)) ∧
         fiberOutcome (run fa fb u fuel cs (Race.raceOutcomeIO src0 src1)) 2 = some .canceled :=

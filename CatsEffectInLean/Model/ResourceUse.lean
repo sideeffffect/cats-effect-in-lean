@@ -721,6 +721,17 @@ def callU (U : UEnv) (uc : Nat → Val → View → UserResult) (l : ULam) (arg 
 
 /-! ## Dispatch -/
 
+/-- A `Timeout` closure of an id: `IO.never` (`TLam.neverBody`, ...), which the `Race` closure
+`constNever` builds (`poll(canceled) *> never`, `K/GenSpawn.scala:414`). Found by the probe check
+(`Proofs/Phase6/LibFieldsResourceUse.lean`): before, this environment sent these ids to user
+code. -/
+def tlamOf? (id : Nat) : Option Timeout.TLam :=
+  if isLibId id then
+    match (cloOfId id).bind ofCloVal with
+    | some (k, tag, fs) => if k == Timeout.ns then Timeout.TLam.ofFields tag fs else none
+    | none => none
+  else none
+
 /-- Library closures except `Bracket`: this mirror, `Race`, and the Phase 5 `Resource` closures
 (`Clo`, with `UEnv.rx`); all other ids go to `uc`. -/
 def uDisp (U : UEnv) (uc : Nat → Val → View → UserResult) (id : Nat) (arg : Val) (v : View) : UserResult :=
@@ -733,7 +744,10 @@ def uDisp (U : UEnv) (uc : Nat → Val → View → UserResult) (id : Nat) (arg 
       if isLibId id then
         match (cloOfId id).bind Clo.ofVal with
         | some c => cloCall U.rx c arg v
-        | none => uc id arg v
+        | none =>
+          match tlamOf? id with
+          | some t => Timeout.call (srcU U) t arg v
+          | none => uc id arg v
       else uc id arg v
 
 /-- All closures: `Bracket` (its user-function calls go to `uDisp`), then `uDisp`. -/
@@ -751,9 +765,10 @@ def UEnv.toEnv (U : UEnv) : UserEnv where
   call id arg refs := resDisp U U.userCall id arg { refs }
   callV := resDisp U U.userCall
 
-/-- The library closures (`WellFormed`): this mirror, `Race`, `Bracket`, Phase 5 `Resource`. -/
+/-- The library closures (`WellFormed`): this mirror, `Race`, `Bracket`, Phase 5 `Resource`, `Timeout`. -/
 def isLib (id : Nat) : Bool :=
-  (ULam.ofId? id).isSome || (Race.ofId? id).isSome || (Bracket.BLam.ofId? id).isSome || Resource.isLib id
+  (ULam.ofId? id).isSome || (Race.ofId? id).isSome || (Bracket.BLam.ofId? id).isSome || Resource.isLib id ||
+    (tlamOf? id).isSome
 
 /-! ## Function fields (decision 56, `Lib.fields`) -/
 
@@ -786,13 +801,36 @@ def cloIds : Clo → List Nat
   | .allocBody _ _ r | .allocK _ r _ => relIds r
   | _ => []
 
-/-- The function fields of a closure value of this library (`ULam`, `Bracket`, `Clo`; `Race`
-closures keep no closure id in a number field). -/
+/-- The closure ids that a source code of this mirror names (`USrc`, rebuilt by `srcU` and
+`srcRel`): the release function of `relApp` and `unitThen`, the `onOutput` function of `fold`.
+(The `res` code of `fold` is a `UEnv.resOf` code, like an external `Bracket` source.) -/
+def usrcIds (c : Val) : List Nat :=
+  match USrc.ofVal c with
+  | some (.relApp rel _ _) | some (.unitThen rel _) => relValIds rel
+  | some (.fold _ o _) =>
+    match OnOut.ofVal o with
+    | some (.user f) => [f]
+    | _ => []
+  | _ => []
+
+/-- The closure ids of every source code inside a value, at any depth (structural). In this
+library `srcU` is the source builder of the `Bracket` closures (external sources `Src.ext s`) and
+of the `Race` closures (`RLam.body k a b`), and the mirror puts `USrc` codes there
+(`Race.bothIO (USrc.relApp finV ec _)`, `Bracket.guaranteeIO (.ext (USrc.relApp ...))`). So a
+`Bracket` or `Race` closure of this library names closures by number inside its source codes
+(found by the probe check `Proofs/Phase6/LibFieldsResourceUse.lean`). -/
+def srcCodeIds : Val → List Nat
+  | v@(.pair a b) => usrcIds v ++ srcCodeIds a ++ srcCodeIds b
+  | .left x | .right x | .some x | .ocSucceeded x => srcCodeIds x
+  | _ => []
+
+/-- The function fields of a closure value of this library: `ULam`, `Bracket`, `Clo` fields, and
+the closure ids in the source codes inside it (`srcCodeIds`; `Bracket` and `Race` closures). -/
 def fnFields (c : Val) : List Nat :=
   (match ofCloVal c with
    | some (k, tag, fs) => if k == ns then ((ULam.ofFields tag fs).map ULam.fnIds).getD [] else []
    | none => []) ++
-  Bracket.fnFields c ++ ((Clo.ofVal c).map cloIds).getD []
+  Bracket.fnFields c ++ ((Clo.ofVal c).map cloIds).getD [] ++ srcCodeIds c
 
 /-- The library of this mirror for `WellFormed` (decision 56). -/
 def lib : Lib := { ok := isLib, fields := fnFields }

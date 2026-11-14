@@ -50,6 +50,7 @@ A property that quantifies over programs or user code has the hypothesis `WellFo
 6. `refuted`: the `bug` file exists. `open`: no theorem.
 7. Each entry row exists in `inventory/inventory.csv`. Each `modelled` row names an entry. Each named entry exists and lists the row.
 8. Each `modelled` row names at least one `proven` or `refuted` entry (decision 28). An `open` entry does not count as progress. Message: `status modelled, but no named registry entry is proven or refuted`.
+9. `lib-fields` (decision 56, 2026-11-14): if `prop` (or any project definition that it uses) builds a `WellFormed` library without function fields (`Lib.idFree`, the `Nat → Bool` coercion, or a `{ ok := _ }` literal), the entry must have a `libNote` that says why its closures keep no closure id in a number field. Message: `uses a Lib without function fields ... and gives no libNote`. So no statement falls back to the shallow capture silently. Self-test cases `fieldless_lib*`.
 
 The audit does not judge if a property is good. That is the job of the reviewer (MIRROR, PROPERTY, SETTLED, wrong-function test).
 

@@ -1,7 +1,7 @@
 # Resource use, allocated, both, and CE-0020
 
 > Sources: Cats Effect v3.7.1 (`Resource.scala:156-314`, `:388-397`, `:464-552`, `:826-993`, `:1229-1234`; `IO.scala:961-962`, `:1822`, `:2062-2064`, `:2152`, `:2161`; `SyncRef.scala:30`, `:65-73`; `GenSpawn.scala:476-498`); upstream commit `3af09e6d56` (PR #4630); own Phase 6 track Res work and scala-cli runs, 2026-11-10
-> Raw: [Review batch 6 notes](../../raw/project-decisions/2026-11-14-review-batch-6-notes.md); [Track Res notes](../../raw/cats-effect/2026-11-10-track-res-resource-notes.md); [Merge with track M](../../raw/cats-effect/2026-11-10-track-res-merge-m-notes.md); [Review batch 5 fixes](../../raw/cats-effect/2026-11-10-track-res-review5-fix-notes.md); [Harness privacy (decision 56)](../../raw/cats-effect/2026-11-14-harness-privacy-notes.md)
+> Raw: [Lib fields probe notes](../../raw/cats-effect/2026-11-14-lib-fields-probe-notes.md); [Review batch 6 notes](../../raw/project-decisions/2026-11-14-review-batch-6-notes.md); [Track Res notes](../../raw/cats-effect/2026-11-10-track-res-resource-notes.md); [Merge with track M](../../raw/cats-effect/2026-11-10-track-res-merge-m-notes.md); [Review batch 5 fixes](../../raw/cats-effect/2026-11-10-track-res-review5-fix-notes.md); [Harness privacy (decision 56)](../../raw/cats-effect/2026-11-14-harness-privacy-notes.md)
 
 ## Overview
 
@@ -63,6 +63,8 @@ Test harness (decision 56, after review batches 4-6): privacy by construction (`
 **Review batch 6 (2026-11-14): still HOLLOW** (`use.releaseOnce`, `flatMap.releaseOrder`; CE-0020 as registered). The deep scan closes the `ULam.allocFn` forgery, but the `NoForge` escape clause ("a result may mention a name if its argument does") lets user code use a number from the runtime: `IO.sleep 6 >> IO.realTime` gives `.nat 6`, the marker id `2 * mR`, and a user function then runs the marker. Fix: `NoForge` without the escape clause (the library gives no harness name to user code). Inventory rows `fold`, `use`, `both` should be `todo` until CE-0020 passes. See [review batch 6](../../review/2026-11-14-review-batch-6.md).
 
 Inventory: `both`, `use`, `fold`, `makeCase`, `evalMap` are `todo` until CE-0020 passes review (decision 56).
+
+**Fields probe check (2026-11-14):** `Proofs/Phase6/LibFieldsResourceUse.lean` checks `ResourceUse.lib` by running the real dispatcher on ~520 probe samples. It found two defects, both fixed: (1) `fnFields` missed the ids in `USrc` source codes of `Bracket` and `Race`/`Timeout` closures (fix: `srcCodeIds`); (2) `uDisp` sent `Timeout` closures (`IO.never` of `Race.constNever`) to user code (fix: `tlamOf?`). Limit: function ids in argument values (the `rel` of `(b, rel)`) are not followed by `WellFormed`. See [probe notes](../../raw/cats-effect/2026-11-14-lib-fields-probe-notes.md).
 
 ## Difftest (format v2)
 
