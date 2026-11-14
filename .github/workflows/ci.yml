@@ -130,19 +130,41 @@ jobs:
       - name: Build twin checks one module at a time, check axioms
         run: scripts/check_twin_checks.sh
 
-  heavy-proofs:
-    # Heavy proofs (decision 55): lean_lib HeavyProofs, registry CatsEffectInLean/RegistryHeavy.lean.
-    # Not in the default target, so the `lean` job (60 min) does not build them. Runs on every
-    # push and pull request. `scripts/check_heavy_proofs.sh`: derives the heavy module and
-    # theorem lists from `heavyModules`/`registryHeavy` (fails if the lakefile roots differ);
-    # builds each heavy module in the bwrap sandbox (only `.lake` writable, no network; review
-    # batch 7); checks that nothing outside the heavy artifacts and the work tree changed; runs a
-    # copy of `audit_heavy` built before the heavy build (both registries in full, deferred
-    # inventory rows included); `#print axioms` of every heavy theorem; leanchecker per heavy
-    # module. Local run (2026-11-14): see the decision 55 note.
-    name: Heavy proofs (sandboxed sequential build, full audit, kernel replay)
+  # Heavy proofs (decisions 55 and 57): lean_lib HeavyProofs, registry
+  # CatsEffectInLean/RegistryHeavy.lean. Not in the default target, so the `lean` job (60 min)
+  # does not build them. Four jobs, on every push and pull request:
+  #   heavy-plan     derives the matrix from the lakefile roots (scripts/heavy_closure.py);
+  #   heavy-module   one job per non-root heavy module: sandboxed build (only `.lake` writable,
+  #                  each build may change only its own artifacts) and leanchecker replay;
+  #                  uploads the module's artifacts;
+  #   heavy-audit    checks that every non-root module has artifacts (and that heavyModules
+  #                  matches the lakefile), installs them unchanged, builds and replays the
+  #                  roots in the sandbox, runs a copy of audit_heavy built before (both
+  #                  registries in full, deferred inventory rows included) and the axiom check;
+  #   heavy-proofs   the stable required check: fails unless all three succeeded.
+  heavy-plan:
+    name: Heavy proofs plan
     runs-on: ubuntu-26.04
-    timeout-minutes: 150
+    timeout-minutes: 5
+    outputs:
+      modules: ${{ steps.plan.outputs.modules }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: plan
+        run: |
+          modules=$(python3 scripts/heavy_closure.py --from-lakefile --matrix)
+          echo "$modules"
+          echo "modules=$modules" >> "$GITHUB_OUTPUT"
+
+  heavy-module:
+    name: Heavy module (${{ matrix.module }})
+    needs: heavy-plan
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        module: ${{ fromJSON(needs.heavy-plan.outputs.modules) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
@@ -153,8 +175,53 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq bubblewrap
           sudo scripts/setup-bwrap-apparmor.sh
-      - name: Build heavy proofs in the sandbox, audit both registries, axioms, replay
-        run: scripts/check_heavy_proofs.sh
+      - name: Build in the sandbox and replay
+        run: HEAVY_ARTIFACT_OUT="$RUNNER_TEMP/heavy-artifacts" scripts/check_heavy_module.sh "${{ matrix.module }}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: heavy-${{ matrix.module }}
+          path: ${{ runner.temp }}/heavy-artifacts
+          if-no-files-found: error
+          retention-days: 3
+
+  heavy-audit:
+    name: Heavy proofs audit (roots, audit_heavy, axioms)
+    needs: heavy-module
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          auto-config: "false"
+      - name: Allow bwrap user namespaces
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          sudo scripts/setup-bwrap-apparmor.sh
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: heavy-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/heavy-artifacts
+      - name: Install module artifacts, build and replay the roots, audit both registries, axioms
+        run: HEAVY_ARTIFACTS_IN="$RUNNER_TEMP/heavy-artifacts" scripts/check_heavy_proofs.sh
+
+  heavy-proofs:
+    # Stable name for the required check (decision 57): the matrix can change without a change
+    # in branch protection.
+    name: heavy-proofs
+    needs: [heavy-plan, heavy-module, heavy-audit]
+    if: always()
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: All heavy jobs succeeded
+        run: |
+          echo "plan=${{ needs.heavy-plan.result }} module=${{ needs.heavy-module.result }} audit=${{ needs.heavy-audit.result }}"
+          test "${{ needs.heavy-plan.result }}" = success
+          test "${{ needs.heavy-module.result }}" = success
+          test "${{ needs.heavy-audit.result }}" = success
 
   inventory:
     name: Inventory check

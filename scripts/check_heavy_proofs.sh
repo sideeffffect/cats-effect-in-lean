@@ -1,33 +1,39 @@
 #!/usr/bin/env bash
-# Heavy proofs (decision 55, lean_lib HeavyProofs, registry CatsEffectInLean/RegistryHeavy.lean).
+# Heavy proofs (decisions 55 and 57, lean_lib HeavyProofs, registry
+# CatsEffectInLean/RegistryHeavy.lean).
 #
-# 1. Build the default target and the tools (`audit_heavy`) as the main job does. Copy the
-#    `audit_heavy` binary to a directory outside `.lake`, and hash every file under
-#    `.lake/build`.
-# 2. Derive the heavy module list and the theorem list (review batch 7, gap 3):
-#    `tools/HeavyList.lean` prints `CatsEffectInLean.heavyModules` and the theorems of
-#    `registryHeavy`; `scripts/heavy_closure.py` gives the import closure of the roots minus the
-#    default target, imports first, and fails if the lakefile roots differ.
-# 3. Build the heavy modules one module per `lake build`, each inside the bwrap sandbox
-#    (`scripts/sandbox.sh`: read-only file system except `.lake`, no network; review batch 7,
-#    gap 1), so build-time code cannot change the sources, the inventory or the audit tool.
-# 4. Check that the heavy build changed nothing outside its own module artifacts: every file
-#    hashed in step 1 that does not belong to a heavy module is unchanged, and the git work
-#    tree is unchanged.
-# 5. Run the copied `audit_heavy`: audit Registry.lean and RegistryHeavy.lean in full
-#    (theorem types, modules, axioms) and run the full inventory cross-check, including the rows
-#    that the main audit defers.
-# 6. Explicit `#print axioms` of every heavy theorem (from step 2), in the sandbox.
-# 7. Kernel replay of every heavy module with `leanchecker` (one module per process; `leanchecker
-#    M` replays only the declarations of M), in the sandbox. Skip with SKIP_REPLAY=1 (the
-#    scheduled paranoid run replays the export through all kernels instead).
+# Two modes:
+# - Full (local, default): build and replay every heavy module here.
+# - Audit (CI job `heavy-audit`, HEAVY_ARTIFACTS_IN=<dir>): the matrix jobs `heavy-module`
+#   (scripts/check_heavy_module.sh) built and replayed each non-root heavy module and uploaded its
+#   artifacts; this job checks that an artifact set exists for every non-root module, installs
+#   them, and builds and replays only the roots.
 #
-# Writes the heavy module list to $HEAVY_MODULES_OUT if set (used by paranoid-heavy.yml).
+# Steps:
+# 1. Build the default target and `audit_heavy` (outside the sandbox, as the main job does).
+#    Copy the `audit_heavy` binary out of `.lake`.
+# 2. Derive the lists (review batch 7, gap 3): `tools/HeavyList.lean` prints
+#    `CatsEffectInLean.heavyModules` and the theorems of `registryHeavy`;
+#    `scripts/heavy_closure.py` gives the heavy module closure (imports first) and fails if the
+#    lakefile roots differ from `heavyModules`.
+# 3. Build the heavy modules one at a time in the bwrap sandbox, each build checked to change
+#    only its own artifacts (scripts/heavy_build.sh; review batch 7, gap 1). In audit mode the
+#    installed artifacts must stay byte-identical (no rebuild of a module that a matrix job
+#    replayed).
+# 4. Run the copied `audit_heavy`: both registries in full, full inventory cross-check
+#    (deferred rows included).
+# 5. `#print axioms` of every heavy theorem, in the sandbox.
+# 6. `leanchecker` replay, one module per process, in the sandbox: every heavy module (full
+#    mode) or the roots (audit mode). Skip with SKIP_REPLAY=1 (paranoid-heavy.yml replays the
+#    export through all kernels instead).
+#
+# Writes the heavy module list to $HEAVY_MODULES_OUT if set.
 # Usage: scripts/check_heavy_proofs.sh   (from any directory; needs bwrap)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.elan/bin:$PATH"
 lake_bin=$(command -v lake)
+artifacts_in=${HEAVY_ARTIFACTS_IN:-}
 
 safe=$(mktemp -d)
 trap 'chmod -R u+w "$safe" 2>/dev/null; rm -rf "$safe"' EXIT
@@ -40,55 +46,47 @@ lean_path=$(lake env printenv LEAN_PATH)
 
 echo "== 2. heavy module and theorem lists"
 lake env lean --run tools/HeavyList.lean > "$safe/heavylist.txt"
-roots=$(sed -n 's/^module //p' "$safe/heavylist.txt")
-thms=$(sed -n 's/^thm //p' "$safe/heavylist.txt")
-# shellcheck disable=SC2086
-python3 scripts/heavy_closure.py $roots > "$safe/mods.txt"
+mapfile -t roots < <(sed -n 's/^module //p' "$safe/heavylist.txt")
+mapfile -t thm_list < <(sed -n 's/^thm //p' "$safe/heavylist.txt")
+[[ ${#roots[@]} -gt 0 ]] || { echo "FAIL: no heavy roots"; exit 1; }
+[[ ${#thm_list[@]} -gt 0 ]] || { echo "FAIL: no heavy theorems in registryHeavy"; exit 1; }
+python3 scripts/heavy_closure.py "${roots[@]}" > "$safe/mods.txt"
 mapfile -t mods < "$safe/mods.txt"
-mapfile -t thm_list <<< "$thms"
 [[ ${#mods[@]} -gt 0 ]] || { echo "FAIL: no heavy modules"; exit 1; }
-[[ -n "$thms" ]] || { echo "FAIL: no heavy theorems in registryHeavy"; exit 1; }
 printf '%s\n' "${mods[@]}"
 if [[ -n "${HEAVY_MODULES_OUT:-}" ]]; then cp "$safe/mods.txt" "$HEAVY_MODULES_OUT"; fi
+is_root() { local r; for r in "${roots[@]}"; do [[ $r == "$1" ]] && return 0; done; return 1; }
 
-# hash every build file that does not belong to a heavy module
-heavy_re=$(printf '%s\n' "${mods[@]}" | sed 's/\./\//g; s/^/\//; s/$/\\./' | paste -sd'|')
-manifest() {
-  find .lake/build -type f -print0 | sort -z | xargs -0 sha256sum | grep -v -E "$heavy_re" || true
-}
-manifest > "$safe/before.sha"
-git status --porcelain=v1 --untracked-files=all > "$safe/git_before.txt"
-git diff HEAD > "$safe/git_before.diff"
-
-echo "== 3. heavy modules, one sandboxed lake build each"
-for m in "${mods[@]}"; do
-  echo "== build $m"
-  scripts/sandbox.sh "$lake_bin" build --wfail "$m"
-done
-scripts/sandbox.sh "$lake_bin" build --wfail HeavyProofs
-
-echo "== 4. nothing outside the heavy module artifacts changed"
-manifest > "$safe/after.sha"
-if ! diff -q "$safe/before.sha" "$safe/after.sha" > /dev/null; then
-  echo "FAIL: the heavy build changed build files outside its own modules:"
-  diff "$safe/before.sha" "$safe/after.sha" | head -20
-  exit 1
-fi
-git status --porcelain=v1 --untracked-files=all > "$safe/git_after.txt"
-git diff HEAD > "$safe/git_after.diff"
-if ! cmp -s "$safe/git_before.txt" "$safe/git_after.txt" || ! cmp -s "$safe/git_before.diff" "$safe/git_after.diff"; then
-  echo "FAIL: the heavy build changed the work tree"; exit 1
+replay=("${mods[@]}")
+if [[ -n "$artifacts_in" ]]; then
+  echo "== 2b. install the artifacts of the matrix jobs from $artifacts_in"
+  replay=("${roots[@]}")
+  for m in "${mods[@]}"; do
+    is_root "$m" && continue
+    [[ -f "$artifacts_in/$m.sha256" ]] || { echo "FAIL: no artifacts for $m (matrix job missing)"; exit 1; }
+    (cd "$artifacts_in" && sha256sum --quiet -c "$m.sha256") || { echo "FAIL: artifacts of $m corrupted"; exit 1; }
+  done
+  mkdir -p .lake/build
+  cp -a "$artifacts_in/build/." .lake/build/
+  cat "$artifacts_in"/*.sha256 | sort -k2 > "$safe/installed.sha"
 fi
 
-echo "== 5. heavy registry audit (copied binary)"
+echo "== 3. heavy modules, sandboxed, one at a time"
+scripts/heavy_build.sh "${mods[@]}"
+if [[ -n "$artifacts_in" ]]; then
+  (cd .lake && sha256sum --quiet -c "$safe/installed.sha") \
+    || { echo "FAIL: installed matrix artifacts were rebuilt or changed"; exit 1; }
+fi
+
+echo "== 4. heavy registry audit (copied binary)"
 LEAN_PATH="$lean_path" "$safe/audit_heavy"
 
-echo "== 6. axioms of the heavy theorems"
+echo "== 5. axioms of the heavy theorems"
 # the sandbox has a private /tmp, so the generated file goes to .lake (read by the sandbox only)
 axdir=.lake/heavy-axioms
 rm -rf "$axdir"; mkdir -p "$axdir"
 {
-  for m in $roots; do echo "import $m"; done
+  for m in "${roots[@]}"; do echo "import $m"; done
   for t in "${thm_list[@]}"; do echo "#print axioms $t"; done
 } > "$axdir/HeavyAxioms.lean"
 out=$(scripts/sandbox.sh "$lake_bin" env lean "$axdir/HeavyAxioms.lean" 2>&1)
@@ -104,8 +102,8 @@ bad=$(echo "$flat" | grep -o '\[[^]]*\]' | tr -d '[]' | tr ',' '\n' | sed 's/^ *
 if [[ -n $bad ]]; then echo "FAIL: forbidden axioms: $bad"; exit 1; fi
 
 if [[ "${SKIP_REPLAY:-0}" != 1 ]]; then
-  for m in "${mods[@]}"; do
-    echo "== 7. kernel replay (leanchecker) $m"
+  for m in "${replay[@]}"; do
+    echo "== 6. kernel replay (leanchecker) $m"
     scripts/sandbox.sh "$lake_bin" env leanchecker "$m"
   done
 fi

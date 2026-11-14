@@ -1,20 +1,15 @@
 name: Paranoid kernel check (heavy proofs)
 
-# Decision 55: the heavy proofs (lean_lib HeavyProofs) are not in the default target, so the
-# weekly `paranoid.yml` (`lake check --paranoid`) does not see them. This run builds them in the
-# bwrap sandbox (scripts/check_heavy_proofs.sh with SKIP_REPLAY=1), exports every heavy module
-# with `leanexport` and replays the export through all bundled kernels
-# (`lake check --from-export --paranoid`).
-#
-# Export scope (checked 2026-11-14, review batch 7 gap 4): `leanexport M` writes M and all its
-# imports; `leanexport A B` writes the union. The export of the law root alone already holds all
-# 49 chunk theorems (362 MB, 43,690 theorems and 17,122 definitions including Init and Lean).
-# This run still passes the full heavy module list (derived, not hand-written), so a future heavy
-# root that the others do not import is covered too.
-#
-# Run time not measured: one default-kernel replay of the heavy modules took about 30 min
-# locally, so six kernels may need about 3-4 h; the timeout is close to the GitHub-hosted
-# maximum (360 min). See QUESTIONS.md Q4.
+# Decisions 55 and 57: the heavy proofs (lean_lib HeavyProofs) are not in the default target, so
+# the weekly `paranoid.yml` (`lake check --paranoid`) does not see them.
+# 1. paranoid-heavy-export builds them in the bwrap sandbox (scripts/check_heavy_proofs.sh,
+#    SKIP_REPLAY=1) and exports every heavy module with one sandboxed `leanexport` call.
+#    Export scope (checked 2026-11-14, review batch 7 gap 4): `leanexport M` writes M and all
+#    its imports; `leanexport A B` writes the union (law: 362 MB, 61,734 declarations with Init
+#    and Lean).
+# 2. paranoid-heavy-kernel runs one kernel per job (scripts/run_kernel.sh, the same commands as
+#    `lake check --paranoid`), so each job has its own 360 min budget. The default kernel took
+#    33 min on the export locally (2026-11-14).
 on:
   schedule:
     - cron: "41 3 * * 0" # Sundays 03:41 UTC
@@ -24,31 +19,60 @@ permissions:
   contents: read
 
 jobs:
-  paranoid-heavy:
-    name: Independent kernels (heavy proofs)
+  paranoid-heavy-export:
+    name: Heavy proofs export
     runs-on: ubuntu-26.04
-    timeout-minutes: 350
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
         with:
           auto-config: "false"
-
       - name: Allow bwrap user namespaces
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq bubblewrap
           sudo scripts/setup-bwrap-apparmor.sh
-
       - name: Build heavy proofs in the sandbox and audit
         run: SKIP_REPLAY=1 HEAVY_MODULES_OUT="$RUNNER_TEMP/heavy-modules.txt" scripts/check_heavy_proofs.sh
-
-      - name: Export every heavy module and replay through all kernels
+      - name: Export every heavy module
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
           mapfile -t mods < "$RUNNER_TEMP/heavy-modules.txt"
-          scripts/sandbox.sh "$(command -v lake)" env leanexport "${mods[@]}" > "$RUNNER_TEMP/heavy.ndjson"
-          ls -l "$RUNNER_TEMP/heavy.ndjson"
+          mkdir -p "$RUNNER_TEMP/export"
+          scripts/sandbox.sh "$(command -v lake)" env leanexport "${mods[@]}" > "$RUNNER_TEMP/export/heavy.ndjson"
+          ls -l "$RUNNER_TEMP/export/heavy.ndjson"
           echo "declarations (def/thm/inductive/opaque/axiom):"
-          grep -c -E '^\{"(def|thm|inductive|opaque|axiom)"' "$RUNNER_TEMP/heavy.ndjson" || true
-          lake check --from-export "$RUNNER_TEMP/heavy.ndjson" --paranoid
+          grep -c -E '^\{"(def|thm|inductive|opaque|axiom)"' "$RUNNER_TEMP/export/heavy.ndjson" || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: heavy-export
+          path: ${{ runner.temp }}/export/heavy.ndjson
+          if-no-files-found: error
+          retention-days: 3
+
+  paranoid-heavy-kernel:
+    name: Kernel ${{ matrix.kernel }} (heavy proofs)
+    needs: paranoid-heavy-export
+    runs-on: ubuntu-26.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        kernel: [default, lean-paranoid, lean4lean, nanoda, con-leche, con-ron]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          auto-config: "false"
+      - name: Allow bwrap user namespaces
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          sudo scripts/setup-bwrap-apparmor.sh
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: heavy-export
+          path: ${{ runner.temp }}/export
+      - name: Replay the export
+        run: scripts/run_kernel.sh "${{ matrix.kernel }}" "$RUNNER_TEMP/export/heavy.ndjson"
