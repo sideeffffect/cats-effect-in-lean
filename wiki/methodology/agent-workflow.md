@@ -55,6 +55,10 @@ Subagents in git worktrees (`worktree-agent-<hex>`), one module each (this repo,
 
 A statement whose hypotheses never hold together is vacuous: it is HOLLOW (review batch 4: `Bracket.MarkersOnly`). Every property with a non-trivial hypothesis set needs a Lean witness: one concrete input that meets all hypotheses and reaches the interesting case. Smoke tests must evaluate the hypotheses too. Test markers capture a handle that only the harness holds (decision 54). Source: [decision 53](../../raw/project-decisions/2026-11-10-decision-53-satisfiability.md).
 
+## Reviewer evidence (added 2026-11-10)
+
+A reviewer cites only evidence it opened: a wrong-function test, a witness or a fixed twin counts only if the reviewer found the file and the declaration. A doc comment that names a check is not evidence (review batch 4 relied on a file that did not exist; [note](../../raw/project-decisions/2026-11-10-reviewer-evidence-rule.md)).
+
 ## Fixed-twin check for refutations (added 2026-11-10)
 
 A refutation is HOLLOW when a correct implementation also refutes the statement (review batch 2 found this twice: a model artifact made `¬P` true for every implementation). For each refutation, mirror the upstream fix or the `possible_fix` as a twin, and show on a bounded domain that the twin satisfies the property.

@@ -68,3 +68,4 @@ import CatsEffectInLean.Props.Phase6.Resource
 import CatsEffectInLean.Proofs.Phase6.ResourceWitnessEnv
 import CatsEffectInLean.Proofs.Phase6.ResourceWitness
 import CatsEffectInLean.Proofs.Phase6.ResourceBoth
+import CatsEffectInLean.Proofs.Phase6.RaceWitness
