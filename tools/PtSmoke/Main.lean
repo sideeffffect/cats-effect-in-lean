@@ -15,7 +15,7 @@ Wrong-function tests (each must break its claim):
 * statement 1: the result list reversed (`Map` with a harness `reverse`);
 * statement 2: the last result dropped;
 * statements 3, 4: `cancelAll` removed from the error (cancel) branch of the action finalizer
-  (`K/GC:196-209`): the traversal then waits for the never-ending action.
+  (`K/GC:197-213`): the traversal then waits for the never-ending action.
 
 An exact search (`exploreP`) is not used: with up to five fibers and a preemption at every run-loop
 iteration the state sets are too large (track R measured > 10^4 states for three fibers).

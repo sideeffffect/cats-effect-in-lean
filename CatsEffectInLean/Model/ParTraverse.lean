@@ -7,12 +7,12 @@ import CatsEffectInLean.Model.Timeout
 
 `IO.parTraverseN(n)(ta)(f)` (`core/shared/src/main/scala/cats/effect/IO.scala:1593-1594`) is
 `_asyncForIO.parTraverseN(n)(ta)(f)`. `IOAsync` does not override it, so the kernel default
-`GenConcurrent#parTraverseN` (`kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala:145-251`,
+`GenConcurrent#parTraverseN` (`kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala:145-249`,
 `K/GC` below) runs with the `IO` operations. There is no twin: one body. Paths at v3.7.1.
 
 `T = List`. The helpers it calls:
 
-* `MiniSemaphore` (`kernel/.../MiniSemaphore.scala:41-88`, `K/MS`): `F.ref(State(Queue(), n)).map(...)`;
+* `MiniSemaphore` (`kernel/.../MiniSemaphore.scala:41-92`, `K/MS`): `F.ref(State(Queue(), n)).map(...)`;
   `acquire` (`:59-72`), `release` (`:74-83`, `state.flatModify`).
 * `Ref` (`IO.ref` = `IO(Ref.unsafe(a))`, `IO.scala:1822`; the JVM `SyncRef`,
   `kernel/jvm-native/.../SyncRef.scala`): `get` = `F.delay(ar.get)` (`:30`), `update` = `F.delay(spin)`
@@ -78,7 +78,7 @@ inductive PT where
   | k1 (n : Nat) (as : Val) (f : Nat)
   /-- `supervision => MiniSemaphore[F](n).flatMap(...)` (`K/GC:152`, `:170`). -/
   | k2 (n : Nat) (as : Val) (f p : Nat)
-  /-- `state => new MiniSemaphore` (`K/MS:56`): the semaphore is its state ref. -/
+  /-- `state => new MiniSemaphore` (`K/MS:60`): the semaphore is its state ref. -/
   | semK
   /-- `sem => { val results = ta traverse {...}; results.flatMap(_.sequence).onCancel(...) }`. -/
   | k3 (as : Val) (f p s : Nat)
@@ -94,19 +94,19 @@ inductive PT where
   | elemSel (f p s q : Nat) (a : Val)
   /-- `poll => F.deferred[...].flatMap(result => ...)` (`K/GC:177`). -/
   | uncK (f p s q : Nat) (a : Val)
-  /-- `result => { val action = ...; action flatMap {...} }` (`K/GC:178-232`). -/
+  /-- `result => { val action = ...; action flatMap {...} }` (`K/GC:178-240`). -/
   | resK (f p s q : Nat) (a : Val) (m pp : Nat)
-  /-- `_ => that` of `poll(sem.acquire) *> (...).start` (`K/GC:182`). -/
+  /-- `_ => that` of `poll(sem.acquire) *> (...).start` (`K/GC:182-220`). -/
   | thenStart (f p s q : Nat) (a : Val) (r : Nat)
   /-- `_ => f(a)` of `F.unit >> f(a)` (`K/GC:182`). -/
   | callF (f : Nat) (a : Val)
-  /-- The `guaranteeCase` finalizer `oc => completion *> sem.release` (`K/GC:183-215`). -/
+  /-- The `guaranteeCase` finalizer `oc => completion *> sem.release` (`K/GC:183-217`). -/
   | finK (p s q r : Nat)
   /-- `{ case Some(Some(e)) => ...; case Some(None) => ...; case None => result.complete(oc) }`. -/
   | compSucc (r : Nat) (oc : Val)
-  /-- `ifM(result.complete(oc) <* cancelAll(Some(e)), false.pure)` (`K/GC:196-200`). -/
+  /-- `ifM(result.complete(oc) <* cancelAll(Some(e)), false.pure)` (`K/GC:197-203`). -/
   | ifErr (s r : Nat) (e : Err)
-  /-- `ifM(result.complete(oc) <* cancelAll(None).start, false.pure)` (`K/GC:203-209`). -/
+  /-- `ifM(result.complete(oc) <* cancelAll(None).start, false.pure)` (`K/GC:205-213`). -/
   | ifCan (s r : Nat)
   /-- `a => that.as(a)` of `<*` with `that = cancelAll(c)` (`IO#productL`). -/
   | plCancelAll (s : Nat) (c : Val)
@@ -114,37 +114,37 @@ inductive PT where
   | plStartCancelAll (s : Nat)
   /-- `_ => b` of `as`. -/
   | asK (b : Val)
-  /-- `_ => sem.release` of `completion *> sem.release` (`K/GC:214`). -/
+  /-- `_ => sem.release` of `completion *> sem.release` (`K/GC:216`). -/
   | thenRelease (q : Nat)
   /-- `_ => ()` of `void`. -/
   | voidK
   /-- `t => IO.pure(())` of `voidError` (`IO.scala:977-980`, `532-533`). -/
   | unitH
   /-- `fiber => supervision.update(_ + ((fiber, result))) *> preempt.tryGet flatMap {...}`
-  (`K/GC:220-222`). Scala precedence: the alphanumeric infix `flatMap` binds weaker than `*>`, so
+  (`K/GC:222-225`). Scala precedence: the alphanumeric infix `flatMap` binds weaker than `*>`, so
   this is `(update *> tryGet) flatMap {...}` (checked on the real `IO` tree). -/
   | fibK (p s r : Nat)
   /-- `update(_ + ((fiber, result)))` thunk (`SyncRef.update`). -/
   | supAdd (s t r : Nat)
   /-- `update(_ - ((fiber, result)))` thunk. -/
   | supRemove (s t r : Nat)
-  /-- `_ => that` of `update *> preempt.tryGet` (`K/GC:220-222`). -/
+  /-- `_ => that` of `update *> preempt.tryGet` (`K/GC:222-225`). -/
   | thenAfter (p s t r : Nat)
-  /-- `{ case Some(Some(e)) => fiber.cancel.as(...); ...; case None => F.pure(...) }` (`K/GC:222-232`). -/
+  /-- `{ case Some(Some(e)) => fiber.cancel.as(...); ...; case None => F.pure(...) }` (`K/GC:225-237`). -/
   | selAfter (s t r : Nat)
-  /-- `{ case Canceled() => F.unit; case _ => supervision.update(_ - ...) }` (`K/GC:228-231`). -/
+  /-- `{ case Canceled() => F.unit; case _ => supervision.update(_ - ...) }` (`K/GC:234-237`). -/
   | finRes (s t r : Nat)
-  /-- `_.embed(F.canceled *> F.never)` (`K/GC:227`). -/
+  /-- `_.embed(F.canceled *> F.never)` (`K/GC:233`). -/
   | embedK
   /-- `_ => F.never` of `F.canceled *> F.never`. -/
   | constNever
-  /-- `_.sequence` (`K/GC:237`): traverse with `identity` over the descriptors. -/
+  /-- `_.sequence` (`K/GC:245`): traverse with `identity` over the descriptors. -/
   | seqK
   /-- `acc => map(io)(b => acc :+ b)` of `map2` in `_.sequence`; `d` the descriptor of `io`. -/
   | seqM2 (d : Val)
   /-- `SyncRef.get` thunk. -/
   | refGet (s : Nat)
-  /-- `states => states.toList parTraverse_ {...}` of `cancelAll` (`K/GC:155-164`). -/
+  /-- `states => states.toList parTraverse_ {...}` of `cancelAll` (`K/GC:154-164`). -/
   | caK (c : Val)
   /-- `b => if (b) fiber.cancel else F.unit` of `result.complete(causeOC).ifM(...)` (`K/GC:162`). -/
   | ifCancel (t : Nat)
@@ -158,30 +158,30 @@ inductive PT where
   | constJoin (t : Nat) (snap : Val)
   /-- `poll => F.deferred[Unit].flatMap(wait => ...)` of `acquire` (`K/MS:60`). -/
   | acqBody (q : Nat)
-  /-- `wait => { val cleanup = ...; state.modify {...}.flatten }` (`K/MS:61-71`). -/
+  /-- `wait => { val cleanup = ...; state.modify {...}.flatten }` (`K/MS:64-73`). -/
   | acqWait (q m pp : Nat)
-  /-- The `modify` thunk of `acquire` (`K/MS:64-69`). -/
+  /-- The `modify` thunk of `acquire` (`K/MS:67-73`). -/
   | modAcq (q w m pp : Nat)
   /-- `fa => fa` of `flatten` (`cats/FlatMap.scala:58-59`); the argument is a descriptor. -/
   | flattenK
-  /-- `won => if (won) F.unit else release` (`K/MS:62`, `:77-78`). -/
+  /-- `won => if (won) F.unit else release` (`K/MS:65`, `:77-78`). -/
   | wonK (q : Nat)
   /-- `_ => F.flatten(modify(f))` of `flatModify` in `release` (`Ref.scala:123-124`). -/
   | relBody (q : Nat)
-  /-- The `modify` thunk of `release` (`K/MS:75-82`). -/
+  /-- The `modify` thunk of `release` (`K/MS:78-86`). -/
   | modRel (q : Nat)
   deriving DecidableEq, Repr
 
 /-- Descriptors of `IO` values held in values. -/
 def dRaise (e : Err) : Val := cloVal ns 90 [.err e]
 def dCanceledNever : Val := cloVal ns 91 []
-/-- `result.get.flatMap(_.embed(...)).guaranteeCase {...}` (`K/GC:225-231`); `snap` = what
+/-- `result.get.flatMap(_.embed(...)).guaranteeCase {...}` (`K/GC:230-237`); `snap` = what
 `result.get` read. -/
 def dResultGet (s t r : Nat) (snap : Val) : Val := cloVal ns 92 [.ref s, .fiber t, .deferred r, snap]
 def dUnit : Val := cloVal ns 93 []
-/-- `poll(wait.get).onCancel(cleanup)` (`K/MS:66`). -/
+/-- `poll(wait.get).onCancel(cleanup)` (`K/MS:70`). -/
 def dAcqWait (q w m pp : Nat) : Val := cloVal ns 94 [.ref q, .deferred w, .poll m pp]
-/-- `waiting.head.complete(()).flatMap { granted => ... }` (`K/MS:78`). -/
+/-- `waiting.head.complete(()).flatMap { granted => ... }` (`K/MS:81`). -/
 def dGrant (q h : Nat) : Val := cloVal ns 95 [.ref q, .deferred h]
 
 /-- Source codes (`ioOf`). -/
@@ -305,7 +305,7 @@ def PT.ofId? (id : Nat) : Option PT :=
 
 /-! ## Terms -/
 
-/-- `IO.parTraverseN(n)(as)(f)` (`IO.scala:1593-1594`, `K/GC:145-251`); `require(n >= 1)` holds
+/-- `IO.parTraverseN(n)(as)(f)` (`IO.scala:1593-1594`, `K/GC:145-249`); `require(n >= 1)` holds
 (the caller checks it). -/
 def parTraverseNIO (n : Nat) (as : List Val) (f : Nat) : IO :=
   .flatMap (.delay PT.newDeferred.fn) (PT.k1 n (listV as) f).fn
@@ -319,16 +319,16 @@ def tryGetIO (d : Nat) : IO := .delay (PT.tryGet d).fn
 /-- `F.canceled *> F.never` (strict `that`). -/
 def canceledNever : IO := .flatMap .canceled PT.constNever.fn
 
-/-- `sem.acquire` (`K/MS:59-72`). -/
+/-- `sem.acquire` (`K/MS:62-75`). -/
 def acquireIO (q : Nat) : IO := .uncancelable (PT.acqBody q).fn
 
-/-- `sem.release` (`K/MS:74-83`): `state.flatModify {...}` = `F.uncancelable(_ => F.flatten(modify(...)))`. -/
+/-- `sem.release` (`K/MS:77-86`): `state.flatModify {...}` = `F.uncancelable(_ => F.flatten(modify(...)))`. -/
 def releaseIO (q : Nat) : IO := .uncancelable (PT.relBody q).fn
 
 /-- `cleanup` / `granted` continuation: `d.complete(()).flatMap { won => if (won) F.unit else release }`. -/
 def completeThenRelease (q d : Nat) : IO := .flatMap (completeIO d .unit) (PT.wonK q).fn
 
-/-- `cancelAll(cause)` (`K/GC:155-164`). -/
+/-- `cancelAll(cause)` (`K/GC:154-164`). -/
 def cancelAllIO (s : Nat) (c : Val) : IO := .flatMap (.delay (PT.refGet s).fn) (PT.caK c).fn
 
 /-- `cancelAllAndJoin` (`K/GC:166-168`). -/
@@ -389,7 +389,7 @@ def ioOf : Val → IO
     match ofCloVal c with
     -- `F.unit >> f(a)` (`K/GC:182`)
     | some (41, 80, [.nat f, a]) => .flatMap (.pure .unit) (PT.callF f a).fn
-    -- `result.get.flatMap(_.embed(F.canceled *> F.never))` (`K/GC:226-227`)
+    -- `result.get.flatMap(_.embed(F.canceled *> F.never))` (`K/GC:231-233`)
     | some (41, 81, [.deferred r, snap]) =>
       .flatMap (IO.deferredGetOf r (match snap with | .some x => some x | _ => none)) PT.embedK.fn
     | some (41, 82, [xs, cause]) =>
@@ -439,7 +439,7 @@ def call (uc : Nat → Val → View → UserResult) (l : PT) (arg : Val) (v : Vi
   | .semK => ret arg
   | .k3 as f p s =>
     match arg with
-    -- `results.flatMap(_.sequence).onCancel(cancelAllAndJoin)` (`K/GC:237`)
+    -- `results.flatMap(_.sequence).onCancel(cancelAllAndJoin)` (`K/GC:245`)
     | .ref q =>
       prog (.onCancel (.flatMap (traverseIO f p s q (listOf as)) PT.seqK.fn) (cancelAllAndJoinIO p s))
     | _ => illTyped

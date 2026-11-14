@@ -6,7 +6,7 @@ import CatsEffectInLean.Model.Outcomes
 # `parTraverseN`: result order, success, error and cancel propagation (Phase 6, batch 6.3)
 
 Model: `CatsEffectInLean/Model/ParTraverse.lean`, the kernel default
-`GenConcurrent#parTraverseN` (`kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala:145-251`)
+`GenConcurrent#parTraverseN` (`kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala:145-249`)
 with the `IO` operations; `IO.parTraverseN` (`core/shared/src/main/scala/cats/effect/IO.scala:1593-1594`)
 calls it. Scaladoc (`GenConcurrent.scala:132-144`): "The first n actions will be started first,
 with subsequent actions starting in order as each one completes. ... Any errors or

@@ -4,7 +4,7 @@ import CatsEffectInLean.Proofs.Phase6.RaceLawChunks9
 # `GenSpawnLaws.uncancelableRaceNotInherited` for `IO` (Phase 6, track P)
 
 `F.uncancelable(_ => F.race(F.never[Unit], F.canceled)).void <-> F.never[Unit]`
-(`laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala:121-122`), `<->` = `EqvP`.
+(`laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala:146-147`), `<->` = `EqvP`.
 
 Proof by certificates (`Proofs/Lemmas/CertP.lean`): the left side has exactly 4,441 states
 (closed under `preempt` and every `pick`), the right side 45. On both sides every state with an

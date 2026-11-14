@@ -384,7 +384,7 @@ def registry : List Entry := [
     prop := ``Props.Phase6.ParTraverse.parTraverseNErrorAborts
     status := .«open»
     note := "If f(a0) raises e, a0 is among the first n inputs and every other f(a) never completes, \
-      every run that stops ends Errored(e) (Scaladoc K/GC:139-140: errors abort the \
+      every run that stops ends Errored(e) (Scaladoc K/GC:137-139: errors abort the \
       sequence). Satisfiable (parTraverseNErrorAborts_satisfiable). Smoke: ptsmoke (no \
       cancelAll in the error branch breaks it). Open." },
   { id := "core.IO.parTraverseN.cancelAborts"

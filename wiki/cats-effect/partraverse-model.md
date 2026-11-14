@@ -1,6 +1,6 @@
 # parTraverseN model
 
-> Sources: Cats Effect v3.7.1 (`kernel/.../GenConcurrent.scala:113-251`, `MiniSemaphore.scala:17-88`, `Ref.scala:123-124`, `SyncRef.scala`, `IODeferred.scala:20-80`, `IO.scala:1593-1600`); cats-core 2.13.0 (`list.scala`, `Traverse.scala`, `FlatMap.scala`, `Parallel.scala`); own Phase 6 batch 6.3 work and scala-cli runs, 2026-11-14
+> Sources: Cats Effect v3.7.1 (`kernel/.../GenConcurrent.scala:113-249`, `MiniSemaphore.scala:17-92`, `Ref.scala:123-124`, `SyncRef.scala`, `IODeferred.scala:20-80`, `IO.scala:1593-1600`); cats-core 2.13.0 (`list.scala`, `Traverse.scala`, `FlatMap.scala`, `Parallel.scala`); own Phase 6 batch 6.3 work and scala-cli runs, 2026-11-14
 > Raw: [parTraverseN notes](../../raw/cats-effect/2026-11-14-partraverse-notes.md)
 
 ## Overview
