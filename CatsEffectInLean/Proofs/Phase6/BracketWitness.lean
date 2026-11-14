@@ -168,7 +168,7 @@ theorem captured2 (mem : Handle → Bool) : WF.capOK lib mem 2 = true :=
 
 theorem gR_ok (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK lib R v (gR n) := by
   match n with
-  | 0 | 1 | 2 => simp [gR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK, WF.sub, Val.handles,
+  | 0 | 1 | 2 => simp [gR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK, Val.handles,
       captured2]
   | _ + 3 => simp [gR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
 

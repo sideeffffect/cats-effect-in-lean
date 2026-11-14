@@ -755,4 +755,46 @@ def UEnv.toEnv (U : UEnv) : UserEnv where
 def isLib (id : Nat) : Bool :=
   (ULam.ofId? id).isSome || (Race.ofId? id).isSome || (Bracket.BLam.ofId? id).isSome || Resource.isLib id
 
+/-! ## Function fields (decision 56, `Lib.fields`) -/
+
+/-- The closure id that a `RelFn.user idx` or `AllocFn.user idx` names: a `ULam` id itself, else
+user function `idx` (program id `2 * idx`). -/
+def idxId (idx : Nat) : Nat := if (ULam.ofId? idx).isSome then idx else 2 * idx
+
+/-- The closure ids in a release function value. -/
+def relIds : RelFn → List Nat
+  | .user idx => [idxId idx]
+  | .guarantee a b => relIds a ++ relIds b
+  | _ => []
+
+def relValIds (rv : Val) : List Nat := ((RelFn.ofVal rv).map relIds).getD []
+
+def ULam.fnIds : ULam → List Nat
+  | .allocFn (.user idx) => [idxId idx]
+  | .foldUse _ o _ | .foldEvalK _ o _ =>
+    match OnOut.ofVal o with
+    | some (.user f) => [f]
+    | _ => []
+  | .unitThenK rel _ | .updateThunk _ _ rel => relValIds rel
+  | .storedFin fin rel | .storedFinK fin rel _ => relValIds fin ++ relValIds rel
+  | _ => []
+
+/-- The Phase 5 closures (`Clo`) with `ULam`-aware release functions. -/
+def cloIds : Clo → List Nat
+  | .evalK _ r | .onErrorH r => relIds r
+  | .allocBody (.user k) _ r => idxId k :: relIds r
+  | .allocBody _ _ r | .allocK _ r _ => relIds r
+  | _ => []
+
+/-- The function fields of a closure value of this library (`ULam`, `Bracket`, `Clo`; `Race`
+closures keep no closure id in a number field). -/
+def fnFields (c : Val) : List Nat :=
+  (match ofCloVal c with
+   | some (k, tag, fs) => if k == ns then ((ULam.ofFields tag fs).map ULam.fnIds).getD [] else []
+   | none => []) ++
+  Bracket.fnFields c ++ ((Clo.ofVal c).map cloIds).getD []
+
+/-- The library of this mirror for `WellFormed` (decision 56). -/
+def lib : Lib := { ok := isLib, fields := fnFields }
+
 end CatsEffectInLean.Model.ResourceUse

@@ -104,8 +104,8 @@ theorem r_calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
     have hl' : lib.ok 279459022985 = true := hl
     rw [he]
     rcases id / 2 with _ | _ | k <;>
-      simp [user, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK, WF.sub, alloc, fa,
-        IOI.uncancelable, uid, hl, hl', hX, h0]
+      simp [user, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK, alloc, fa,
+        IOI.uncancelable, uid, hl', hX, h0]
 
 theorem r_opaque : WF.PollOpaque r.toEnv := by
   obtain ⟨hl, hc, hc0, hc2⟩ := ids_ok

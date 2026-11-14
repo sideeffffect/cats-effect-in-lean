@@ -4,10 +4,10 @@ import CatsEffectInLean.Proofs.Phase6.ResourceBoth
 # Fixed-twin check of CE-0020 (decision 39), kernel-checked
 
 Input: the refutation witness of `bothReleasesBoth` (`ResourceBothWitness`: environment
-`W true true false`, all hypotheses of `BothReleasesBothFor` proven there; they do not depend on
+`W true true false`, all hypotheses of `BothReleasesBothFor` proven there (`Private` and the deep `WellFormed` too); they do not depend on
 the implementation of `both`). Domain: the 120 schedules "FIFO for `k` choices, then `pick d`"
-(`60 ≤ k < 120`, `d ∈ {1, 2}`; the release phase of the program, where v3.7.1 fails at `k = 89`),
-fuel 6000. (About 6 s of kernel time per run; the full 600-schedule family and 1,500 random
+(`63 ≤ k < 123`, `d ∈ {1, 2}`; the release phase of the program, where v3.7.1 fails at `k = 92`),
+fuel 8000. (About 6 s of kernel time per run; the full 600-schedule family and 1,500 random
 schedules are `#guard`ed in `test/Phase6/ResourceSmoke.lean`.)
 
 * `fixed_satisfies`: for the fixed twin `fixedBothRes` (not Cats Effect code), every run of the
@@ -35,41 +35,42 @@ def family (lo n : Nat) : List (List PChoice) :=
 /-- The conclusion of `bothReleasesBoth` on one run (runs without a root outcome are not counted). -/
 def concl (o : Obs) : Bool :=
   match o.summary with
-  | .done _ => o.out.count RA == o.out.count A && o.out.count RB == o.out.count B
+  | .done _ => (logOf o).count tagRA == (logOf o).count tagA && (logOf o).count tagRB == (logOf o).count tagB
   | _ => true
 
-def okOn (p : IO) (cs : List PChoice) : Bool :=
-  match runObsP {} counterMaskModel (envH WB) 6000 cs p with
+/-- The run of the harness with test body `b` on schedule `cs` satisfies the conclusion. -/
+def okOn (b : IO) (cs : List PChoice) : Bool :=
+  match runObsP {} counterMaskModel (envH WB b) 8000 cs harness with
   | some o => concl o
   | none => true
 
 set_option maxHeartbeats 0 in
-theorem fixed_0 : (family 60 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_0 : (family 63 5).all (okOn fixedBody) = true := by decide +kernel
 set_option maxHeartbeats 0 in
-theorem fixed_1 : (family 65 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_1 : (family 68 5).all (okOn fixedBody) = true := by decide +kernel
 set_option maxHeartbeats 0 in
-theorem fixed_2 : (family 70 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_2 : (family 73 5).all (okOn fixedBody) = true := by decide +kernel
 set_option maxHeartbeats 0 in
-theorem fixed_3 : (family 75 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_3 : (family 78 5).all (okOn fixedBody) = true := by decide +kernel
 set_option maxHeartbeats 0 in
-theorem fixed_4 : (family 80 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_4 : (family 83 5).all (okOn fixedBody) = true := by decide +kernel
 set_option maxHeartbeats 0 in
-theorem fixed_5 : (family 85 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_5 : (family 88 5).all (okOn fixedBody) = true := by decide +kernel
 set_option maxHeartbeats 0 in
-theorem fixed_6 : (family 90 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_6 : (family 93 5).all (okOn fixedBody) = true := by decide +kernel
 set_option maxHeartbeats 0 in
-theorem fixed_7 : (family 95 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_7 : (family 98 5).all (okOn fixedBody) = true := by decide +kernel
 set_option maxHeartbeats 0 in
-theorem fixed_8 : (family 100 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_8 : (family 103 5).all (okOn fixedBody) = true := by decide +kernel
 set_option maxHeartbeats 0 in
-theorem fixed_9 : (family 105 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_9 : (family 108 5).all (okOn fixedBody) = true := by decide +kernel
 set_option maxHeartbeats 0 in
-theorem fixed_10 : (family 110 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_10 : (family 113 5).all (okOn fixedBody) = true := by decide +kernel
 set_option maxHeartbeats 0 in
-theorem fixed_11 : (family 115 5).all (okOn fixedProg) = true := by decide +kernel
+theorem fixed_11 : (family 118 5).all (okOn fixedBody) = true := by decide +kernel
 
-theorem fixed_satisfies : ∀ cs ∈ family 60 60, okOn fixedProg cs = true := by
-  have hall : ∀ n, n < 12 → (family (60 + 5 * n) 5).all (okOn fixedProg) = true := by
+theorem fixed_satisfies : ∀ cs ∈ family 63 60, okOn fixedBody cs = true := by
+  have hall : ∀ n, n < 12 → (family (63 + 5 * n) 5).all (okOn fixedBody) = true := by
     intro n hn
     match n, hn with
     | 0, _ => exact fixed_0 | 1, _ => exact fixed_1 | 2, _ => exact fixed_2 | 3, _ => exact fixed_3
@@ -82,15 +83,15 @@ theorem fixed_satisfies : ∀ cs ∈ family 60 60, okOn fixedProg cs = true := b
   rw [List.all_eq_true] at h
   apply h
   simp only [family, List.mem_flatMap, List.mem_range]
-  exact ⟨i % 5, Nat.mod_lt _ (by omega), by rw [show 60 + 5 * (i / 5) + i % 5 = 60 + i by omega]; exact hm⟩
+  exact ⟨i % 5, Nat.mod_lt _ (by omega), by rw [show 63 + 5 * (i / 5) + i % 5 = 63 + i by omega]; exact hm⟩
 
-theorem old_violates : ∃ cs ∈ family 60 60, okOn (withParent false prog) cs = false :=
+theorem old_violates : ∃ cs ∈ family 63 60, okOn body cs = false :=
   ⟨sched, by
     simp only [family, List.mem_flatMap, List.mem_range]
     exact ⟨29, by omega, by simp [sched]⟩, by decide +kernel⟩
 
 /-- Everything of this module (for `#print axioms` in `scripts/check_twin_checks.sh`). -/
-theorem all_checks : (∀ cs ∈ family 60 60, okOn fixedProg cs = true) ∧
-    ∃ cs ∈ family 60 60, okOn (withParent false prog) cs = false := ⟨fixed_satisfies, old_violates⟩
+theorem all_checks : (∀ cs ∈ family 63 60, okOn fixedBody cs = true) ∧
+    ∃ cs ∈ family 63 60, okOn body cs = false := ⟨fixed_satisfies, old_violates⟩
 
 end CatsEffectInLean.Proofs.Phase6.ResourceBothFixed
