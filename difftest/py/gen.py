@@ -104,7 +104,10 @@ WEIGHTS = {
     'tpl_memo': 0.4, 'memoGet': 4,
     # format v2 (track Res)
     'rUse': 0.5, 'rAllocated': 0.4, 'res_both': 2.0, 'tpl_resBoth': 0.5,
-    # format v2 (batch 6.3): `parTraverseN` (lists of at most 4 elements)
+    # format v2 (batch 6.3): `parTraverseN` (lists of at most 4 elements). Not a production of
+    # `composite_opts` (a new option shifts the shared RNG and pushed `race` below its selftest
+    # minimum); `gen_case` appends it with its own RNG (`p_par_traverse`). Weights here only
+    # scale how often the two shapes are chosen there (`--boost` in opcount.py).
     'tpl_parTraverse': 1.2, 'tpl_parTraverseCancel': 0.6,
 }
 
@@ -128,7 +131,8 @@ CONFIG = {
     'p_syncstep': 0.09,        # the root is `syncStep(prog, limit)`
     'p_queue_type': 0.1,       # bind_type gives a queue type
     # preempt coverage (Phase 5 gate caveat 3): small IORuntimeConfig thresholds
-    'p_runtime': 0.25,         # replay case gets a `runtime` field (auto-yield every few iterations)
+    'p_runtime': 0.25,
+    'p_par_traverse': 0.08,    # batch 6.3: append a `parTraverseN` part (own RNG, see gen_case)         # replay case gets a `runtime` field (auto-yield every few iterations)
 }
 
 
@@ -566,12 +570,6 @@ class Gen:
             opts.append((w['rAllocated'], lambda: g_ruse('rAllocated')))
         if size >= 5:
             opts.append((w['tpl_resBoth'], lambda: self.tpl_res_both(t, env, size, cc)))
-
-        # ---- format v2 (batch 6.3): `parTraverseN` in a `seq`, or in a child that the parent cancels
-        if size >= 3:
-            opts.append((w['tpl_parTraverse'], lambda: self.tpl_par_traverse(t, env, size, cc, False)))
-        if size >= 5:
-            opts.append((w['tpl_parTraverseCancel'], lambda: self.tpl_par_traverse(t, env, size, cc, True)))
 
         # ---- format v2 (track R): type-directed combinators
         if size >= 3 and t[0] in ('either', 'pair'):
@@ -1400,6 +1398,18 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
         cct = rr.choice([1, 1, 2, 4])
         case['runtime'] = {'cancelationCheckThreshold': cct,
                            'autoYieldThreshold': cct * rr.randint(2 if cct == 1 else 1, 8)}
+    # Batch 6.3: append `parTraverseN` (plain, or in a child that the parent cancels). Own RNG,
+    # so the rest of the case does not change; the probability scales with the template weights.
+    pr = random.Random(f"difftest-partraverse:{seed}:{i}")
+    w = g.w
+    pp = g.c['p_par_traverse'] * (w['tpl_parTraverse'] + w['tpl_parTraverseCancel']) / 1.8
+    if prog.get('op') != 'syncStep' and pr.random() < pp:
+        g2 = Gen(pr, weights, config)
+        g2.names = 10000
+        cancel = pr.random() * (w['tpl_parTraverse'] + w['tpl_parTraverseCancel']) < w['tpl_parTraverseCancel']
+        extra = g2.tpl_par_traverse(UNIT, {}, pr.randint(3, 12), {}, cancel)
+        prog = {'op': 'seq', 'ps': [prog, extra]}
+        check_prog(prog)
     case['prog'] = prog
     return case
 
