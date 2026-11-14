@@ -1,0 +1,42 @@
+name: Paranoid kernel check (heavy proofs)
+
+# Decision 55: the heavy proofs (lean_lib HeavyProofs) are not in the default target, so the
+# weekly `paranoid.yml` (`lake check --paranoid`) does not see them. This run exports the heavy
+# modules with `leanexport` and replays the export through all bundled kernels
+# (`lake check --from-export --paranoid`). Estimate: one default-kernel replay takes about
+# 38 min locally, so six kernels may need about 4 h or more; the timeout is close to the
+# GitHub-hosted maximum (360 min). If it does not fit, see QUESTIONS.md.
+on:
+  schedule:
+    - cron: "41 3 * * 0" # Sundays 03:41 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paranoid-heavy:
+    name: Independent kernels (heavy proofs)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          auto-config: "false"
+
+      - name: Allow bwrap user namespaces
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          sudo scripts/setup-bwrap-apparmor.sh
+
+      - name: Build heavy proofs (one module at a time) and audit
+        run: SKIP_REPLAY=1 scripts/check_heavy_proofs.sh
+
+      - name: Export and replay through all kernels
+        run: |
+          export PATH="$HOME/.elan/bin:$PATH"
+          lake env leanexport CatsEffectInLean.Proofs.Phase6.RaceLaw > "$RUNNER_TEMP/heavy.ndjson"
+          ls -l "$RUNNER_TEMP/heavy.ndjson"
+          lake check --from-export "$RUNNER_TEMP/heavy.ndjson" --paranoid

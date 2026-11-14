@@ -1,7 +1,7 @@
 # Registry and audit
 
 > Sources: own work: `CatsEffectInLean/Registry.lean`, `tools/Audit/Core.lean`, `scripts/test_audit.sh`, Lean v4.35.0 (2026-11-10)
-> Raw: [Registry and audit notes](../../raw/project-decisions/2026-11-10-registry-audit-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
+> Raw: [Decision 55: heavy proofs](../../raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md); [Registry and audit notes](../../raw/project-decisions/2026-11-10-registry-audit-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
 
 ## Overview
 
@@ -53,9 +53,21 @@ A property that quantifies over programs or user code has the hypothesis `WellFo
 
 The audit does not judge if a property is good. That is the job of the reviewer (MIRROR, PROPERTY, SETTLED, wrong-function test).
 
+## Heavy proofs (decision 55)
+
+Proofs that take more than about 5 minutes are in lean_lib `HeavyProofs` (not a default target). Their entries are in `CatsEffectInLean/RegistryHeavy.lean` (`registryHeavy`, same `Entry` type; `heavyModules` lists the lib roots).
+
+- `RegistryHeavy.lean` is light and in the default target. It names heavy theorems with a single backtick and the full name, because it does not import them.
+- Main CI job (`lake exe audit`): every check of `Registry.lean`. Heavy entries get every check that needs no heavy module: id, rows, `prop` (exists, `def`, `Prop`, module, axioms), status/theorem/bug consistency, bug file. Ids are unique across both registries. The inventory cross-check uses both registries; a `modelled` row that only a heavy entry settles is **deferred** (counted in the output, not accepted).
+- Heavy CI job `heavy-proofs` (`scripts/check_heavy_proofs.sh`, 150 min, every push): builds the heavy modules one `lake build` per module, `lake exe audit_heavy` (both registries in full, full inventory cross-check, deferred rows included), explicit `#print axioms`, and `leanchecker` per heavy module.
+- So every check of the single registry still runs on every push, in one of the two jobs. The design needs `heavy-proofs` to block merges like `lean` (QUESTIONS.md Q4).
+- Paranoid: the weekly `paranoid.yml` covers only the default target. `paranoid-heavy.yml` (weekly, 350 min) exports the heavy root with `leanexport` and runs `lake check --from-export --paranoid`. Estimated about 4 h; not measured.
+- Gotcha: `leanchecker M` replays only the declarations of module `M`, not its imports (root of the law: 23 s; one chunk module: about 3 min). Replay each heavy module.
+- Today: one heavy entry, `laws.GenSpawnLaws.uncancelableRaceNotInherited.IO` (49-chunk certificate check, [Certificate checks](../lean/certificate-checker.md)).
+
 ## Self-test
 
-`scripts/test_audit.sh` runs `lake exe audit_fixture <case>` on `test/AuditFixtures/`. Case `good` (one proven, one refuted, one open entry) must pass. Thirteen cases each plant one fault and must fail with the expected message: weaker statement, unfolded statement, `refuted` without `¬`, `¬ P` as `proven`, new axiom, missing theorem, `open` with a theorem, missing bug field, missing bug file, unknown row, unnamed `modelled` row, `modelled` row named only by an `open` entry (`open_modelled`), duplicate id. In the fixtures the row of the open entry is `todo`.
+`scripts/test_audit.sh` runs `lake exe audit_fixture <case>` on `test/AuditFixtures/`. Case `good` (one proven, one refuted, one open entry) must pass. Thirteen cases each plant one fault and must fail with the expected message (nine more `heavy_*` cases test the heavy registry: deferral in the main mode, full check, missing or wrong theorem caught only in the full mode, missing theorem field, non-`def` property, open heavy entry on a `modelled` row, duplicate id across registries): weaker statement, unfolded statement, `refuted` without `¬`, `¬ P` as `proven`, new axiom, missing theorem, `open` with a theorem, missing bug field, missing bug file, unknown row, unnamed `modelled` row, `modelled` row named only by an `open` entry (`open_modelled`), duplicate id. In the fixtures the row of the open entry is `todo`.
 
 The new-axiom fixture is generated at test time and deleted on exit, because `check_forbidden.py` forbids `axiom` in committed `.lean` files.
 

@@ -52,6 +52,8 @@ jobs:
 
       # Registry audit: theorem types are exactly `prop` / `¬ prop`, only allowed
       # axioms, registry and inventory agree (wiki/methodology/registry-and-audit.md).
+      # Heavy-registry entries (decision 55) get every check that needs no heavy module here;
+      # inventory rows that only a heavy entry settles are deferred to the `heavy-proofs` job.
       - name: Registry audit
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
@@ -127,6 +129,25 @@ jobs:
           auto-config: "false"
       - name: Build twin checks one module at a time, check axioms
         run: scripts/check_twin_checks.sh
+
+  heavy-proofs:
+    # Heavy proofs (decision 55): lean_lib HeavyProofs, registry CatsEffectInLean/RegistryHeavy.lean.
+    # Not in the default target, so the `lean` job (60 min) does not build them. Runs on every
+    # push and pull request. Builds the modules one Lean process at a time (largest `decide`
+    # about 8 GB), audits both registries in full (`lake exe audit_heavy`: theorem types, axioms,
+    # and the inventory rows that the main audit defers), checks the axioms of the heavy
+    # theorems, and replays them with leanchecker. Local run (2026-11-10): build about 30 min,
+    # replay about 38 min.
+    name: Heavy proofs (sequential build, full audit, kernel replay)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          auto-config: "false"
+      - name: Build heavy proofs one module at a time, audit both registries, axioms, replay
+        run: scripts/check_heavy_proofs.sh
 
   inventory:
     name: Inventory check

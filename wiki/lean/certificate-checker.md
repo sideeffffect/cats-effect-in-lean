@@ -28,7 +28,7 @@
 - Size chunks from a profile (100 states at a few offsets). The law `uncancelableRaceNotInherited` uses 49 chunks (up to 250 states early, about 50 late; each declaration at most about 7.5 GB).
 - `decide_cbv` on a chunk fails at once with a recursion-depth error; use `decide +kernel`.
 - The tree shape (DFS tree vs BFS tree) does not change the cost much.
-- CI cost of the law (measured 2026-11-10): `lake build` of the 10 chained chunk modules about 30 min (about 3 min each, peak RSS 8.3 GB per process); `lake check` (leanchecker replay) about 38 min, peak about 7.4 GB. The orchestrator may want to move these modules to a scheduled job.
+- CI cost of the law (measured 2026-11-10): `lake build` of the 10 chained chunk modules about 30 min (about 3 min each, peak RSS 8.3 GB per process); `lake check` (leanchecker replay) about 38 min, peak about 7.4 GB. So the law is in lean_lib `HeavyProofs` with its own registry and CI job (decision 55, [Registry and audit](../methodology/registry-and-audit.md)).
 
 ## Results
 

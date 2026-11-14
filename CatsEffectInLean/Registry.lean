@@ -11,7 +11,6 @@ import CatsEffectInLean.Proofs.Calibration.FatalRaise
 import CatsEffectInLean.Props.Phase6.Race
 import CatsEffectInLean.Props.Phase6.Bracket
 import CatsEffectInLean.Proofs.Phase6.BracketFullTwin
-import CatsEffectInLean.Proofs.Phase6.RaceLaw
 
 /-!
 # Property registry
@@ -211,17 +210,6 @@ def registry : List Entry := [
       (Proofs/Lemmas/Frame.lean: owner_stable, result_stable). Gap: runtime grammar S, slot-0 \
       discipline F3, outcome stability F4 with the takeover/join protocols P1/P2, handle secrecy H, \
       and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md)." },
-  { id := "laws.GenSpawnLaws.uncancelableRaceNotInherited.IO"
-    rows := ["laws.GenSpawnLaws.uncancelableRaceNotInherited", "core.IO.race", "kernel.GenSpawn.race"]
-    prop := ``Props.Phase6.Race.uncancelableRaceNotInherited
-    status := .proven
-    thm := ``Proofs.Phase6.RaceLaw.uncancelableRaceNotInherited_proven
-    note := "Closed law (no input) under EqvP (all PChoice schedules, default Config, IOFiber \
-      mask model). Proof by certificates (Proofs/Lemmas/CertP.lean, generator tools/CertGen): \
-      left side exactly 4,441 states (closed), right side 45; every observation of both sides is \
-      blocked with empty trace, refs and reports. Kernel check in 49 chunks \
-      (Proofs/Phase6/RaceLawChunks*.lean). Only the law row is modelled; race itself needs the \
-      open leak entries." },
   -- Phase 6, track G (guarantee, bracket*)
   { id := "core.IO.bracketFull.kernelDefaultTwin"
     rows := ["core.IO.bracketFull", "core.IO.IOAsync.bracketFull", "kernel.MonadCancel.bracketFull"]

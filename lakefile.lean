@@ -58,3 +58,15 @@ lean_lib TwinChecks where
 lean_exe leaksmoke where
   srcDir := "tools"
   root := `LeakSmoke.Main
+
+-- Heavy proofs (decision 55): proofs that take more than about 5 minutes. Not a default target,
+-- so the main CI job (`lake build`, `lake check`, 60 min) does not build them. Their registry is
+-- `CatsEffectInLean/RegistryHeavy.lean`. CI job `heavy-proofs` builds the modules one Lean
+-- process at a time and audits both registries (`scripts/check_heavy_proofs.sh`,
+-- `lake exe audit_heavy`). The roots must match `CatsEffectInLean.heavyModules`.
+lean_lib HeavyProofs where
+  roots := #[`CatsEffectInLean.Proofs.Phase6.RaceLaw]
+
+lean_exe audit_heavy where
+  srcDir := "tools"
+  root := `Audit.MainHeavy

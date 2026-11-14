@@ -59,4 +59,4 @@ import CatsEffectInLean.Props.Phase6.Bracket
 import CatsEffectInLean.Proofs.Phase6.BracketFullTwin
 import CatsEffectInLean.Proofs.Lemmas.Frame
 import CatsEffectInLean.Proofs.Lemmas.CertP
-import CatsEffectInLean.Proofs.Phase6.RaceLaw
+import CatsEffectInLean.RegistryHeavy

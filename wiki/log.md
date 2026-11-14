@@ -156,3 +156,7 @@
 - Raw: raw/lean-tooling/2026-11-10-certificate-checker-track-p-notes.md
 - Created: Certificate checks of closed state sets
 - Updated: Race no-leak invariant (F1b, law proven), race, both and fiber leaks, Outcome sets (large sets), Kernel evaluation (See Also), index
+
+## [2026-11-10] ingest | Decision 55: heavy proofs lib, heavy registry, heavy CI job
+- Raw: raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md
+- Updated: Registry and audit (heavy proofs section, self-test), Certificate checks (CI layout)
