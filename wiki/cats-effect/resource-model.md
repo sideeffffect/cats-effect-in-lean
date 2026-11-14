@@ -76,7 +76,7 @@ Why `EqvP`, not `Eqv` (review batch 2): the right side has one more run-loop ite
 
 - Application of `rel2` (`Resource.scala:490`) is not mirrored. `IO#guarantee` and `reportError` are mirrored since track G (`Model/Bracket.lean`, `UserEffect.report`; see [guarantee and bracket model](bracket-model.md)); batch 6.2 can use them. It gives a fatal throw with code 900002. `allocatedCase` never applies `rel2` itself.
 - Ill-typed values give a fatal throw with code 900001 (impossible in Scala).
-- Not mirrored: `fold`/`use`, `allocated`, `map`, `both`, `race`, `timeout` (case A). Inventory rows `make`, `flatMap`, `apply*` stay `todo` (mirrored, but no registered property names them).
+- Not mirrored here: `fold`/`use`, `allocated`, `both` and the application of `rel2` are mirrored since track Res in `Model/ResourceUse.lean` ([Resource use, allocated, both](resource-use-both-model.md)); this module is unchanged. Still not mirrored: `map`, `race`, `timeout` (case A). Inventory rows `make`, `flatMap`, `apply*` stay `todo` (mirrored, but no proven or refuted entry names them).
 
 ## See Also
 
@@ -87,3 +87,4 @@ Why `EqvP`, not `Eqv` (review batch 2): the right side has one more run-loop ite
 - [Kernel evaluation of the model](../lean/kernel-evaluation.md)
 - [Registry and audit](../methodology/registry-and-audit.md)
 - [guarantee and bracket model, CE-0005](bracket-model.md)
+- [Resource use, allocated, both, and CE-0020](resource-use-both-model.md)

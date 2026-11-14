@@ -289,6 +289,10 @@ final class Interp(h: Harness):
     // ---- format v2 (Phase 6, track M): `IO#memoize` (IO.scala:944-945)
     case Prog.Memoize(e) => run(e, env).memoize.map(get => VMemo(h.newMemo(get)))
     case Prog.MemoGet(m) => memoOf(atom(m, env))
+    // ---- format v2 (Phase 6, track Res)
+    case Prog.RUse(r, x, k) => res(r, env).use(v => run(k, env + (x -> Bound.V(v))))
+    case Prog.RAllocated(r, x, k) =>
+      res(r, env).allocated.flatMap { case (a, rel) => run(k, env + (x -> Bound.V(a))).flatMap(b => rel.as(b)) }
 
   /** `(a, oc) => ocVal(oc).flatMap(o => IO.delay(emit fin) *> run(rel, env + x + y).void)` (format v2). */
   private def caseRelease(op: String, x: String, y: String, rel: Prog, tag: Long, env: Env)
@@ -305,3 +309,4 @@ final class Interp(h: Harness):
     case Res.REval(e) => Resource.eval(run(e, env))
     case Res.RMake(acq, x, rel) => Resource.make(run(acq, env))(a => run(rel, env + (x -> Bound.V(a))).void)
     case Res.RFlatMap(r0, x, k) => res(r0, env).flatMap(v => res(k, env + (x -> Bound.V(v))))
+    case Res.RBoth(a, b) => res(a, env).both(res(b, env)).map { case (x, y) => VPair(x, y) }

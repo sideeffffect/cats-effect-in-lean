@@ -5,6 +5,7 @@ import CatsEffectInLean.Model.Timeout
 import CatsEffectInLean.Model.Race
 import CatsEffectInLean.Model.Bracket
 import CatsEffectInLean.Model.Memoize
+import CatsEffectInLean.Model.ResourceUse
 import CatsEffectInLean.Std.Queue
 
 /-!
@@ -414,8 +415,28 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     match Resource.allocatedCase R res with
     | .ok io => pure (.map io (clo node .allocFst []))
     | .error _ => throw .typeError
-  | .rPure _, _, _, _ | .rEval _, _, _, _ | .rMake _ _, _, _, _ | .rFlatMap _ _, _, _, _ =>
+  | .rPure _, _, _, _ | .rEval _, _, _, _ | .rMake _ _, _, _, _ | .rFlatMap _ _, _, _, _
+  | .rBoth _ _, _, _, _ =>
     throw .typeError -- a resource node at an `IO` position: the decoder prevents this
+  -- format v2 (track Res): `I_R(r).use(x => I(k))` = `r.fold(f, _.apply(_))`
+  -- (`Resource.scala:207-208`, mirror `Model/ResourceUse.lean`). `fold` runs `loop` now; a `Pure`
+  -- at the end calls `f` now (`I(k)` with the current view).
+  | .rUse r k, node, env, vw => do
+    let res ← trRes R r (node + 1) env
+    let out (a : Val) : List UserEffect × Except Err IO :=
+      match tr R k (node + 1 + r.size) (a :: env) vw with
+      | .ok io => ([], .ok io)
+      | .error e => ([], .error e.toErr)
+    match (ResourceUse.foldLoop R.bind out (ResourceUse.OnOut.user (cloId node .ruUse env)).toVal
+        ResourceUse.OnRel.apply.toVal Resource.loopFuel res []).2 with
+    | .ok io => pure io
+    | .error _ => throw .typeError
+  -- `I_R(r).allocated.flatMap { case (x, rel) => I(k).flatMap(b => rel.as(b)) }`
+  -- (`Resource.scala:550-552`); `I_R(r)` is the code `ruRes` (`UEnv.resOf`)
+  | .rAllocated r _, node, env, _ => do
+    let _ ← trRes R r (node + 1) env
+    pure (.flatMap (ResourceUse.allocatedIO (.nat (Clo.encode { node, lam := .ruRes, vals := env })))
+      (clo node .raK env))
   -- format v2: `I(a).<op>(I(b))` (`IO.scala:638`, `:641`, `:243`, `:228`) = the kernel default
   -- with `IOAsync` (`Model/Race.lean`). Scala builds `I(a)` then `I(b)` now; the model builds them
   -- in the `body` closure from the source codes `raceSrcA`/`raceSrcB`, with the snapshot.
@@ -495,6 +516,15 @@ def trRes (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → E
   -- `I_R(r).flatMap(v => I_R(k)[x := v])` (`Resource.scala:388-389`)
   | .rFlatMap r _, node, env => do
     pure (Resource.Res.flatMap (← trRes R r (node + 1) env) (Clo.encode { node, lam := .resBind, vals := env }))
+  -- format v2 (track Res): `I_R(a).both(I_R(b)).map { case (x, y) => VPair(x, y) }`
+  -- (`Resource.scala:286-314`, `:396-397`); the sides are the codes `rbA`, `rbB` (`UEnv.resOf`)
+  | .rBoth a b, node, env => do
+    let _ ← trRes R a (node + 1) env
+    let _ ← trRes R b (node + 1 + a.size) env
+    pure (Resource.Res.flatMap
+      (ResourceUse.bothRes (.nat (Clo.encode { node, lam := .rbA, vals := env }))
+        (.nat (Clo.encode { node, lam := .rbB, vals := env })))
+      (Clo.encode { node, lam := .rbPair, vals := [] }))
   | _, _, _ => throw .typeError
 end
 
@@ -505,14 +535,8 @@ end
 def harnessUser : UserEnv where
   call _ _ _ := { out := .throw harnessErr }
 
-/-- `REnv` with lookup `look` (pre-order node number → node of the root program). `fuel`
-bounds the nesting of `allocatedCase` inside resource nodes. -/
-def renvF (look : Nat → Option Prog) : Nat → Resource.REnv
-  | 0 =>
-    { user := harnessUser, bind := fun _ _ => .error harnessErr, acquire := fun _ => .error harnessErr,
-      release := fun _ _ => .error harnessErr }
-  | n + 1 =>
-    let R := renvF look n
+/-- The `REnv` codes of the program at level `R` (the level below). -/
+def rawEnv (look : Nat → Option Prog) (R : Resource.REnv) : Resource.REnv :=
     { user := harnessUser
       -- `v => I_R(k)[x := v]` of `rFlatMap`
       bind := fun k v =>
@@ -524,6 +548,11 @@ def renvF (look : Nat → Option Prog) : Nat → Resource.REnv
             | .ok res => .ok res
             | .error e => .error e.toErr
           | _ => .error harnessErr
+        -- `{ case (x, y) => VPair(x, y) }` of `rBoth`'s `.map`: `a => Resource.pure(f(a))`
+        | some { lam := .rbPair, .. } =>
+          match v with
+          | .pair x y => .ok (.pure (.pair x y))
+          | _ => .error typeErr
         | _ => .error harnessErr
       -- `I(acq)` of `rMake`
       acquire := fun k =>
@@ -547,6 +576,46 @@ def renvF (look : Nat → Option Prog) : Nat → Resource.REnv
             | .error e => .error e.toErr
           | _ => .error harnessErr
         | _ => .error harnessErr }
+
+/-- The `Res` codes of the program (track Res, `UEnv.resOf`): `I_R(res)` of `rUse`/`rAllocated`,
+`I_R(a)`/`I_R(b)` of `rBoth`, built with the level below `R`. -/
+def resOfR (look : Nat → Option Prog) (R : Resource.REnv) (c : Val) : Option Resource.Res :=
+  let ok (x : Except TrErr Resource.Res) : Option Resource.Res := match x with
+    | .ok r => some r
+    | .error _ => none
+  match c with
+  | .nat k =>
+    match Clo.decode? k with
+    | some { node, lam := .ruRes, vals } =>
+      match look node with
+      | some (.rUse r _) | some (.rAllocated r _) => ok (trRes R r (node + 1) vals)
+      | _ => none
+    | some { node, lam := .rbA, vals } =>
+      match look node with
+      | some (.rBoth a _) => ok (trRes R a (node + 1) vals)
+      | _ => none
+    | some { node, lam := .rbB, vals } =>
+      match look node with
+      | some (.rBoth a b) => ok (trRes R b (node + 1 + a.size) vals)
+      | _ => none
+    | _ => none
+  | _ => none
+
+/-- `REnv` with lookup `look` (pre-order node number → node of the root program). `fuel`
+bounds the nesting of `allocatedCase` inside resource nodes. Each level is the program codes
+(`rawEnv`) with the `Resource` use/allocated/both mirror (`ResourceUse.UEnv.rx`). -/
+def renvF (look : Nat → Option Prog) : Nat → Resource.REnv
+  | 0 =>
+    { user := harnessUser, bind := fun _ _ => .error harnessErr, acquire := fun _ => .error harnessErr,
+      release := fun _ _ => .error harnessErr }
+  | n + 1 =>
+    let R := renvF look n
+    ResourceUse.UEnv.rx { r := rawEnv look R, resOf := resOfR look R }
+
+/-- The `UEnv` of root program `p` (track Res): `(uenvOf p).rx = renvOf p`. -/
+def uenvOf (p : Prog) : ResourceUse.UEnv :=
+  let R := renvF p.at? p.size
+  { r := rawEnv p.at? R, resOf := resOfR p.at? R }
 
 /-- The `REnv` of root program `p`. -/
 def renvOf (p : Prog) : Resource.REnv := renvF p.at? (p.size + 1)

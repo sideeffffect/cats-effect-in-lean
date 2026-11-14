@@ -46,9 +46,9 @@ combinator in a fiber, cancels it and joins it.
 
 ## Wrong-function test
 
-A `race` that never cancels the loser (`Model/RaceSmoke.lean`, `raceNoCancel`) falsifies the
-statement on `race(pure 1, never)`: the root completes with fiber 2 live. Checked by
-`decide +kernel` (`RaceSmoke.noCancel_leaks`).
+A `race` that never cancels the loser (`noCancelEnv` in `Proofs/Phase6/RaceWitness.lean`)
+falsifies the statement on `race(pure 1, never)`: the root completes with fiber 2 live. Checked by
+`decide +kernel` (`RaceWitness.noCancel_leaks`); random schedules: `lake exe leaksmoke`.
 -/
 
 namespace CatsEffectInLean.Props.Phase6.Race

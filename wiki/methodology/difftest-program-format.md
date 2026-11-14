@@ -146,6 +146,16 @@ New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decod
 - `Prog.eagerReads`: `memoize` builds `e` at once.
 - Fixed cases `cases/memoize.jsonl` (`cases/gen_memo.py`). Generator: `tpl_memo` and `memoGet` (gen.py docstring). See [memoize model](../cats-effect/memoize-model.md).
 
+### Format v2 ops of track Res (same version, same `checkNoV2` gate)
+| op | fields | term |
+|----|--------|------|
+| `rUse` | `res`, `x`, `k` | `I_R(res).use(x => I(k))` |
+| `rAllocated` | `res`, `x`, `k` | `I_R(res).allocated.flatMap { case (x, rel) => I(k).flatMap(b => rel.as(b)) }` |
+| `rBoth` (resource position) | `a`, `b` | `I_R(a).both(I_R(b)).map { case (x, y) => pair(x, y) }` |
+- Lean side: `Model/ResourceUse.lean` (`foldLoop`, `allocatedIO`, `bothRes`); `renvF` wraps each level with `UEnv.rx`; `uenvOf p`; resource codes `ruRes`, `rbA`, `rbB` (`UEnv.resOf`); `srcIO` and `bracketSrcIO` rebuild `USrc` codes with `ResourceUse.srcU`.
+- `Prog.eagerReads`: `rUse`/`rAllocated` build `res` at once; `rBoth` builds both sides.
+- Fixed cases `cases/resuse.jsonl` (`cases/gen_res.py`). Generator: `rUse`, `rAllocated`, `res_both`, `tpl_resBoth` (a `both` whose one release raises: CE-0020). See [Resource use, allocated, both](../cats-effect/resource-use-both-model.md).
+
 ## User function table
 
 `call(fn, v)` first emits `{"ev":"call","fn":fn,"arg":v}`, then applies the function. Lean must implement the same table.
