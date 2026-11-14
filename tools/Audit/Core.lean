@@ -33,6 +33,14 @@ structure Config where
   propModulePrefix : Name
   /-- Each `thm` must be declared in a module with this prefix. -/
   thmModulePrefix : Name
+  /-- Entries of the heavy registry (`RegistryHeavy.lean`, decision 55). Ids must be unique
+  across both registries; the inventory cross-check uses both. -/
+  heavy : List Entry := []
+  /-- `true` (heavy CI job): the heavy proof modules are in `imports`; heavy entries get every
+  check. `false` (main CI job): heavy entries get every check that needs no theorem (the
+  theorem is not imported), and a `modelled` row that only a heavy entry settles is deferred
+  to the heavy job (counted, not accepted). -/
+  verifyHeavy : Bool := false
 
 /-! ## CSV (RFC 4180 subset: quotes, doubled quotes, CRLF) -/
 
@@ -103,7 +111,10 @@ def expectedType (prop : Name) : Status → Option Expr
   | .refuted => some (mkApp (.const ``Not []) (.const prop []))
   | .open => none
 
-def checkEntry (cfg : Config) (env : Environment) (e : Entry) : IO (List String) := do
+/-- All checks of one entry. With `full = false` the theorem itself is not looked up (heavy
+entry in the main job); the status/theorem/bug consistency is still checked. -/
+def checkEntry (cfg : Config) (env : Environment) (e : Entry) (full : Bool := true) :
+    IO (List String) := do
   let who := s!"entry {e.id}"
   let mut errs : List String := []
   if e.id.trimAscii.isEmpty then errs := errs ++ [s!"{who}: empty id"]
@@ -125,17 +136,18 @@ def checkEntry (cfg : Config) (env : Environment) (e : Entry) : IO (List String)
   | none, some t => errs := errs ++ [s!"{who}: status open, but theorem `{t}` is given"]
   | some _, none => errs := errs ++ [s!"{who}: status {repr e.status}, but no theorem is given"]
   | some want, some t =>
-    match env.find? t with
-    | none => errs := errs ++ [s!"{who}: theorem `{t}` does not exist"]
-    | some (.thmInfo info) =>
-      if !info.levelParams.isEmpty then
-        errs := errs ++ [s!"{who}: theorem `{t}` has universe parameters"]
-      -- Syntactic equality, no unfolding. Stored theorem types have no metavariables.
-      if info.type != want then
-        errs := errs ++ [s!"{who}: theorem `{t}` has type `{info.type}`, expected exactly `{want}`"]
-      errs := errs ++ checkModule env who t cfg.thmModulePrefix
-      errs := errs ++ (← checkAxioms env who t)
-    | some _ => errs := errs ++ [s!"{who}: `{t}` is not a `theorem`"]
+    if full then
+      match env.find? t with
+      | none => errs := errs ++ [s!"{who}: theorem `{t}` does not exist"]
+      | some (.thmInfo info) =>
+        if !info.levelParams.isEmpty then
+          errs := errs ++ [s!"{who}: theorem `{t}` has universe parameters"]
+        -- Syntactic equality, no unfolding. Stored theorem types have no metavariables.
+        if info.type != want then
+          errs := errs ++ [s!"{who}: theorem `{t}` has type `{info.type}`, expected exactly `{want}`"]
+        errs := errs ++ checkModule env who t cfg.thmModulePrefix
+        errs := errs ++ (← checkAxioms env who t)
+      | some _ => errs := errs ++ [s!"{who}: `{t}` is not a `theorem`"]
   -- the bug record
   if e.status == .refuted then
     match e.bug with
@@ -146,9 +158,14 @@ def checkEntry (cfg : Config) (env : Environment) (e : Entry) : IO (List String)
   return errs
 
 /-- Cross-check registry entries and inventory rows. A `modelled` row must name at least one
-entry that is `proven` or `refuted` (decision 28); `open` entries can name `todo` rows. -/
-def checkInventory (reg : List Entry) (rows : List Row) : List String := Id.run do
+entry that is `proven` or `refuted` (decision 28); `open` entries can name `todo` rows.
+`deferred`: ids of entries whose theorems this run does not check (heavy entries in the main
+job). A `modelled` row that is settled only by such entries is not accepted here; it is counted
+in the second result and checked by the heavy job. -/
+def checkInventory (reg : List Entry) (rows : List Row) (deferred : List String := []) :
+    List String × Nat := Id.run do
   let mut errs : List String := []
+  let mut nDeferred := 0
   let ids := rows.map (·.id)
   for e in reg do
     for r in e.rows do
@@ -159,20 +176,24 @@ def checkInventory (reg : List Entry) (rows : List Row) : List String := Id.run 
       errs := errs ++ [s!"inventory row {r.id}: status modelled, but no registry entry is named"]
     -- Decision 28: only a settled (proven or refuted) entry makes a row `modelled`.
     -- An `open` entry may name a `todo` row, but it does not count as progress.
-    let settled := r.entries.any fun name =>
+    let settledBy (ok : Entry → Bool) := r.entries.any fun name =>
       match reg.find? (·.id == name) with
-      | some e => e.status == .proven || e.status == .refuted
+      | some e => (e.status == .proven || e.status == .refuted) && ok e
       | none => false
+    let settled := settledBy fun e => !deferred.contains e.id
+    let settledDeferred := settledBy fun e => deferred.contains e.id
     if r.status == "modelled" && !r.entries.isEmpty && !settled then
-      errs := errs ++ [s!"inventory row {r.id}: status modelled, but no named registry entry " ++
-        "is proven or refuted"]
+      if settledDeferred then nDeferred := nDeferred + 1
+      else
+        errs := errs ++ [s!"inventory row {r.id}: status modelled, but no named registry entry " ++
+          "is proven or refuted"]
     for name in r.entries do
       match reg.find? (·.id == name) with
       | none => errs := errs ++ [s!"inventory row {r.id}: registry entry `{name}` does not exist"]
       | some e =>
         unless e.rows.contains r.id do
           errs := errs ++ [s!"inventory row {r.id}: registry entry `{name}` does not list this row"]
-  return errs
+  return (errs, nDeferred)
 
 /-- Duplicate entry ids. -/
 def checkUnique (reg : List Entry) : List String :=
@@ -183,24 +204,36 @@ def checkUnique (reg : List Entry) : List String :=
 def run (cfg : Config) : IO UInt32 := do
   initSearchPath (← findSysroot)
   let env ← importModules (cfg.imports.map ({ module := · })) {}
-  let mut errs := checkUnique cfg.registry
+  let all := cfg.registry ++ cfg.heavy
+  let mut errs := checkUnique all
   for e in cfg.registry do
     errs := errs ++ (← checkEntry cfg env e)
+  for e in cfg.heavy do
+    errs := errs ++ (← checkEntry cfg env e (full := cfg.verifyHeavy))
   let mut nRows := 0
   let mut nModelled := 0
+  let mut nDeferred := 0
   match ← readInventory cfg.csv with
   | .error msg => errs := errs ++ [msg]
   | .ok rows =>
     nRows := rows.length
     nModelled := (rows.filter (·.status == "modelled")).length
-    errs := errs ++ checkInventory cfg.registry rows
+    let deferred := if cfg.verifyHeavy then [] else cfg.heavy.map (·.id)
+    let (es, nd) := checkInventory all rows deferred
+    errs := errs ++ es
+    nDeferred := nd
   for msg in errs do
     IO.println s!"error: {msg}"
   if errs.isEmpty then
-    let count (s : Status) := (cfg.registry.filter (·.status == s)).length
-    IO.println (s!"OK: {cfg.registry.length} entries ({count .proven} proven, " ++
+    let count (s : Status) := (all.filter (·.status == s)).length
+    let heavyMsg :=
+      if cfg.heavy.isEmpty then ""
+      else if cfg.verifyHeavy then s!" Heavy registry: {cfg.heavy.length} entries, checked in full."
+      else s!" Heavy registry: {cfg.heavy.length} entries, theorems not checked here; " ++
+        s!"{nDeferred} modelled row(s) deferred to the heavy audit (lake exe audit_heavy)."
+    IO.println (s!"OK: {all.length} entries ({count .proven} proven, " ++
       s!"{count .refuted} refuted, {count .open} open); " ++
-      s!"{cfg.csv}: {nRows} rows, {nModelled} modelled.")
+      s!"{cfg.csv}: {nRows} rows, {nModelled} modelled." ++ heavyMsg)
     return 0
   else
     IO.println s!"FAIL: {errs.length} error(s)."
