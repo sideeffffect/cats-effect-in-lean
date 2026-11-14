@@ -1,54 +1,73 @@
 import CatsEffectInLean.Props.Phase6.Bracket
-import CatsEffectInLean.Model.BracketExamples
 import CatsEffectInLean.Model.EnumP
-import CatsEffectInLean.Proofs.Phase6.BracketSmoke
 
 /-!
-# Smoke tests: release and finalizer run once (parent cancels the child)
+# Smoke tests: release and finalizer run once (harness of decision 54)
 
-Supports the open entries `core.IO.bracket.releaseOnce` and `core.IO.guarantee.finalizerOnce`.
-Each program has about 3,000 states under `exploreP`, too large for `decide +kernel` in the
-default build (about 19 GB per module). So these are `#guard`s (compiled evaluation, not
-kernel-checked). Run: `lake env lean test/Phase6/BracketSmokeParent.lean` (silent on success).
+Supports the open entries `core.IO.bracket.releaseOnce` and `core.IO.guarantee.finalizerOnce`
+(restated after review batch 4). For each input the checks evaluate the hypotheses too
+(decision 53): user functions even, `a0` passes `progOK` with no handle, and the user table is
+constant code that ignores the view (`CallOK`, `PollOpaque` as in
+`Proofs/Phase6/BracketWitness.lean`). Then the claim must hold for every observation of the exact
+outcome set (`outcomesPList`, all schedules with preemption), and the broken implementations
+(`childOf` with `g = 2`: no release; `g = 3`: no finalizer) must break it.
+
+Compiled evaluation (`#guard`), not kernel-checked: the sets are too large for `decide +kernel`
+in the default build. Run: `lake env lean test/Phase6/BracketSmokeParent.lean` (silent on
+success).
 -/
 
 namespace CatsEffectInLean.Proofs.Phase6.BracketSmokeParent
 
 open CatsEffectInLean.Model
 open CatsEffectInLean.Model.Bracket
-open CatsEffectInLean.Model.BracketExamples
 open CatsEffectInLean.Props.Phase6.Bracket
-open CatsEffectInLean.Proofs.Phase6.BracketSmoke
 
-/-! ## Release and finalizer run once (parent cancels the child) -/
+/-- User code (even ids `2 n`), constant: 1 `IO.cede`, 2 `IO.unit`, 3 `IO.raiseError(E7)`,
+4 `IO.canceled`, 5 `IO.cede >> IO.canceled`. -/
+def sR : Nat → UserResult
+  | 1 => { out := .prog .cede }
+  | 2 => { out := .prog (.pure .unit) }
+  | 3 => { out := .prog (.error { code := 7 }) }
+  | 4 => { out := .prog .canceled }
+  | 5 => { out := .prog (.flatMap .cede (.user 8)) }
+  | _ => { out := .throw { code := 0 } }
 
-/-- All observations satisfy `p`. -/
-def allObs (io : IO) (p : Obs → Bool) : Option Bool :=
-  (outcomesPList {} counterMaskModel env2 4000 io).map (·.all p)
+def su : UserEnv where
+  call id _ _ := sR (id / 2)
 
-/-- `bracket(a0.flatMap(markA 77))(use)(_ => IO.delay(emit 88) *> IO.unit)` under `parent`. -/
-def relProg (a0 use : Nat) : IO :=
-  parent (bracketIO (.ext (.pair (.nat 50) (.nat a0))) (uid 0 [.nat use]) (uid 6 []))
+/-- The acquire programs. -/
+def acqs : List IO := [.pure (.nat 5), .flatMap .cede (.user 4), .error { code := 9 }, .canceled]
 
-def relOK (o : Obs) : Bool := o.out.count (.nat 88) == o.out.count (.nat 77)
+def obsOf (a0 : IO) (g x y : Nat) : Option (List Obs) :=
+  outcomesPList {} counterMaskModel (henv a0 su) 20000 (harness g x y)
 
-#guard allObs (relProg 6 9) relOK == some true
-#guard allObs (relProg 6 2) relOK == some true
-#guard allObs (relProg 6 1) relOK == some true
-#guard allObs (relProg 9 6) relOK == some true
-#guard allObs (relProg 1 6) relOK == some true
-#guard allObs (relProg 2 6) relOK == some true
+def done (o : Obs) : Bool := match o.summary with | .done _ => true | _ => false
 
--- Wrong-function test: a `bracket` that never runs release (`acquire.flatMap(use)`).
-#guard allObs (parent (.flatMap (progOf (.pair (.nat 50) (.nat 6))) (.user (uid 0 [.nat 9])))) relOK == some false
+def relClaim (o : Obs) : Bool := !done o || count o 1 == count o 0
+def finClaim (o : Obs) : Bool := !done o || (count o 1 ≤ 1 && count o 0 ≤ count o 1)
 
-def finOK (o : Obs) : Bool := o.out.count (.nat 88) ≤ 1 && o.out.count (.nat 77) ≤ o.out.count (.nat 88)
+/-- The decidable hypotheses: user functions even, `a0` with no handle. -/
+def hyps (a0 : IO) (x y : Nat) : Bool :=
+  x % 2 == 0 && y % 2 == 0 && WF.progOK isLib (fun h => ([] : List Handle).contains h) a0
 
-/-- `guarantee(IO.delay(emit 77) *> progOf c)(IO.delay(emit 88) *> IO.unit)` under `parent`. -/
-def finProg (c : Nat) : IO := parent (guaranteeIO (.ext (.pair (.nat 51) (.nat c))) (.ext (.nat 10)))
+def holds (a0 : IO) (g x y : Nat) (p : Obs → Bool) : Bool :=
+  hyps a0 x y && (obsOf a0 g x y).any (·.all p)
 
-#guard allObs (finProg 9) finOK == some true
-#guard allObs (finProg 2) finOK == some true
-#guard allObs (finProg 5) finOK == some true
+def breaks (a0 : IO) (g x y : Nat) (p : Obs → Bool) : Bool :=
+  hyps a0 x y && (obsOf a0 g x y).any (·.any fun o => !p o)
+
+-- bracket: 4 acquires x 4 uses (cede, unit, raise, canceled), release `IO.unit`
+#guard acqs.all fun a0 => [2, 4, 6, 8].all fun use => holds a0 0 use 4 relClaim
+-- release that suspends (`IO.cede`) and that cancels itself (`IO.cede >> IO.canceled`)
+#guard holds (.pure (.nat 5)) 0 2 2 relClaim
+#guard holds (.pure (.nat 5)) 0 2 10 relClaim
+-- wrong function: a bracket that never runs release
+#guard breaks (.pure (.nat 5)) 2 2 4 relClaim
+
+-- guarantee: k in {cede, unit, raise, canceled}, q in {unit, cede, raise}
+#guard [2, 4, 6, 8].all fun k => [4, 2, 6].all fun q => holds (.pure .unit) 1 k q finClaim
+-- wrong function: a guarantee that never runs the finalizer
+#guard breaks (.pure .unit) 3 2 4 finClaim
 
 end CatsEffectInLean.Proofs.Phase6.BracketSmokeParent

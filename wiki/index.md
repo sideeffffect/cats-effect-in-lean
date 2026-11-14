@@ -7,7 +7,7 @@ How this project works: synthesis, agent loop, difftest design. Start here.
 | Article | Summary | Updated |
 |---------|---------|---------|
 | [Lessons for Cats Effect in Lean](methodology/lessons-for-cats-effect.md) | Top-level synthesis: what to copy, what is new for CE, order of work | 2026-11-10 |
-| [Agent workflow and review protocol](methodology/agent-workflow.md) | Inventory → mirror → difftest → prove/refute → review; rubric; bug records; no upstream filing | 2026-11-10 |
+| [Agent workflow and review protocol](methodology/agent-workflow.md) | Inventory → mirror → difftest → prove/refute → review; rubric; bug records; no upstream filing | 2026-11-14 |
 | [Project plan](methodology/project-plan.md) | Step-by-step plan: phases 0–9, gates, risks, user decisions; started 2026-11-10 | 2026-11-10 |
 | [Phase 5 gate report](methodology/phase5-gate-report.md) | Gate PASS (review batch 3), user-approved 2026-11-10: 9/9 FAITHFUL, 3 calibration bugs refuted + reproduced, CE-0004, metrics, caveats | 2026-11-10 |
 | [Differential testing](methodology/differential-testing.md) | Lean-vs-CE difftest harness, generator, driver, results; v1 ops ≥ 65,960 agreeing cases each; preempt coverage via small runtime thresholds; triage bins | 2026-11-10 |
@@ -32,10 +32,10 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [Kernel typeclasses model](cats-effect/kernel-typeclasses-model.md) | MonadCancel/GenSpawn ops over abstract F; default-body mirrors; 33 laws as Props with Eqv parameter; IO twin table; unregistered default-instance lemmas | 2026-11-10 |
 | [SyncIO and syncStep model](cats-effect/syncio-and-syncstep-model.md) | SyncIO run loop and SyncStep.interpret (G = SyncIO) mirror; syncStepIdentitySyncIO refuted (CE-0001, reproducer case 4) | 2026-11-10 |
 | [Resource model and CE-0002](cats-effect/resource-model.md) | Resource ADT + allocatedCase mirror (F = IO), closure-id codec; resourceEvalPreservesUncancelable refuted (CE-0002, reproducer case C); use/both in ResourceUse | 2026-11-10 |
-| [guarantee and bracket model, CE-0005](cats-effect/bracket-model.md) | IO#guarantee/guaranteeCase/bracket*/IO.bracketFull + kernel twins mirror; UserEffect.report; difftest v2; bracketFull twin refuted (CE-0005), 4 open | 2026-11-10 |
+| [guarantee and bracket model, CE-0005](cats-effect/bracket-model.md) | IO#guarantee/guaranteeCase/bracket*/IO.bracketFull + kernel twins mirror; UserEffect.report; difftest v2; bracketFull twin refuted (CE-0005), 4 open | 2026-11-14 |
 | [Queue and timeout model](cats-effect/queue-model.md) | UnboundedAsyncQueue + IO#timeout/timeoutTo/never mirror; takeTimeoutNoLostElement refuted by the FIFO schedule (CE-0003) | 2026-11-10 |
 | [memoize model and CE-0030](cats-effect/memoize-model.md) | IO#memoize = kernel GenConcurrent#memoize mirror (no twin); difftest ops memoize/memoGet; CE-0030 refuted (masked `canceled *> never` hangs a racing get), 2 open | 2026-11-10 |
-| [Resource use, allocated, both, and CE-0020](cats-effect/resource-use-both-model.md) | fold/use/allocated/rel2/both mirror (`ResourceUse`), difftest v2 rUse/rAllocated/rBoth (≥51k each), CE-0020 refuted (both skips a release), 3 open; harness-name check (`NoForge`), satisfiability witnesses | 2026-11-10 |
+| [Resource use, allocated, both, and CE-0020](cats-effect/resource-use-both-model.md) | fold/use/allocated/rel2/both mirror (`ResourceUse`), difftest v2 rUse/rAllocated/rBoth (≥51k each), CE-0020 refuted (both skips a release), 3 open; harness-name check (`NoForge`), satisfiability witnesses | 2026-11-14 |
 | [race, both and fiber leaks](cats-effect/race-both-model.md) | Kernel-default mirror of race/raceOutcome/both/bothOutcome (no IO twin), leak observation liveRaceChildren, difftest v2 (≥50k per op), 5 open entries, smoke 0 violations | 2026-11-10 |
 
 ## semantics
