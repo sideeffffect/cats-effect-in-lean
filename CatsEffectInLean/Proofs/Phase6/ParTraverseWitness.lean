@@ -308,4 +308,88 @@ theorem parTraverseNCancelAbortsGen_satisfiable :
     o, ⟨3000, [], ho⟩, by simpa using hp⟩
   intro a ha e; simp [ins3] at ha; rcases ha with h | h | h <;> subst h <;> simp [bhAbort]
 
+
+
+/-! ## Statement 8: at most `n` at once (the limit harness)
+
+`n = 1`, inputs `[1, 2]`, `g = _ => IO.pure(0)` (id 2): a run ends with highest count 1 (the
+limit is reached). Wrong function: the same program with a semaphore of 1000 permits reaches 2. -/
+
+namespace Limit
+
+open CatsEffectInLean.Props.Phase6.HarnessPrivacy
+
+theorem limited_even (u : UserEnv) (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
+    (limited u).callV id a v = u.callV id a v := by
+  have h : CL.ofId? id = none := by simp [CL.ofId?, isLibId, hid]
+  simp [limited, h]
+
+theorem envL_even (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
+    (env idOrd (limited cu)).callV id a v = cR (id / 2) := by
+  rw [env_even _ _ _ hid, limited_even _ _ hid]; rfl
+
+theorem cR_okL (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK limLib R v (cR n) := by
+  match n with
+  | 0 | 1 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.sub, Val.handles]
+  | _ + 2 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
+
+theorem cR_free (k : Nat) : tokFreeR limToks (cR k) = true := by
+  match k with
+  | 0 => decide +kernel
+  | 1 => decide +kernel
+  | _ + 2 => simp [cR, tokFreeR]
+
+def lRoot : IO := limitRoot 1 [.nat 1, .nat 2] 2
+
+theorem lWf : WellFormed limLib [] (env idOrd (limited cu)) lRoot :=
+  ⟨by decide +kernel,
+   fun id hid arg v => ⟨fun w _ => by rw [envL_even id hid, envL_even id hid],
+     by rw [envL_even id hid]; exact cR_okL _ _ _⟩,
+   constOpaque _ envL_even⟩
+
+theorem lPrivate : UserPrivate (env idOrd (limited cu)) limToks := by
+  intro id hid a v; rw [envL_even id hid]; exact cR_free _
+
+def limRun : Option Obs := runObsP {} counterMaskModel (env idOrd (limited cu)) 3000 [] lRoot
+
+theorem limRun_ok : limRun.map (fun o => highest o == some 1) = some true := by decide +kernel
+
+theorem parTraverseNAtMostN_satisfiable :
+    ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (g : Nat),
+      (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ g % 2 = 0 ∧
+      UserPrivate (env ord (limited u)) limToks ∧
+      WellFormed limLib [] (env ord (limited u)) (limitRoot n as g) ∧
+      ∃ o, outcomesP {} counterMaskModel (env ord (limited u)) (limitRoot n as g) o ∧
+        highest o = some n := by
+  obtain ⟨o, ho, hp⟩ := exists_of_map limRun_ok
+  exact ⟨idOrd, cu, 1, [.nat 1, .nat 2], 2, idOrd_perm, by decide, rfl, lPrivate, lWf,
+    o, ⟨3000, [], ho⟩, by simpa using hp⟩
+
+/-- Wrong function: `parTraverseN` with a semaphore of 1000 permits (`K/GC:170`). -/
+def wide (e : UserEnv) : UserEnv where
+  call := e.call
+  callV id arg v :=
+    match PT.ofId? id with
+    | some (.k2 _ as f p) => e.callV (PT.k2 1000 as f p).id arg v
+    | _ => e.callV id arg v
+
+/-- `g = _ => IO.cede *> IO.pure(7)` (id 4, via 10), so two actions can overlap. -/
+def wu : UserEnv where
+  call id _ _ := match id with
+    | 4 => { out := .prog (.flatMap .cede (.user 10)) }
+    | 10 => { out := .prog (.pure (.nat 7)) }
+    | _ => { out := .throw { code := 0 } }
+
+def cedeRun : Option Obs :=
+  runObsP {} counterMaskModel (env idOrd (limited wu)) 3000 [] (limitRoot 1 [.nat 1, .nat 2] 4)
+
+def wideRun : Option Obs :=
+  runObsP {} counterMaskModel (wide (env idOrd (limited wu))) 3000 [] (limitRoot 1 [.nat 1, .nat 2] 4)
+
+/-- The mirror keeps the limit on this schedule; the wrong function breaks statement 8 on it: the
+highest count is 2 > 1. -/
+theorem cedeRun_ok : cedeRun.map (fun o => highest o == some 1) = some true := by decide +kernel
+theorem wideRun_breaks : wideRun.map (fun o => highest o == some 2) = some true := by decide +kernel
+
+end Limit
 end CatsEffectInLean.Proofs.Phase6.ParTraverseWitness
