@@ -1,7 +1,7 @@
 # Agent workflow and review protocol
 
 > Sources: synthesized from python-formalization AGENTS.md / REVIEW_PROMPT.md and julia-in-lean ARCHITECTURE.md / review prompts (2026-10..11)
-> Raw: [Review batch 6 notes](../../raw/project-decisions/2026-11-14-review-batch-6-notes.md); [Review batch 5 notes](../../raw/project-decisions/2026-11-10-review-batch-5-notes.md); [Decision 53](../../raw/project-decisions/2026-11-10-decision-53-satisfiability.md); [Phase 6 merge notes](../../raw/project-decisions/2026-11-10-phase6-merge-notes.md); [User decision: no bugs outside this repo](../../raw/project-decisions/2026-11-10-no-bugs-outside-this-repo.md); [Review batch 1 notes](../../raw/project-decisions/2026-11-10-review-batch-1-notes.md); [python AGENTS.md](../../raw/python-formalization/2026-11-09-agents-md-current.md); [python REVIEW_PROMPT.md](../../raw/python-formalization/2026-11-01-review-prompt.md); [python orchestration scripts](../../raw/python-formalization/2026-11-05-orchestration-scripts.md); [julia ARCHITECTURE.md](../../raw/julia-formalization/2026-11-07-julia-base-architecture.md); [julia coverage review prompt](../../raw/julia-formalization/2026-10-29-julia-base-coverage-review-prompt.md); [julia memsafety review prompt](../../raw/julia-formalization/2026-10-29-julia-base-memsafety-review-prompt.md)
+> Raw: [Decision 56](../../raw/project-decisions/2026-11-14-decision-56-harness-privacy.md); [Review batch 6 notes](../../raw/project-decisions/2026-11-14-review-batch-6-notes.md); [Review batch 5 notes](../../raw/project-decisions/2026-11-10-review-batch-5-notes.md); [Decision 53](../../raw/project-decisions/2026-11-10-decision-53-satisfiability.md); [Phase 6 merge notes](../../raw/project-decisions/2026-11-10-phase6-merge-notes.md); [User decision: no bugs outside this repo](../../raw/project-decisions/2026-11-10-no-bugs-outside-this-repo.md); [Review batch 1 notes](../../raw/project-decisions/2026-11-10-review-batch-1-notes.md); [python AGENTS.md](../../raw/python-formalization/2026-11-09-agents-md-current.md); [python REVIEW_PROMPT.md](../../raw/python-formalization/2026-11-01-review-prompt.md); [python orchestration scripts](../../raw/python-formalization/2026-11-05-orchestration-scripts.md); [julia ARCHITECTURE.md](../../raw/julia-formalization/2026-11-07-julia-base-architecture.md); [julia coverage review prompt](../../raw/julia-formalization/2026-10-29-julia-base-coverage-review-prompt.md); [julia memsafety review prompt](../../raw/julia-formalization/2026-10-29-julia-base-memsafety-review-prompt.md)
 
 ## Overview
 
@@ -63,6 +63,10 @@ A reviewer cites only evidence it opened: a wrong-function test, a witness or a 
 ## Fixed-twin check for refutations (added 2026-11-10)
 
 A refutation is HOLLOW when a correct implementation also refutes the statement (review batch 2 found this twice: a model artifact made `¬P` true for every implementation). For each refutation, mirror the upstream fix or the `possible_fix` as a twin, and show on a bounded domain that the twin satisfies the property.
+
+## Harness privacy (decision 56, added 2026-11-14)
+
+Three review rounds (batches 4–6) each found a new marker forgery. Patching each found forgery did not converge. Rule: harness tokens must be private by construction, or a kernel-checked lemma must show that user steps preserve privacy. No escape clauses; runtime numbers (clock) are user data. One shared module owns this for all tracks. Each known forgery becomes a Lean regression `example`. Source: [decision 56](../../raw/project-decisions/2026-11-14-decision-56-harness-privacy.md).
 
 ## See Also
 

@@ -210,3 +210,7 @@
 ## [2026-11-14] ingest | Review batch 6 (re-review of 5 track G/Res entries; 5 HOLLOW)
 - Updated: Agent workflow (review log, satisfiable-hypotheses note), guarantee and bracket model, Resource use, allocated, both, index
 - Raw: raw/project-decisions/2026-11-14-review-batch-6-notes.md
+
+## [2026-11-14] ingest | Decision 56: harness privacy by construction or proof
+- Updated: Agent workflow (harness privacy section)
+- Raw: raw/project-decisions/2026-11-14-decision-56-harness-privacy.md
