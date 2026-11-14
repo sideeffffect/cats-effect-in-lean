@@ -82,6 +82,64 @@ def bracketFullIsKernelDefaultPureUse : Prop :=
     WellFormed isLib [] env (defaultBracketFullIO acq use rel) →
     IOEqv env (bracketFullIO acq use rel) (defaultBracketFullIO acq use rel)
 
+/-! ## Legacy test-program parts (not used by the track G statements)
+
+The first form of the track G invariants used these: user-code parent lambdas (`PLam`, even ids,
+namespace `pns`), `ParentEnv`, `parent`, `usesId` and `Marker`. Review batch 4 found that form
+vacuous, and the track G statements now use the harness below. Track Res
+(`Props/Phase6/Resource.lean`, `test/Phase6/ResourceSmoke.lean`) still imports these names, so
+they stay unchanged here until track Res moves to a harness too (review batch 5). -/
+
+/-- The namespace of the parent lambdas. -/
+def pns : Nat := 8
+
+/-- The lambdas of `parent`. -/
+inductive PLam where
+  /-- `f => f.cancel.flatMap(_ => f.join)`. -/
+  | cancelJoin
+  /-- `_ => f.join`. -/
+  | thenJoin (f : Nat)
+  deriving DecidableEq, Repr
+
+/-- The closure value. -/
+def PLam.toVal : PLam → Val
+  | .cancelJoin => cloVal pns 0 []
+  | .thenJoin f => cloVal pns 1 [.fiber f]
+
+/-- The closure as a user function. -/
+def PLam.fn (l : PLam) : Fn := userFn l.toVal
+
+/-- Run a parent lambda. -/
+def PLam.call (l : PLam) (arg : Val) (v : View) : UserResult :=
+  match l, arg with
+  | .cancelJoin, .fiber f => { out := .prog (.flatMap (IO.cancelOf f (v.outcome f)) (PLam.thenJoin f).fn) }
+  | .thenJoin f, _ => { out := .prog (IO.joinOf f (v.outcome f)) }
+  | _, _ => { out := .throw { code := 999999, kind := .fatal } }
+
+/-- `env` runs the parent lambdas. -/
+def ParentEnv (env : UserEnv) : Prop :=
+  ∀ (l : PLam) (arg : Val) (v : View), env.callV (2 * valToNat l.toVal) arg v = l.call arg v
+
+/-- The test program: `b.start.flatMap(f => f.cancel.flatMap(_ => f.join))`. -/
+def parent (b : IO) : IO := .flatMap (.start b) PLam.cancelJoin.fn
+
+/-- Does a term name user function `id` (directly, or inside a runtime closure)? -/
+def usesId (id : Nat) : IO → Bool
+  | .map p f | .flatMap p f | .handleErrorWith p f => usesId id p || fnUses id f
+  | .delay f | .uncancelable f | .ioCont f | .blocking _ f | .local f => fnUses id f
+  | .attempt p | .start p | .unmaskRunLoop p _ _ | .evalOn p _ => usesId id p
+  | .onCancel p q | .racePair p q => usesId id p || usesId id q
+  | _ => false
+where
+  /-- `Fn` case (runtime closures hold no user function ids that matter here except `racePair`). -/
+  fnUses (id : Nat) : Fn → Bool
+    | .user k => k == id
+    | .rt _ => false
+
+/-- A marker: user function `m` emits `x` and returns `unit` (the thunk of `IO.delay(emit x)`). -/
+def Marker (env : UserEnv) (m : Nat) (x : Val) : Prop :=
+  ∀ (a : Val) (v : View), env.callV m a v = { effects := [.emit x], out := .ret .unit }
+
 /-! ## The test program of the invariants (decisions 50, 53, 54)
 
 Review batch 4 found the first form of statements 4 and 5 vacuous: its marker hypothesis
