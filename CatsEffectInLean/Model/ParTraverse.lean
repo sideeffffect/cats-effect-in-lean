@@ -120,13 +120,15 @@ inductive PT where
   | voidK
   /-- `t => IO.pure(())` of `voidError` (`IO.scala:977-980`, `532-533`). -/
   | unitH
-  /-- `fiber => supervision.update(_ + ((fiber, result))) *> preempt.tryGet flatMap {...}` (`K/GC:220-222`). -/
+  /-- `fiber => supervision.update(_ + ((fiber, result))) *> preempt.tryGet flatMap {...}`
+  (`K/GC:220-222`). Scala precedence: the alphanumeric infix `flatMap` binds weaker than `*>`, so
+  this is `(update *> tryGet) flatMap {...}` (checked on the real `IO` tree). -/
   | fibK (p s r : Nat)
   /-- `update(_ + ((fiber, result)))` thunk (`SyncRef.update`). -/
   | supAdd (s t r : Nat)
   /-- `update(_ - ((fiber, result)))` thunk. -/
   | supRemove (s t r : Nat)
-  /-- `_ => that` of `*>` with `that = preempt.tryGet flatMap {...}` (`K/GC:222`). -/
+  /-- `_ => that` of `update *> preempt.tryGet` (`K/GC:220-222`). -/
   | thenAfter (p s t r : Nat)
   /-- `{ case Some(Some(e)) => fiber.cancel.as(...); ...; case None => F.pure(...) }` (`K/GC:222-232`). -/
   | selAfter (s t r : Nat)
@@ -497,7 +499,8 @@ def call (uc : Nat → Val → View → UserResult) (l : PT) (arg : Val) (v : Vi
   | .unitH => prog (.pure .unit)
   | .fibK p s r =>
     match arg with
-    | .fiber t => prog (.flatMap (.delay (PT.supAdd s t r).fn) (PT.thenAfter p s t r).fn)
+    | .fiber t =>
+      prog (.flatMap (.flatMap (.delay (PT.supAdd s t r).fn) (PT.thenAfter p s t r).fn) (PT.selAfter s t r).fn)
     | _ => illTyped
   | .supAdd s t r =>
     match v.refs[s]? with
@@ -510,7 +513,7 @@ def call (uc : Nat → Val → View → UserResult) (l : PT) (arg : Val) (v : Vi
     match v.refs[s]? with
     | some xs => { effects := [.writeRef s (listV (setRemove (listOf xs) (.pair (.fiber t) (.deferred r))))], out := .ret .unit }
     | none => illTyped
-  | .thenAfter p s t r => prog (.flatMap (tryGetIO p) (PT.selAfter s t r).fn)
+  | .thenAfter p _ _ _ => prog (tryGetIO p)
   | .selAfter s t r =>
     match arg with
     | .some (.some (.err e)) => prog (.map (IO.cancelOf t (v.outcome t)) (PT.asK (dRaise e)).fn)

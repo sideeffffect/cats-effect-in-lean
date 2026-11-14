@@ -104,6 +104,8 @@ WEIGHTS = {
     'tpl_memo': 0.4, 'memoGet': 4,
     # format v2 (track Res)
     'rUse': 0.5, 'rAllocated': 0.4, 'res_both': 2.0, 'tpl_resBoth': 0.5,
+    # format v2 (batch 6.3): `parTraverseN` (lists of at most 4 elements)
+    'tpl_parTraverse': 1.2, 'tpl_parTraverseCancel': 0.6,
 }
 
 # Other knobs (probabilities and ranges).
@@ -565,6 +567,12 @@ class Gen:
         if size >= 5:
             opts.append((w['tpl_resBoth'], lambda: self.tpl_res_both(t, env, size, cc)))
 
+        # ---- format v2 (batch 6.3): `parTraverseN` in a `seq`, or in a child that the parent cancels
+        if size >= 3:
+            opts.append((w['tpl_parTraverse'], lambda: self.tpl_par_traverse(t, env, size, cc, False)))
+        if size >= 5:
+            opts.append((w['tpl_parTraverseCancel'], lambda: self.tpl_par_traverse(t, env, size, cc, True)))
+
         # ---- format v2 (track R): type-directed combinators
         if size >= 3 and t[0] in ('either', 'pair'):
             kind = 'race' if t[0] == 'either' else 'both'
@@ -778,6 +786,30 @@ class Gen:
             self.rids += 1
             rel = {'op': 'seq', 'ps': [self.mark(MARK_REL, self.rids), rel]}
         return {'op': 'rMake', 'acq': self.prog(t, self.res_env(env), sa, ctx), 'x': x, 'rel': rel}
+
+    def g_par_traverse(self, env, size, ctx):
+        """`parTraverseN(n)(xs)(x => f)`: 0..4 elements of a literal type (or variables of it),
+        limit 1..5, `f` an arbitrary program of a small type (it can suspend, raise or cancel)."""
+        a = self.pick([(3, NAT), (1, UNIT), (1, BOOL)])
+        k = self.pick([(1, 0), (2, 1), (3, 2), (3, 3), (3, 4)])
+        xs = [self.atom(a, env) for _ in range(k)]
+        x = self.fresh('x', env)
+        n = self.pick([(4, 1), (4, 2), (2, 3), (1, 5)])
+        f = self.prog(self.small_type(), {**env, x: ('val', a)}, max(1, size), self.child_ctx(ctx))
+        return {'op': 'parTraverseN', 'n': n, 'xs': xs, 'x': x, 'f': f}
+
+    def tpl_par_traverse(self, t, env, size, ctx, cancel):
+        sp, sk = self.split_size(size, 2)
+        p = self.g_par_traverse(env, sp, ctx)
+        if not cancel:
+            return {'op': 'seq', 'ps': [p, self.prog(t, env, sk, ctx)]}
+        fv = self.fresh('x')
+        env2 = {**env, fv: ('val', fiber(UNIT))}
+        ps = [{'op': 'cede'} for _ in range(self.pick([(2, 0), (2, 1), (2, 2), (1, 4)]))]
+        ps.append({'op': 'cancel', 'f': {'t': 'var', 'x': fv}})
+        ps.append(self.prog(t, env2, sk, ctx))
+        return {'op': 'bind', 'x': fv, 'e': {'op': 'start', 'e': {'op': 'map', 'e': p, 'fn': 1}},
+                'k': {'op': 'seq', 'ps': ps}}
 
     def tpl_resource(self, t, env, size, ctx):
         """allocatedCase(rFlatMap(rMake(acq, x, rel), y, rest)): the rest often waits, fails or is
