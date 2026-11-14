@@ -20,5 +20,5 @@
 ## Measurements (local, 16 cores)
 
 - Heavy build (49 chunks in 10 chained modules): about 30 min, peak RSS 8.3 GB per Lean process.
-- Kernel replay: see the CI timings in the track P report (one chunk module: about 3 min, 7.5 GB).
+- Full heavy job locally (`scripts/check_heavy_proofs.sh` after the merge with `origin/main` 0d2c318: rebuild of all heavy modules + audit + axioms + leanchecker of each module): 61 min, peak RSS 8.5 GB. Main job steps after the move: `lake check` 5.8 min (was about 38 min with the law).
 - Default build after the move: the law modules are gone from `lake build` and `lake check`.
