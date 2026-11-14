@@ -400,24 +400,45 @@ def REnv.toEnv (r : REnv) : UserEnv where
 /-- The library closures of this model: odd ids that decode to a `Clo`. -/
 def isLib (id : Nat) : Bool := isLibId id && ((cloOfId id).bind Clo.ofVal).isSome
 
+/-- The user functions that a release function value names (`RelFn.user k` is user function `k`,
+program id `2 * k`). -/
+def RelFn.fnIds : RelFn → List Nat
+  | .user k => [2 * k]
+  | .guarantee a b => a.fnIds ++ b.fnIds
+  | _ => []
+
+/-- The function fields of a closure of this mirror (decision 56, `Lib.fields`). `Bind`, acquire
+and release codes are `REnv` functions (no captured handles); `AllocFn.user k` and
+`RelFn.user k` name user function `k` (program id `2 * k`). -/
+def Clo.fnIds : Clo → List Nat
+  | .evalK _ r | .onErrorH r => r.fnIds
+  | .allocBody (.user k) _ r => 2 * k :: r.fnIds
+  | .allocBody _ _ r | .allocK _ r _ => r.fnIds
+  | _ => []
+
+def fnFields (c : Val) : List Nat := ((Clo.ofVal c).map Clo.fnIds).getD []
+
+/-- The library of this mirror for `WellFormed` (decision 56). -/
+def lib : Lib := { ok := isLib, fields := fnFields }
+
 /-- A `Resource` value that user code built holds only held handles (`mem`). Its `Allocate`
 user functions are user functions of `REnv.user` (id `k` is `uid k` in programs), its `Eval`
 programs pass `WF.progOK`. `make` names closed programs (`REnv.acquire`, `REnv.release`). -/
 def Res.ok (mem : Handle → Bool) : Res → Bool
-  | .allocate (.user k) => WF.capOK (isLib : Lib) mem (2 * k)
+  | .allocate (.user k) => WF.capOK lib mem (2 * k)
   | .allocate (.make _ _) => true
   | .bind source _ => Res.ok mem source
   | .pure a => WF.sub mem a.handles
-  | .eval fa => WF.progOK isLib mem fa
+  | .eval fa => WF.progOK lib mem fa
 
 /-- `WellFormed` for a program that uses `Resource`: `WellFormed` with the library closures
 `isLib` and no handles before the start, for `r.toEnv`; and the user parts of `REnv` that are
 pure Lean functions build only well-formed values: an `acquire` program is closed, and
 `release k a` and `bind k a` hold only the handles of `a`. -/
 def REnv.WellFormed (r : REnv) (p : IO) : Prop :=
-  Model.WellFormed isLib [] r.toEnv p ∧
-  (∀ k, WF.progOK isLib (fun _ => false) (r.acquire k) = true) ∧
-  (∀ k a q, r.release k a = .ok q → WF.progOK isLib (a.handles.contains ·) q = true) ∧
+  Model.WellFormed lib [] r.toEnv p ∧
+  (∀ k, WF.progOK lib (fun _ => false) (r.acquire k) = true) ∧
+  (∀ k a q, r.release k a = .ok q → WF.progOK lib (a.handles.contains ·) q = true) ∧
   (∀ k a res, r.bind k a = .ok res → Res.ok (a.handles.contains ·) res = true)
 
 end CatsEffectInLean.Model.Resource

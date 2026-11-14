@@ -409,6 +409,23 @@ theorem capOK_coe (f : Nat → Bool) (mem : Handle → Bool) (id : Nat) :
     capOK (f : Lib) mem id = sub mem (match cloOfId id with | some c => c.handles | none => []) := by
   simp [capOK, capDepth, capturedD_coe]
 
+/-- A number that is not a closure code captures nothing. -/
+theorem capOK_of_none (lib : Lib) (mem : Handle → Bool) (id : Nat) (h : cloOfId id = none) :
+    capOK lib mem id = true := by
+  unfold capOK; rw [show capDepth = 63 + 1 from rfl, capturedD, h]; rfl
+
+theorem captured_of_none (lib : Lib) (id : Nat) (h : cloOfId id = none) : captured lib id = [] := by
+  unfold captured; rw [show capDepth = 63 + 1 from rfl, capturedD, h]; rfl
+
+/-- A closure value without function fields: its handles. -/
+theorem capOK_of_noFields (lib : Lib) (mem : Handle → Bool) (id : Nat) (c : Val) (h : cloOfId id = some c)
+    (hf : lib.fields c = []) : capOK lib mem id = sub mem c.handles := by
+  unfold capOK; rw [show capDepth = 63 + 1 from rfl, capturedD, h]; simp only [hf, List.foldr_nil]
+
+theorem captured_of_noFields (lib : Lib) (id : Nat) (c : Val) (h : cloOfId id = some c)
+    (hf : lib.fields c = []) : captured lib id = c.handles := by
+  unfold captured; rw [show capDepth = 63 + 1 from rfl, capturedD, h]; simp only [hf, List.foldr_nil, Option.getD_some]
+
 /-- A closure without captured handles (library without function fields) passes `capOK`. -/
 theorem capOK_coe_of_nil (f : Nat → Bool) (mem : Handle → Bool) (id : Nat)
     (h : (match cloOfId id with | some c => c.handles | none => []) = []) : capOK (f : Lib) mem id = true := by
