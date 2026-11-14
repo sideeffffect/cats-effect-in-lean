@@ -48,7 +48,10 @@ open(base + 'RaceLawDefs.lean', 'w').write(defs)
 
 idx = 0
 for mi, mod in enumerate(mods):
-    prev = 'CatsEffectInLean.Proofs.Phase6.RaceLawDefs' if mi == 0 else f'CatsEffectInLean.Proofs.Phase6.RaceLawChunks{mi-1}'
+    # every chunk module imports only the definitions, so CI can build and replay the chunk
+    # modules in parallel jobs (decision 57); a local run builds them one at a time
+    # (scripts/check_heavy_proofs.sh)
+    prev = 'CatsEffectInLean.Proofs.Phase6.RaceLawDefs'
     thms = ""
     for (a, n) in mod:
         thms += f"""set_option maxHeartbeats 0 in
@@ -64,8 +67,11 @@ theorem lhs_chunk_{idx} :
     src = f"""import {prev}
 
 /-! Edge checks of the left side of `uncancelableRaceNotInherited`, states {lo} to {hi}
-(see `Proofs/Phase6/RaceLaw.lean`). Each module imports the previous one, so the chunks are
-checked one after another; chunk sizes keep each `decide` below about 7.5 GB. -/
+(see `Proofs/Phase6/RaceLaw.lean`). Each chunk module imports only `RaceLawDefs`, so the CI
+matrix builds and replays them in parallel jobs (decision 57). Do not build `HeavyProofs` with
+plain parallel `lake build` on one machine: each module needs up to about 8 GB; use
+`scripts/check_heavy_proofs.sh` (one module per Lean process). Chunk sizes keep each `decide`
+below about 7.5 GB. -/
 
 namespace {ns}
 
@@ -81,13 +87,13 @@ chain = "edgesUpTo_zero _ _ _ lhs_chunk_0"
 for i in range(len(chunks)):
     chain = f"edgesUpTo_chunk _ _ _ ({chain}) lhs_chunk_{i}"
 
-main = f"""import CatsEffectInLean.Proofs.Phase6.RaceLawChunks{len(mods)-1}
+main = "".join(f"import CatsEffectInLean.Proofs.Phase6.RaceLawChunks{i}\n" for i in range(len(mods))) + f"""
 
 /-!
 # `GenSpawnLaws.uncancelableRaceNotInherited` for `IO` (Phase 6, track P)
 
 `F.uncancelable(_ => F.race(F.never[Unit], F.canceled)).void <-> F.never[Unit]`
-(`laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala:121-122`), `<->` = `EqvP`.
+(`laws/shared/src/main/scala/cats/effect/laws/GenSpawnLaws.scala:146-147`), `<->` = `EqvP`.
 
 Proof by certificates (`Proofs/Lemmas/CertP.lean`): the left side has exactly 4,441 states
 (closed under `preempt` and every `pick`), the right side 45. On both sides every state with an

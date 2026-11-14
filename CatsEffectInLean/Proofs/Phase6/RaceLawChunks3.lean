@@ -1,8 +1,11 @@
-import CatsEffectInLean.Proofs.Phase6.RaceLawChunks2
+import CatsEffectInLean.Proofs.Phase6.RaceLawDefs
 
 /-! Edge checks of the left side of `uncancelableRaceNotInherited`, states 2100 to 2583
-(see `Proofs/Phase6/RaceLaw.lean`). Each module imports the previous one, so the chunks are
-checked one after another; chunk sizes keep each `decide` below about 7.5 GB. -/
+(see `Proofs/Phase6/RaceLaw.lean`). Each chunk module imports only `RaceLawDefs`, so the CI
+matrix builds and replays them in parallel jobs (decision 57). Do not build `HeavyProofs` with
+plain parallel `lake build` on one machine: each module needs up to about 8 GB; use
+`scripts/check_heavy_proofs.sh` (one module per Lean process). Chunk sizes keep each `decide`
+below about 7.5 GB. -/
 
 namespace CatsEffectInLean.Proofs.Phase6.RaceLaw
 
