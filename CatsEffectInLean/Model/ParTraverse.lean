@@ -45,9 +45,12 @@ import CatsEffectInLean.Model.Timeout
   `uc` (`uc f a view`).
 * An `IO` held as a value (the traverse result is a `List[F[B]]`; `modify` returns an `F[...]`)
   is a descriptor `Val` (`Desc`); the closure that consumes it rebuilds the term.
-* `Set[(Fiber, Deferred)]`: a list in insertion order. Scala's `Set1`..`Set4` keep insertion order
-  under `+` and `-`; a fifth element makes a `HashSet` (identity-hash order), which the model does
-  not mirror: it stops with the fatal error code `setLimitCode` (so inputs of length ≤ 4).
+* `Set[(Fiber, Deferred)]`: Scala's `Set1`..`Set4` keep insertion order under `+` and `-`
+  (`listV xs`). A fifth element makes a `HashSet` (`.right (listV xs)`, `xs` in insertion order),
+  which stays a `HashSet` under `-`. Its iteration order depends on identity hashes, so the
+  model takes it as an input: `ho xs`, where `ho` is any function (the statements require
+  `(ho xs).Perm xs`). This over-approximates the real order (a `HashSet` order is also
+  consistent between a set and its subsets; `ho` need not be).
 * `Chain` = list. A list value is `Codec.listV`.
 * The source of an `IO` in a `guaranteeCase` or `both` is a source code (`ioOf`).
 -/
@@ -59,9 +62,6 @@ open CatsEffectInLean.Model.Codec
 
 /-- The namespace of these closures (batch 6.3: 41..49). -/
 def ns : Nat := 41
-
-/-- The model limit: a supervision set of more than 4 elements. -/
-def setLimitCode : Nat := 900041
 
 /-- Error codes: an ill-typed argument (impossible in Scala). -/
 def illCode : Nat := 999999
@@ -407,12 +407,27 @@ def illTyped : UserResult := { out := .throw { code := illCode, kind := .fatal }
 /-- The list of a list value. -/
 def listOf (v : Val) : List Val := (unlistV v).getD []
 
-/-- `Set + elem` for `Set1`..`Set4` (insertion order); a fifth element: the model limit. -/
-def setAdd (xs : List Val) (x : Val) : Option (List Val) :=
-  if xs.contains x then some xs else if xs.length ≥ 4 then none else some (xs ++ [x])
+/-- A supervision set value: `(isHashSet, elements in insertion order)`. -/
+def setOf : Val → Bool × List Val
+  | .right xs => (true, listOf xs)
+  | xs => (false, listOf xs)
 
-/-- `Set - elem`. -/
-def setRemove (xs : List Val) (x : Val) : List Val := xs.filter (· != x)
+/-- The value of a supervision set. -/
+def setVal : Bool × List Val → Val
+  | (true, xs) => .right (listV xs)
+  | (false, xs) => listV xs
+
+/-- `Set + elem`: `Set1`..`Set4` add at the end; `Set4 + new` and `HashSet + new` give a
+`HashSet` (Scala 2.13 `immutable/Set.scala`, `Set4.incl`). -/
+def setAdd (st : Bool × List Val) (x : Val) : Bool × List Val :=
+  if st.2.contains x then st else (st.1 || st.2.length ≥ 4, st.2 ++ [x])
+
+/-- `Set - elem` (`Set1`..`Set4` shrink in order; a `HashSet` stays a `HashSet`). -/
+def setRemove (st : Bool × List Val) (x : Val) : Bool × List Val := (st.1, st.2.filter (· != x))
+
+/-- `set.toList`: insertion order for `Set1`..`Set4`, the chosen order `ho` for a `HashSet`. -/
+def setToList (ho : List Val → List Val) (st : Bool × List Val) : List Val :=
+  if st.1 then ho st.2 else st.2
 
 /-- The state of the semaphore: `(waiting, permits)`. -/
 def semState (v : View) (q : Nat) : Option (List Val × Nat) :=
@@ -420,8 +435,9 @@ def semState (v : View) (q : Nat) : Option (List Val × Nat) :=
   | some (.pair w (.nat k)) => (unlistV w).map (·, k)
   | _ => none
 
-/-- Run closure `l`. `uc` calls the user function `f`. -/
-def call (uc : Nat → Val → View → UserResult) (l : PT) (arg : Val) (v : View) : UserResult :=
+/-- Run closure `l`. `uc` calls the user function `f`; `ho` is the `HashSet` iteration order. -/
+def call (ho : List Val → List Val) (uc : Nat → Val → View → UserResult) (l : PT) (arg : Val)
+    (v : View) : UserResult :=
   match l with
   | .newDeferred => { effects := [.allocDeferred], out := .ret (.deferred v.deferreds.length) }
   | .newRef x => { effects := [.allocRef x], out := .ret (.ref v.refs.length) }
@@ -505,13 +521,11 @@ def call (uc : Nat → Val → View → UserResult) (l : PT) (arg : Val) (v : Vi
   | .supAdd s t r =>
     match v.refs[s]? with
     | some xs =>
-      match setAdd (listOf xs) (.pair (.fiber t) (.deferred r)) with
-      | some ys => { effects := [.writeRef s (listV ys)], out := .ret .unit }
-      | none => { out := .throw { code := setLimitCode, kind := .fatal } }
+      { effects := [.writeRef s (setVal (setAdd (setOf xs) (.pair (.fiber t) (.deferred r))))], out := .ret .unit }
     | none => illTyped
   | .supRemove s t r =>
     match v.refs[s]? with
-    | some xs => { effects := [.writeRef s (listV (setRemove (listOf xs) (.pair (.fiber t) (.deferred r))))], out := .ret .unit }
+    | some xs => { effects := [.writeRef s (setVal (setRemove (setOf xs) (.pair (.fiber t) (.deferred r))))], out := .ret .unit }
     | none => illTyped
   | .thenAfter p _ _ _ => prog (tryGetIO p)
   | .selAfter s t r =>
@@ -539,7 +553,7 @@ def call (uc : Nat → Val → View → UserResult) (l : PT) (arg : Val) (v : Vi
   | .seqM2 d => prog (.map (descIO d) (PT.snoc arg).fn)
   | .refGet s => ret (v.refs.getD s .unit)
   | .caK c =>
-    match listOf arg with
+    match setToList ho (setOf arg) with
     | [] => prog (.pure .unit)
     | xs => prog (runHalf c xs)
   | .ifCancel t =>
@@ -556,7 +570,7 @@ def call (uc : Nat → Val → View → UserResult) (l : PT) (arg : Val) (v : Vi
   | .joinAllK =>
     let snapOf (t : Nat) : Val := match v.outcome t with | some oc => .some oc.toVal | none => .none
     let joinVoid (t : Nat) : IO := .map (IO.joinOf t (v.outcome t)) PT.voidK.fn
-    match listOf arg with
+    match setToList ho (setOf arg) with
     | [] => prog (.pure .unit)
     | .pair (.fiber t0) _ :: rest =>
       prog (.map (rest.foldl (fun g x =>
@@ -599,14 +613,15 @@ def call (uc : Nat → Val → View → UserResult) (l : PT) (arg : Val) (v : Vi
 
 /-- The environment of a program that uses `parTraverseN`: these closures, the `Bracket`, `Race`
 and `Timeout` mirrors, and user code `u` (even ids). -/
-def dispatch (u : UserEnv) (id : Nat) (arg : Val) (v : View) : UserResult :=
+def dispatch (ho : List Val → List Val) (u : UserEnv) (id : Nat) (arg : Val) (v : View) :
+    UserResult :=
   match PT.ofId? id with
-  | some l => call u.callV l arg v
+  | some l => call ho u.callV l arg v
   | none =>
     match Bracket.BLam.ofId? id with
     | some l =>
       Bracket.call (fun k a w => match PT.ofId? k with
-        | some l' => call u.callV l' a w
+        | some l' => call ho u.callV l' a w
         | none => u.callV k a w) ioOf l arg v
     | none =>
       match Race.ofId? id with
@@ -623,8 +638,8 @@ def dispatch (u : UserEnv) (id : Nat) (arg : Val) (v : View) : UserResult :=
           | none => u.callV id arg v
         else u.callV id arg v
 
-def env (u : UserEnv) : UserEnv where
-  call id arg refs := dispatch u id arg { refs }
-  callV := dispatch u
+def env (ho : List Val → List Val) (u : UserEnv) : UserEnv where
+  call id arg refs := dispatch ho u id arg { refs }
+  callV := dispatch ho u
 
 end CatsEffectInLean.Model.ParTraverse
