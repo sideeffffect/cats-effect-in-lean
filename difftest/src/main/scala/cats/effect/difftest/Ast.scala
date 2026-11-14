@@ -102,6 +102,9 @@ enum Prog:
   case RUse(r: Res, x: String, k: Prog)
   /** `I_R(r).allocated.flatMap { case (x, rel) => k.flatMap(b => rel.as(b)) }`. */
   case RAllocated(r: Res, x: String, k: Prog)
+  // ---- format v2 (Phase 6, batch 6.3)
+  /** `IO.parTraverseN(n)(xs)(x => f).map(list)`; the list result is right-nested pairs ending in unit. */
+  case ParTraverseN(n: Int, xs: List[Atom], x: String, f: Prog)
 
 /** A `Resource[IO, Val]` (format v1). It occurs only under `AllocatedCase`. */
 enum Res:

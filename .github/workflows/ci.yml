@@ -71,7 +71,7 @@ jobs:
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
           lake build --wfail Difftest cediff
-          lake exe cediff difftest/cases/basic.jsonl difftest/cases/sched.jsonl difftest/cases/deferred.jsonl difftest/cases/racesleep.jsonl difftest/cases/syncstep.jsonl difftest/cases/resource.jsonl difftest/cases/queue.jsonl difftest/cases/race.jsonl difftest/cases/preempt.jsonl difftest/cases/bracket.jsonl difftest/cases/memoize.jsonl difftest/cases/resuse.jsonl > /dev/null
+          lake exe cediff difftest/cases/basic.jsonl difftest/cases/sched.jsonl difftest/cases/deferred.jsonl difftest/cases/racesleep.jsonl difftest/cases/syncstep.jsonl difftest/cases/resource.jsonl difftest/cases/queue.jsonl difftest/cases/race.jsonl difftest/cases/preempt.jsonl difftest/cases/bracket.jsonl difftest/cases/memoize.jsonl difftest/cases/resuse.jsonl difftest/cases/partraverse.jsonl > /dev/null
 
   # Scala side of the difftest: runner tests against cats-effect 3.7.1 (golden files,
   # rerun determinism, hand-checked facts). See difftest/README.md.
@@ -111,7 +111,7 @@ jobs:
         run: |
           export PATH="$HOME/.elan/bin:$PATH"
           lake build --wfail cediff
-          python3 difftest/py/drive.py check --lean "lake exe cediff" difftest/cases/basic.jsonl difftest/cases/sched.jsonl difftest/cases/deferred.jsonl difftest/cases/racesleep.jsonl difftest/cases/syncstep.jsonl difftest/cases/resource.jsonl difftest/cases/queue.jsonl difftest/cases/race.jsonl difftest/cases/preempt.jsonl difftest/cases/bracket.jsonl difftest/cases/memoize.jsonl difftest/cases/resuse.jsonl
+          python3 difftest/py/drive.py check --lean "lake exe cediff" difftest/cases/basic.jsonl difftest/cases/sched.jsonl difftest/cases/deferred.jsonl difftest/cases/racesleep.jsonl difftest/cases/syncstep.jsonl difftest/cases/resource.jsonl difftest/cases/queue.jsonl difftest/cases/race.jsonl difftest/cases/preempt.jsonl difftest/cases/bracket.jsonl difftest/cases/memoize.jsonl difftest/cases/resuse.jsonl difftest/cases/partraverse.jsonl
           python3 difftest/py/drive.py corpus --lean "lake exe cediff"
           python3 difftest/py/drive.py run --seeds 1 2 3 --n 2000 --modes replay --lean "lake exe cediff" --min-v1-agree 150
 

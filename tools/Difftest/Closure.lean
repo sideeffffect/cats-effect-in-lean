@@ -229,6 +229,11 @@ inductive Lam where
   /-- `rBoth`: `{ case (x, y) => VPair(x, y) }` of `.map`, as the `REnv.bind` code of
   `flatMap(a => Resource.pure(f(a)))` (`Resource.scala:396-397`). `vals = []`. -/
   | rbPair
+  -- format v2 (batch 6.3): `parTraverseN` runs on the mirror `Model/ParTraverse.lean`
+  /-- `parTraverseN`: `x => I(f)`. `vals = env`. -/
+  | ptF
+  /-- `parTraverseN`: `.map(bs => list)` (the model already holds the list encoding). -/
+  | ptList
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -245,7 +250,8 @@ def Lam.all : List Lam :=
    .gSrcE, .gSrcFin, .gFinEmit, .gFinThen, .brAcqSrc, .brUse, .brRel, .brFinEmit, .brRelThen,
    .brcRel, .brcFinK, .brcFinEmit, .brcFinThen, .bfAcq,
    .memoSrc, .memoHandle,
-   .ruUse, .raK, .raRelAs, .ruRes, .rbA, .rbB, .rbPair]
+   .ruUse, .raK, .raRelAs, .ruRes, .rbA, .rbB, .rbPair,
+   .ptF, .ptList]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?

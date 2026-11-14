@@ -291,6 +291,19 @@ class Checker:
         if op in ('rUse', 'rAllocated'):
             a = self.res(p['res'], env)
             return self.prog(p['k'], {**env, p['x']: ('val', a)})
+        # ---- format v2 (batch 6.3)
+        if op == 'parTraverseN':
+            k = p.get('n')
+            if not isinstance(k, int) or isinstance(k, bool) or not 1 <= k <= 1000:
+                raise TypeErr(f"parTraverseN n {k!r}")
+            a = f()
+            for x in p['xs']:
+                u(self.atom(x, env), a, "parTraverseN element")
+            b = self.prog(p['f'], {**env, p['x']: ('val', a)})
+            t = ('unit',)
+            for _ in p['xs']:
+                t = ('pair', b, t)
+            return t
         if op == 'syncStep':
             raise TypeErr("syncStep below the root")
         if op in RES_OPS:

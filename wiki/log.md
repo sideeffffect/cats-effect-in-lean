@@ -224,6 +224,24 @@
 - Updated: Agent workflow (harness privacy section)
 - Raw: raw/project-decisions/2026-11-14-decision-56-harness-privacy.md
 
+## [2026-11-14] ingest | Batch 6.3: parTraverseN
+- Created: parTraverseN model
+- Updated: Difftest program format (op `parTraverseN`), index
+- Raw: raw/cats-effect/2026-11-14-partraverse-notes.md
+
+## [2026-11-14] ingest | Review batch 7: parTraverseN and heavy-proof CI split
+- Updated: Agent workflow (review log), Registry and audit (CI split gaps), parTraverseN model (review result), index
+- Raw: raw/project-decisions/2026-11-14-review-batch-7-notes.md
+
+## [2026-11-14] update | Review 7: parTraverseN fixes
+- Updated: parTraverseN model (HashSet order as input `ho`, no `as.length ≤ 4`, statements 5-7 with a behaviour harness, resultOrder waits for decision 56), Difftest program format, index
+- Raw: raw/cats-effect/2026-11-14-partraverse-review7.md
+- Smoke `lake exe ptsmoke 100`: 55,980 stopped runs, 0 violations; behaviour tables 120/84/63; all 8 wrong functions break their claim (1000 permits: 72 and 26 runs of 100)
+
+## [2026-11-14] ingest | Decision 57: heavy-proofs required, split into parallel jobs (user answer Q4)
+- Updated: Registry and audit (heavy proofs section)
+- Raw: raw/project-decisions/2026-11-14-decision-57-required-heavy-checks.md
+
 ## [2026-11-14] ingest | Review batch 7 fixes for decision 55 (sandbox, derived lists, export scope)
 - Raw: raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md (section "Review batch 7 fixes")
 - Updated: Registry and audit (heavy job steps, export scope, leanexport gotcha)
