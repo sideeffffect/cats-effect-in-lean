@@ -129,23 +129,7 @@ open CatsEffectInLean.Model.Codec
 open CatsEffectInLean.Model.ParTraverse
 open CatsEffectInLean.Props.Phase6.ParTraverse
 
-/-- The user function fields of the `ParTraverse` closures. -/
-def PT.fnIds : PT → List Nat
-  | .k1 _ _ f | .k2 _ _ f _ | .k3 _ f _ _ | .travM2 f _ _ _ _ | .elemSel f _ _ _ _ | .uncK f _ _ _ _
-  | .resK f _ _ _ _ _ _ | .thenStart f _ _ _ _ _ | .callF f _ => [f]
-  | _ => []
-
-/-- `Lib.fields` for the closures of `parTraverseNOrder`: `PT`, `TL.tag`, and `Bracket`. -/
-def ptFields (c : Val) : List Nat :=
-  (match ofCloVal c with
-   | some (k, tag, fs) => if k == ParTraverse.ns then ((PT.ofFields tag fs).map PT.fnIds).getD [] else []
-   | none => []) ++
-  (match ofCloVal c with
-   | some (42, 0, [.nat f]) => [f]
-   | _ => []) ++ Bracket.fnFields c
-
-/-- The `Lib` of `parTraverseNOrder` with function fields (decision 56). -/
-def ptLibDeep : Lib := { ok := ptIsLib, fields := ptFields }
+-- `ptLibDeep` (with `ptFields`) is declared in `Props/Phase6/ParTraverse.lean` (track G).
 
 /-- The forging `f` of review batch 7: a user closure that captured `Deferred` 5. -/
 def forgingF : Nat := 2 * valToNat (.deferred 5)
@@ -162,6 +146,19 @@ example : WF.progOK ptLibDeep (fun _ => false) ptRoot = false := by decide +kern
 /-- An honest `f` (no captured handle) is still accepted. -/
 example : WF.progOK ptLibDeep (fun _ => false) (parTraverseNIO 1 [.nat 0] (TL.tag 14).id) = true := by
   decide +kernel
+
+/-- The same forging `f` hidden in a source code: `guaranteeCase` (`Bracket`) of the action source
+`srcAction f a` (the `Src.ext` field). Passes the shallow check, rejected by the deep one. -/
+def ptSrcForged : IO := Bracket.guaranteeCaseIO (.ext (srcAction forgingF (.nat 0))) 14
+
+example : WF.progOK (ptIsLib : Lib) (fun _ => false) ptSrcForged = true := by decide +kernel
+example : WF.progOK ptLibDeep (fun _ => false) ptSrcForged = false := by decide +kernel
+
+/-- The same in a `Race` source (`both`). -/
+def ptRaceForged : IO := Race.bothIO (srcAction forgingF (.nat 0)) (srcAction 14 (.nat 0))
+
+example : WF.progOK (ptIsLib : Lib) (fun _ => false) ptRaceForged = true := by decide +kernel
+example : WF.progOK ptLibDeep (fun _ => false) ptRaceForged = false := by decide +kernel
 
 end ParTraverseD
 

@@ -96,6 +96,17 @@ def TL.ofId? (id : Nat) : Option TL :=
     | _ => none
   else none
 
+/-- `Lib.fields` of the statements: the mirror's function fields (`ParTraverse.fnFields`) and the
+user function `f` of the harness closure `TL.tag f`. `TL.pairWith a` holds an input value (data). -/
+def ptFields (c : Val) : List Nat :=
+  ParTraverse.fnFields c ++
+  (match ofCloVal c with
+   | some (42, 0, [.nat f]) => [f]
+   | _ => [])
+
+/-- The `Lib` of the statements with function fields (decision 56; review batch 7, defect D). -/
+def ptLibDeep : Lib := { ok := ptIsLib, fields := ptFields }
+
 /-- User code `u` with the tagging closures. -/
 def tagged (u : UserEnv) : UserEnv where
   call id a refs := u.call id a refs
@@ -119,7 +130,7 @@ def fstOf : Val → Val
 def parTraverseNOrder : Prop :=
   ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat),
     1 ≤ n → f % 2 = 0 →
-    WellFormed ptIsLib [] (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) →
+    WellFormed ptLibDeep [] (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) →
     ∀ o, outcomesP {} counterMaskModel (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) o →
       ∀ v, o.summary = .done (.succeeded v) → (unlistV v).map (·.map fstOf) = some as
 
@@ -128,7 +139,7 @@ def parTraverseNPureSucceeds : Prop :=
   ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (g : Val → Val),
     1 ≤ n → f % 2 = 0 →
     (∀ a v, u.callV f a v = { out := .prog (.pure (g a)) }) →
-    WellFormed ptIsLib [] (env ord u) (parTraverseNIO n as f) →
+    WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) →
     ∀ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o →
       o.summary = .done (.succeeded (listV (as.map g)))
 
@@ -137,7 +148,7 @@ def parTraverseNErrorAborts : Prop :=
   ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val) (e : Err),
     1 ≤ n → f % 2 = 0 → a0 ∈ as.take n → e.kind = .nonFatal →
     (∀ a v, u.callV f a v = { out := .prog (if a = a0 then .error e else Timeout.neverIO) }) →
-    WellFormed ptIsLib [] (env ord u) (parTraverseNIO n as f) →
+    WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) →
     ∀ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o →
       o.summary = .done (.errored e)
 
@@ -146,7 +157,7 @@ def parTraverseNCancelAborts : Prop :=
   ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val),
     1 ≤ n → f % 2 = 0 → a0 ∈ as.take n →
     (∀ a v, u.callV f a v = { out := .prog (if a = a0 then .canceled else Timeout.neverIO) }) →
-    WellFormed ptIsLib [] (env ord u) (parTraverseNIO n as f) →
+    WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) →
     ∀ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o →
       o.summary = .done .canceled
 

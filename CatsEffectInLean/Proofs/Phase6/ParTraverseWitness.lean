@@ -57,7 +57,7 @@ theorem tagged_even (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
   have h : TL.ofId? id = none := by simp [TL.ofId?, isLibId, hid]
   simp [tagged, h, cu]
 
-theorem cR_ok (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK ptIsLib R v (cR n) := by
+theorem cR_ok (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK ptLibDeep R v (cR n) := by
   match n with
   | 0 | 1 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.sub, Val.handles]
   | _ + 2 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
@@ -77,8 +77,8 @@ theorem constOpaque (e : UserEnv) (he : ∀ id, id % 2 = 0 → ∀ a v, e.callV 
     subst hk; rfl
 
 theorem wfConst (e : UserEnv) (he : ∀ id, id % 2 = 0 → ∀ a v, e.callV id a v = cR (id / 2)) (p : IO)
-    (hp : WF.progOK ptIsLib (fun h => ([] : List Handle).contains h) p = true) :
-    WellFormed ptIsLib [] e p :=
+    (hp : WF.progOK ptLibDeep (fun h => ([] : List Handle).contains h) p = true) :
+    WellFormed ptLibDeep [] e p :=
   ⟨hp, fun id hid arg v => ⟨fun w _ => by rw [he id hid, he id hid], by rw [he id hid]; exact cR_ok _ _ _⟩,
     constOpaque e he⟩
 
@@ -100,7 +100,7 @@ theorem orderRun_ok : orderRun.map (fun o =>
 theorem parTraverseNOrder_satisfiable :
     ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat),
       (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧
-      WellFormed ptIsLib [] (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) ∧
+      WellFormed ptLibDeep [] (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) o ∧
         o.summary = .done (.succeeded (listV [.pair (.nat 1) (.nat 0), .pair (.nat 2) (.nat 0)])) := by
   obtain ⟨o, ho, hp⟩ := exists_of_map orderRun_ok
@@ -124,7 +124,7 @@ theorem parTraverseNPureSucceeds_satisfiable :
     ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (g : Val → Val),
       (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧
       (∀ a v, u.callV f a v = { out := .prog (.pure (g a)) }) ∧
-      WellFormed ptIsLib [] (env ord u) (parTraverseNIO n as f) ∧
+      WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o ∧
         o.summary = .done (.succeeded (listV (as.map g))) := by
   obtain ⟨o, ho, hp⟩ := exists_of_map pureRun_ok
@@ -150,12 +150,14 @@ theorem neverFn (σ : WF.PollRen) : WF.rnFn σ Timeout.TLam.neverBody.fn = Timeo
 /-- The id of the `IO.never` body closure. -/
 def neverId : Nat := 2 * valToNat Timeout.TLam.neverBody.toVal + 1
 
-theorem neverCaptured (mem : Handle → Bool) : WF.capOK (ptIsLib : Lib) mem neverId = true :=
-  WF.capOK_coe_of_nil _ _ _ (by decide +kernel)
+theorem neverCapD : WF.capturedD ptLibDeep WF.capDepth neverId = some [] := by decide +kernel
 
-theorem neverLib : ptIsLib neverId = true := by decide +kernel
+theorem neverCaptured (mem : Handle → Bool) : WF.capOK ptLibDeep mem neverId = true := by
+  simp [WF.capOK, neverCapD, WF.sub]
 
-theorem neverOK (mem : Handle → Bool) : WF.progOK ptIsLib mem Timeout.neverIO = true := by
+theorem neverLib : ptLibDeep.ok neverId = true := by decide +kernel
+
+theorem neverOK (mem : Handle → Bool) : WF.progOK ptLibDeep mem Timeout.neverIO = true := by
   have h : Timeout.neverIO = .ioCont (.user neverId) := rfl
   rw [h]
   simp [WF.progOK, WF.fnOK, neverCaptured, neverLib]
@@ -184,8 +186,8 @@ theorem aOpaque (x : IO) (hx : ∀ σ : WF.PollRen, WF.rnIO σ x = x) : WF.PollO
     simp [aR, h1, h1', WF.rnResult]
 
 theorem aCall (x : IO) (n : Nat) (R : Handle → Prop) (v : View) (a : Val)
-    (hx : WF.progOK ptIsLib (WF.memOf R) x = true) :
-    WF.ResultOK ptIsLib R v (aR x n a) := by
+    (hx : WF.progOK ptLibDeep (WF.memOf R) x = true) :
+    WF.ResultOK ptLibDeep R v (aR x n a) := by
   unfold aR
   split
   · split
@@ -193,10 +195,10 @@ theorem aCall (x : IO) (n : Nat) (R : Handle → Prop) (v : View) (a : Val)
     · simp only [WF.ResultOK, WF.EffectsOK, WF.OutOK]; exact neverOK _
   · simp [WF.ResultOK, WF.EffectsOK, WF.OutOK]
 
-theorem aWf (x : IO) (hx : ∀ R, WF.progOK ptIsLib (WF.memOf R) x = true)
+theorem aWf (x : IO) (hx : ∀ R, WF.progOK ptLibDeep (WF.memOf R) x = true)
     (hrn : ∀ σ : WF.PollRen, WF.rnIO σ x = x) (p : IO)
-    (hp : WF.progOK ptIsLib (fun h => ([] : List Handle).contains h) p = true) :
-    WellFormed ptIsLib [] (env idOrd (au x)) p := by
+    (hp : WF.progOK ptLibDeep (fun h => ([] : List Handle).contains h) p = true) :
+    WellFormed ptLibDeep [] (env idOrd (au x)) p := by
   refine ⟨hp, fun id hid arg v => ⟨fun w _ => ?_, ?_⟩, aOpaque x hrn⟩
   · rw [env_even _ _ _ hid, env_even _ _ _ hid]; rfl
   · rw [env_even _ _ _ hid]; exact aCall x id _ v arg (hx _)
@@ -211,7 +213,7 @@ theorem parTraverseNErrorAborts_satisfiable :
     ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val) (e : Err),
       (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧ a0 ∈ as.take n ∧ e.kind = .nonFatal ∧
       (∀ a v, u.callV f a v = { out := .prog (if a = a0 then .error e else Timeout.neverIO) }) ∧
-      WellFormed ptIsLib [] (env ord u) (parTraverseNIO n as f) ∧
+      WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o ∧
         o.summary = .done (.errored e) := by
   obtain ⟨o, ho, hp⟩ := exists_of_map errRun_ok
@@ -229,7 +231,7 @@ theorem parTraverseNCancelAborts_satisfiable :
     ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val),
       (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧ a0 ∈ as.take n ∧
       (∀ a v, u.callV f a v = { out := .prog (if a = a0 then .canceled else Timeout.neverIO) }) ∧
-      WellFormed ptIsLib [] (env ord u) (parTraverseNIO n as f) ∧
+      WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o ∧ o.summary = .done .canceled := by
   obtain ⟨o, ho, hp⟩ := exists_of_map canRun_ok
   refine ⟨idOrd, au .canceled, 2, [.nat 1, .nat 2], 2, .nat 1, idOrd_perm, by decide, rfl, by decide,
