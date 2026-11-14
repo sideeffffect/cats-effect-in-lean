@@ -1,7 +1,7 @@
 # Registry and audit
 
 > Sources: own work: `CatsEffectInLean/Registry.lean`, `tools/Audit/Core.lean`, `scripts/test_audit.sh`, Lean v4.35.0 (2026-11-10)
-> Raw: [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [Decision 55: heavy proofs](../../raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md); [Registry and audit notes](../../raw/project-decisions/2026-11-10-registry-audit-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
+> Raw: [Decision 57](../../raw/project-decisions/2026-11-14-decision-57-required-heavy-checks.md); [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [Decision 55: heavy proofs](../../raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md); [Registry and audit notes](../../raw/project-decisions/2026-11-10-registry-audit-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
 
 ## Overview
 
@@ -65,6 +65,8 @@ Proofs that take more than about 5 minutes are in lean_lib `HeavyProofs` (not a 
 - Gotcha: `leanchecker M` replays only the declarations of module `M`, not its imports (root of the law: 23 s; one chunk module: about 3 min). Replay each heavy module.
 - Review batch 7 (2026-11-14): the split keeps every check on every push, but has gaps: (1) the heavy modules build with plain `lake build`, outside the bwrap sandbox of `lake check`, so build-time code could change the audit tool or the inventory before `audit_heavy` runs; (2) the main audit passes with a deferred row, so `heavy-proofs` must be a required check (Q4); (3) `check_heavy_proofs.sh` hard-codes the module list and the `#print axioms` list (a new heavy module would not be replayed by `leanchecker`); (4) `paranoid-heavy.yml` exports only the root module, scope not verified. [Review](../../review/2026-11-14-review-batch-7.md).
 - Today: one heavy entry, `laws.GenSpawnLaws.uncancelableRaceNotInherited.IO` (49-chunk certificate check, [Certificate checks](../lean/certificate-checker.md)).
+
+Decision 57 (2026-11-14, user answer to Q4): `heavy-proofs` is a required check on `main`. The heavy work runs as parallel matrix jobs, and an aggregate job `heavy-proofs` is the stable required name. The paranoid replay is split by kernel. Source: [decision 57](../../raw/project-decisions/2026-11-14-decision-57-required-heavy-checks.md).
 
 ## Self-test
 
