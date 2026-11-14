@@ -1076,7 +1076,7 @@ core.IO.productL,core,method,core/shared/src/main/scala/cats/effect/IO.scala,900
 core.IO.productR,core,method,core/shared/src/main/scala/cats/effect/IO.scala,903,todo,,
 core.IO.start,core,method,core/shared/src/main/scala/cats/effect/IO.scala,929,todo,,
 core.IO.background,core,method,core/shared/src/main/scala/cats/effect/IO.scala,941,todo,,
-core.IO.memoize,core,method,core/shared/src/main/scala/cats/effect/IO.scala,944,todo,,
+core.IO.memoize,core,method,core/shared/src/main/scala/cats/effect/IO.scala,944,modelled,,core.IO.memoize.noStuckGet;core.IO.memoize.getsAgree;core.IO.memoize.atMostOnce
 core.IO.uncancelable,core,method,core/shared/src/main/scala/cats/effect/IO.scala,955,todo,,
 core.IO.void,core,method,core/shared/src/main/scala/cats/effect/IO.scala,961,todo,,
 core.IO.reportError,core,method,core/shared/src/main/scala/cats/effect/IO.scala,967,excluded,internal: private helper; modelled as part of its public caller,
@@ -1864,7 +1864,7 @@ kernel.Fiber.joinWithNever,kernel,method,kernel/shared/src/main/scala/cats/effec
 kernel.Fiber.joinWithUnit,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Fiber.scala,83,todo,,
 kernel.GenConcurrent.ref,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,29,todo,,
 kernel.GenConcurrent.deferred,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,31,todo,,
-kernel.GenConcurrent.memoize,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,43,todo,,
+kernel.GenConcurrent.memoize,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,43,modelled,,core.IO.memoize.noStuckGet;core.IO.memoize.getsAgree;core.IO.memoize.atMostOnce
 kernel.GenConcurrent.parReplicateAN,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,117,todo,,
 kernel.GenConcurrent.parSequenceN,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,123,todo,,
 kernel.GenConcurrent.parSequenceN_,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/GenConcurrent.scala,129,todo,,
@@ -2254,14 +2254,14 @@ kernel.RefSource.get,kernel,method,kernel/shared/src/main/scala/cats/effect/kern
 kernel.RefSource.catsFunctorForRefSource,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Ref.scala,500,todo,,
 kernel.RefSink.set,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Ref.scala,517,todo,,
 kernel.RefSink.catsContravariantForRefSink,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Ref.scala,521,todo,,
-kernel.Resource.fold,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,156,todo,,
-kernel.Resource.use,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,207,todo,,
+kernel.Resource.fold,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,156,modelled,,kernel.Resource.both.releaseOnce
+kernel.Resource.use,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,207,modelled,,kernel.Resource.both.releaseOnce
 kernel.Resource.useEval,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,215,todo,,
 kernel.Resource.useForever,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,224,todo,,
 kernel.Resource.use_,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,230,todo,,
 kernel.Resource.useKleisli,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,235,todo,,
 kernel.Resource.useKleisliK,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,243,todo,,
-kernel.Resource.both,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,286,todo,,
+kernel.Resource.both,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,286,modelled,,kernel.Resource.both.releaseOnce
 kernel.Resource.race,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,320,todo,,
 kernel.Resource.flatMap,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,388,todo,,
 kernel.Resource.map,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,396,todo,,
@@ -2271,7 +2271,7 @@ kernel.Resource.onFinalize,kernel,method,kernel/shared/src/main/scala/cats/effec
 kernel.Resource.onFinalizeCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,443,todo,,
 kernel.Resource.allocatedCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,464,modelled,,kernel.Resource.eval.preservesUncancelable
 kernel.Resource.allocated,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,550,todo,,
-kernel.Resource.evalMap,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,558,todo,,
+kernel.Resource.evalMap,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,558,modelled,,kernel.Resource.both.releaseOnce
 kernel.Resource.evalTap,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,565,todo,,
 kernel.Resource.surround,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,572,todo,,
 kernel.Resource.surroundK,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,579,todo,,
@@ -2293,7 +2293,7 @@ kernel.Resource.applyCase,kernel,method,kernel/shared/src/main/scala/cats/effect
 kernel.Resource.applyFull,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,879,todo,,
 kernel.Resource.suspend,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,885,todo,,
 kernel.Resource.make,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,900,todo,,
-kernel.Resource.makeCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,917,todo,,
+kernel.Resource.makeCase,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,917,modelled,,kernel.Resource.both.releaseOnce
 kernel.Resource.makeFull,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,942,todo,,
 kernel.Resource.makeCaseFull,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,967,todo,,
 kernel.Resource.pure,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,977,modelled,,kernel.Resource.eval.preservesUncancelable

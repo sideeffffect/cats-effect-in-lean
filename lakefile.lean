@@ -50,7 +50,9 @@ lean_lib TwinChecks where
     -- CE-0005 fixed-twin check and the track G smoke tests (Phase 6): several minutes each,
     -- so not in the default build (decision 45)
     `CatsEffectInLean.Proofs.Phase6.BracketFullFixed,
-    `CatsEffectInLean.Proofs.Phase6.BracketSmoke]
+    `CatsEffectInLean.Proofs.Phase6.BracketSmoke,
+    -- CE-0030 fixed-twin check (track M, Phase 6)
+    `CatsEffectInLean.Proofs.Phase6.MemoizeFixed]
 
 -- Leak smoke test of track R (Phase 6): exact bounded search (`exploreP`) of `race`, `both`,
 -- `raceOutcome`, `bothOutcome` and `timeout` over a small family of sides, with the leak

@@ -133,6 +133,29 @@ New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decod
 - Failure text of `UserError(999998)`: track G first changed the Scala text; track D fixed it on the Lean side instead (`userErr 999998 ≠ timeoutErr`). After the merge only D's fix is kept (Scala `Runner.scala` unchanged).
 - See [guarantee and bracket model](../cats-effect/bracket-model.md).
 
+### Format v2 ops of track M (same version, same `checkNoV2` gate)
+
+| op | fields | term |
+|----|--------|------|
+| `memoize` | `e` | `I(e).memoize.map(get => memo(handle get))` (`IO.scala:944-945`) |
+| `memoGet` | `m`: atom | the `get` of memo handle `⟦m⟧` (the `IO[Val]` itself) |
+
+- Value `{"t":"memo","id":n}` (output only; handles count `memoize` calls). A literal is a decode error.
+- Lean side: `Memoize.memoizeIO src` (`Model/Memoize.lean`) plus the `Map` of the handle; `src` is a `memoSrc` code (snapshot, `Env.srcIO` rebuilds `I(e)`); the handle value is the `get` code (`Memoize.Eff.get`). `memoGet` translates the code back (`Memoize.getOfVal?`).
+- The mirror makes model `Deferred` and `Ref` cells. So the glue renumbers `Deferred` handles too (internal event `deferredH`, emitted where Scala calls `h.newDeferred`), and memo handles (`memoH`).
+- `Prog.eagerReads`: `memoize` builds `e` at once.
+- Fixed cases `cases/memoize.jsonl` (`cases/gen_memo.py`). Generator: `tpl_memo` and `memoGet` (gen.py docstring). See [memoize model](../cats-effect/memoize-model.md).
+
+### Format v2 ops of track Res (same version, same `checkNoV2` gate)
+| op | fields | term |
+|----|--------|------|
+| `rUse` | `res`, `x`, `k` | `I_R(res).use(x => I(k))` |
+| `rAllocated` | `res`, `x`, `k` | `I_R(res).allocated.flatMap { case (x, rel) => I(k).flatMap(b => rel.as(b)) }` |
+| `rBoth` (resource position) | `a`, `b` | `I_R(a).both(I_R(b)).map { case (x, y) => pair(x, y) }` |
+- Lean side: `Model/ResourceUse.lean` (`foldLoop`, `allocatedIO`, `bothRes`); `renvF` wraps each level with `UEnv.rx`; `uenvOf p`; resource codes `ruRes`, `rbA`, `rbB` (`UEnv.resOf`); `srcIO` and `bracketSrcIO` rebuild `USrc` codes with `ResourceUse.srcU`.
+- `Prog.eagerReads`: `rUse`/`rAllocated` build `res` at once; `rBoth` builds both sides.
+- Fixed cases `cases/resuse.jsonl` (`cases/gen_res.py`). Generator: `rUse`, `rAllocated`, `res_both`, `tpl_resBoth` (a `both` whose one release raises: CE-0020). See [Resource use, allocated, both](../cats-effect/resource-use-both-model.md).
+
 ## User function table
 
 `call(fn, v)` first emits `{"ev":"call","fn":fn,"arg":v}`, then applies the function. Lean must implement the same table.
@@ -222,7 +245,7 @@ Code: `tools/Difftest/` (`lean_lib Difftest`, `lean_exe cediff`). It is test cod
 
 ## Limits of v0 and v1
 
-- No `IO.blocking`, `evalOn`, `memoize`. Of `Resource` only `allocatedCase` over `pure`/`eval`/`make`/`flatMap` (no `use`, `allocated`, `map`); of `std` only `Queue.unbounded` (`offer`, `take`, `tryTake`).
+- No `IO.blocking`, `evalOn` (`memoize` since format v2, track M). Of `Resource` only `allocatedCase` over `pure`/`eval`/`make`/`flatMap` (no `use`, `allocated`, `map`); of `std` only `Queue.unbounded` (`offer`, `take`, `tryTake`).
 - `syncStep` only at the root, and only `G = SyncIO` with `unsafeRunSync` (not `to[IO]`).
 - No recursion or loops in the language; programs are finite trees.
 - Replay labels only the root and handled fibers by handle. CE-internal fibers (none in v0 ops except the `racePair` pair) get plain `f<k>` labels.

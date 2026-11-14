@@ -1,0 +1,102 @@
+id: CE-0020
+title: "Resource#both: an error in the finalizers of one side can cancel the finalizers of the other side; that resource is never released"
+status: draft  # found in Phase 6 track Res (2026-11-10); Lean refutation done, waits for review
+priority: medium
+kind: invariant-violation
+area: kernel
+files:
+  - kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:302   # makeCase release: F.void(F.both(thisFin(ec), thatFin(ec)))
+  - kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:295   # stored finalizer: ec => F.unit >> fin(ec).guarantee(release(ec))
+  - kernel/shared/src/main/scala/cats/effect/kernel/GenSpawn.scala:476   # both: on Errored(e) of one side, f.cancel *> raiseError(e)
+  - kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala:1473  # ResourceConcurrent.both -> fa.both(fb) (Parallel[Resource], parMapN, parTupled)
+functions:
+  - Resource#both
+  - Resource.both
+  - Concurrent[Resource[F, *]].both, Parallel[Resource[F, *]] (parMapN, parTupled, parZip)
+summary: >
+  Resource#both stores the finalizers of each side in a Ref and runs the two chains in the
+  release of `makeCase` with `F.both(thisFin(ec), thatFin(ec))`. `F.both` runs each chain in a
+  child fiber of `racePair`. When one chain ends with an error (a release that raises),
+  `F.both` cancels the other child (GenSpawn#both: `f.cancel *> raiseError(e)`). A child fiber
+  is not masked. If the other child has not started yet, or has not yet entered the first
+  `guarantee` of its chain (`F.unit >> fin(ec).guarantee(release(ec))`), the cancel stops it,
+  and the releases of that side never run. The resources of that side are leaked. The use of
+  the resource and the error are otherwise normal: the outer `use` ends with the error.
+likelihood: >
+  Medium. It needs (1) a release that raises an error on one side of `both` / `parMapN` /
+  `parTupled` on Resource, and (2) a schedule where the parent fiber runs the cancel before the
+  other finalizer fiber starts. On the default runtime this happens in about 1.5-1.8 % of runs
+  of the minimal program (306 to 360 of 20,000 runs); under TestControl in 332 of 1,000 seeds.
+  Releases that raise are common (close() of a socket or a file). The visible effect is a
+  resource that is never released, with no error for it.
+maybe_intended: >
+  Unlikely. The Scaladoc of `both` (Resource.scala:248-257) says that the finalizers of the two
+  resources run concurrently and that each resource's nested finalizers run in reverse order;
+  nothing says that an error in one finalizer may skip the other resource's finalizers. The
+  sequential `Resource#flatMap` releases all resources when a release raises (nested
+  bracketFull). PR #1689 (parallel finalization in Concurrent[Resource]#both) introduced
+  `F.both` for the finalizers; its discussion does not mention errors.
+reproducer: reproducers/CE-0020/Repro.scala
+output:
+  v3.7.1: |
+    1. Resource#both, TestControl seeds 0..999: release of B skipped in 332 seeds (first: Some(0))
+    2. parTupled (Parallel[Resource]), same seeds: release of B skipped in 332 seeds (first: Some(0))
+    3. Resource#both, default runtime, 20000 runs: release of B skipped in 360 runs
+    4. fixed twin (attempt both chains), same seeds: release of B skipped in 0 seeds (first: None)
+    REPRODUCED CE-0020
+  # series/3.x = 3.7.1-89-de84c01 (publishLocal; origin/series/3.x head de84c01f76 on 2026-11-10)
+  series/3.x: |
+    1. Resource#both, TestControl seeds 0..999: release of B skipped in 332 seeds (first: Some(0))
+    2. parTupled (Parallel[Resource]), same seeds: release of B skipped in 332 seeds (first: Some(0))
+    3. Resource#both, default runtime, 20000 runs: release of B skipped in 306 runs
+    4. fixed twin (attempt both chains), same seeds: release of B skipped in 0 seeds (first: None)
+    REPRODUCED CE-0020
+  # series/3.7.x = 3.7.1-15-2f94201 (publishLocal; origin/series/3.7.x head 2f9420145f, includes fix PR #4630)
+  series/3.7.x: |
+    1. Resource#both, TestControl seeds 0..999: release of B skipped in 332 seeds (first: Some(0))
+    2. parTupled (Parallel[Resource]), same seeds: release of B skipped in 332 seeds (first: Some(0))
+    3. Resource#both, default runtime, 20000 runs: release of B skipped in 360 runs
+    4. fixed twin (attempt both chains), same seeds: release of B skipped in 0 seeds (first: None)
+    REPRODUCED CE-0020
+  # The default-runtime count (line 3) depends on thread timing; it is not deterministic.
+expected: |
+  The release of B runs in every run (lines 1-3 report 0), as in the fixed twin (line 4). The
+  outer `use` still ends with the error of A's release. The last line is NOT REPRODUCED CE-0020.
+promised_by:
+  - "Scaladoc of Resource#both (Resource.scala:248-257): 'The finalizers for the two resources are also run concurrently with each other, but within each of the two resources, nested finalizers are run in the usual reverse order of acquisition.'"
+  - "Undisputed invariant (AGENTS.md section 3b): each acquired resource is released exactly once, for every outcome. Resource#flatMap (nested bracketFull) keeps it when a release raises."
+cause: >
+  Resource.scala:302-305 runs the two finalizer chains with `F.both`. GenSpawn#both cancels the
+  other fiber when one side ends with Errored (GenSpawn.scala:476-498). The finalizer chain of a
+  side is not masked at its start (`F.unit >> fin(ec).guarantee(release(ec))`, Resource.scala:295),
+  and a fiber that is canceled before it starts runs nothing (IOFiber execR). So the cancel can
+  skip all releases of that side.
+possible_fix: >
+  Do not cancel the other chain on error: for example
+  `F.both(thisFin(ec).attempt, thatFin(ec).attempt).flatMap { case (x, y) => F.fromEither(x) *> F.fromEither(y) }`
+  (or `F.bothOutcome` and re-raise). The Lean fixed twin (`ResourceUse.fixedBothRes`) and the
+  reproducer (`FixedBoth.both`) show no skipped release on the witness schedule, on 600
+  single-deviation schedules and 1,500 random schedules (test/Phase6/ResourceSmoke.lean), and
+  on 1,000 TestControl seeds. Which error to raise when both chains fail is a design choice
+  (the current code raises the first one).
+duplicates:
+  upstream: []
+  related:
+    - "typelevel/cats-effect#1689 (merged PR, 2021) parallel finalization in Concurrent[Resource]#both: introduced F.both for the finalizers"
+    - "typelevel/cats-effect#3307 (merged PR, 2022) Fix propagation of ExitCase in Resource#{both,combineK}: ExitCase only, not this defect"
+    - "typelevel/cats-effect#2084 (merged PR) Small, mostly cosmetics changes to Resource.both"
+  queries:
+    - "gh search issues 'Resource both finalizer' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'Resource both' -R typelevel/cats-effect (2026-11-10): #1576, #1652, #1645; none is this defect"
+    - "gh search issues 'parZip finalizer' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'finalizer error both' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'Resource parMapN release' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'Resource release leak concurrent' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search issues 'finalizer not run' -R typelevel/cats-effect (2026-11-10): no result"
+    - "gh search prs 'Resource both' -R typelevel/cats-effect (2026-11-10): #3307, #3227, #3226, #2084, #1689 and others; none handles an error of one finalizer chain"
+    - "gh pr view 1689 --comments: no mention of errors or cancel in the finalizers"
+lean:
+  property: CatsEffectInLean.Props.Phase6.Resource.bothReleasesBoth
+  theorem: CatsEffectInLean.Proofs.Phase6.bothReleasesBoth_refuted
+  fixed_twin: "test/Phase6/ResourceSmoke.lean (#guard, schedule family + random schedules; the fixed twin is ResourceUse.fixedBothRes)"
+  ordinary_inputs: "The witness is ordinary: two Resource.make, a release that raises, use_ (no exotic input)."

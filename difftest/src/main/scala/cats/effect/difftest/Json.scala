@@ -55,7 +55,7 @@ object Json:
       case "succeeded" => only("v"); Val.VSucceeded(decodeVal(field(o, "v", t)))
       case "errored" => only("code"); Val.VErrored(Err.User(nat(field(o, "code", t), "errored.code")))
       case "canceled" => only(); Val.VCanceled
-      case "fiber" | "ref" | "deferred" | "queue" => fail(s"value '$t': handles cannot be literals")
+      case "fiber" | "ref" | "deferred" | "queue" | "memo" => fail(s"value '$t': handles cannot be literals")
       case _ => fail(s"unknown value tag '$t'")
 
   def encodeErr(e: Err): ujson.Obj = e match
@@ -76,6 +76,7 @@ object Json:
     case Val.VRef(i) => ujson.Obj("t" -> "ref", "id" -> i)
     case Val.VDeferred(i) => ujson.Obj("t" -> "deferred", "id" -> i)
     case Val.VQueue(i) => ujson.Obj("t" -> "queue", "id" -> i)
+    case Val.VMemo(i) => ujson.Obj("t" -> "memo", "id" -> i)
 
   // --------------------------------------------------------------- programs
 
@@ -98,11 +99,11 @@ object Json:
   val V1Ops: Set[String] =
     Set("syncStep", "timeout", "timeoutTo", "queueNew", "queueOffer", "queueTake", "queueTryTake",
       "allocatedCase", "rPure", "rEval", "rMake", "rFlatMap")
-  private val ResOps = Set("rPure", "rEval", "rMake", "rFlatMap")
+  private val ResOps = Set("rPure", "rEval", "rMake", "rFlatMap", "rBoth")
 
   /** Ops of format v2 (a decode error in a v0 or v1 case). */
   val V2Ops: Set[String] = Set("race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket", "bracketCase",
-    "bracketFull")
+    "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth")
 
   /** Reject a v2 op anywhere in `j` (a case of format v0 or v1). */
   private def checkNoV2(j: Value): Unit = j match
@@ -150,7 +151,8 @@ object Json:
       case "rFlatMap" =>
         only("res", "x", "k"); val x = s("x")
         Res.RFlatMap(res(field(o, "res", ctx), scope, v1), x, res(field(o, "k", ctx), scope + (x -> Kind.V), v1))
-      case _ => fail(s"$ctx: not a resource op (expected rPure, rEval, rMake or rFlatMap)")
+      case "rBoth" => only("a", "b"); Res.RBoth(res(field(o, "a", ctx), scope, v1), res(field(o, "b", ctx), scope, v1))
+      case _ => fail(s"$ctx: not a resource op (expected rPure, rEval, rMake, rFlatMap or rBoth)")
 
   private def prog(j: Value, scope: Scope, v1: Long): Prog =
     val (o, op) = opOf(j, v1)
@@ -246,6 +248,15 @@ object Json:
         only("poll", "acq", "x", "use", "y", "rel", "tag"); val q = s("poll"); val x = s("x"); val y = s("y")
         Prog.BracketFull(q, p("acq", scope + (q -> Kind.P)), x, p("use", scope + (x -> Kind.V)), y,
           p("rel", scope + (x -> Kind.V) + (y -> Kind.V)), tag)
+      // ---- format v2 (track M)
+      case "memoize" => only("e"); Prog.Memoize(p("e"))
+      case "memoGet" => only("m"); Prog.MemoGet(a("m"))
+      case "rUse" =>
+        only("res", "x", "k"); val x = s("x")
+        Prog.RUse(res(field(o, "res", ctx), scope, v1), x, p("k", scope + (x -> Kind.V)))
+      case "rAllocated" =>
+        only("res", "x", "k"); val x = s("x")
+        Prog.RAllocated(res(field(o, "res", ctx), scope, v1), x, p("k", scope + (x -> Kind.V)))
       case "syncStep" => fail(s"$ctx: only at the root of a program")
       case r if ResOps.contains(r) => fail(s"$ctx: a resource op outside a resource position")
       case _ => fail(s"unknown op '$op'")

@@ -23,6 +23,11 @@ Design notes: wiki/methodology/differential-testing.md ("Generator").
   type fits, and `tpl_comb` (any type: bind the result of a combinator, often with a sleeping,
   never-ending or masked side) and `tpl_combCancel` (decision 50: a parent starts the combinator and
   cancels it).
+- Format v2 (decision 51, track M): `memoize` and `memoGet` only through `tpl_memo` (a memo handle
+  of type `('memo', A)` is bound and used by `memoGet`, never printed): sequential `get`s, two
+  `get` fibers, a parent that cancels one `get` fiber, or cancels all and runs `get` again; `fa`
+  often waits (`cede`, `sleep`) or cancels itself (the CE-0030 shape). `memoGet` is also a
+  production of type A wherever a memo of type A is in scope.
 
 Usage:
   gen.py --seed 1 --n 1000 [--max-size 40] [--mode replay|testcontrol] [--out FILE]
@@ -54,6 +59,7 @@ def fiber(a): return ('fiber', a)
 def ref(a): return ('ref', a)
 def deferred(a): return ('deferred', a)
 def queue(a): return ('queue', a)
+def memo(a): return ('memo', a)
 
 
 def race_type(a, b):
@@ -93,6 +99,11 @@ WEIGHTS = {
     'race': 2.5, 'raceOutcome': 2.5, 'both': 2.5, 'bothOutcome': 2.5, 'tpl_comb': 5, 'tpl_combCancel': 2.5,
     # format v2 (track G)
     'guarantee': 1.0, 'bracket': 0.8, 'bracketCase': 0.8, 'bracketFull': 0.8, 'tpl_bracket': 1.0,
+    # format v2 (track M)
+    # tpl_memo 0.4: with 1.0 (or 0.5) a static share in selftest.py fell below its minimum (N = 400 is noisy)
+    'tpl_memo': 0.4, 'memoGet': 4,
+    # format v2 (track Res)
+    'rUse': 0.5, 'rAllocated': 0.4, 'res_both': 2.0, 'tpl_resBoth': 0.5,
 }
 
 # Other knobs (probabilities and ranges).
@@ -325,6 +336,9 @@ class Gen:
         if t[0] == 'queue':
             opts.append((w['queueNew'], lambda: {'op': 'queueNew'}))
         opts += self.queue_opts(t, env)
+        ms = self.vars_of(env, lambda u: u == memo(t))
+        if ms:
+            opts.append((w['memoGet'] * hb, lambda: {'op': 'memoGet', 'm': {'t': 'var', 'x': self.r.choice(ms)}}))
         rg = self.vars_of(env, lambda u: u == ref(t))
         if rg:
             opts.append((w['refGet'] * hb, lambda: {'op': 'refGet', 'r': {'t': 'var', 'x': self.r.choice(rg)}}))
@@ -538,6 +552,19 @@ class Gen:
         if self.res_ok(t):
             opts.append((w['allocatedCase'], lambda: {'op': 'allocatedCase', 'res': self.g_res(t, env, size - 1, cc)}))
 
+        # ---- format v2 (track Res): `use`, `allocated` of a resource tree; `both` in g_res
+        if size >= 2:
+            def g_ruse(op):
+                s = self.small_type()
+                sr, sk = self.split_size(size, 2)
+                x = self.fresh('x', env)
+                return {'op': op, 'res': self.g_res(s, env, sr, cc), 'x': x,
+                        'k': self.prog(t, {**env, x: ('val', s)}, sk, cc)}
+            opts.append((w['rUse'], lambda: g_ruse('rUse')))
+            opts.append((w['rAllocated'], lambda: g_ruse('rAllocated')))
+        if size >= 5:
+            opts.append((w['tpl_resBoth'], lambda: self.tpl_res_both(t, env, size, cc)))
+
         # ---- format v2 (track R): type-directed combinators
         if size >= 3 and t[0] in ('either', 'pair'):
             kind = 'race' if t[0] == 'either' else 'both'
@@ -566,6 +593,8 @@ class Gen:
             opts.append((w['tpl_combCancel'], lambda: self.tpl_comb_cancel(t, env, size, ctx)))
         if size >= 4 and self.res_ok(t):
             opts.append((w['tpl_resource'], lambda: self.tpl_resource(t, env, size, cc)))
+        if size >= 4:
+            opts.append((w['tpl_memo'], lambda: self.tpl_memo(t, env, size, ctx)))
         return opts
 
     # ------------------------------------------------------- format v2
@@ -620,6 +649,61 @@ class Gen:
         else:
             ps.append(k)
         return {'op': 'bind', 'x': f, 'e': {'op': 'start', 'e': child}, 'k': {'op': 'seq', 'ps': ps}}
+
+    # ------------------------------------------------------- format v2 (track M)
+
+    def memo_source(self, a, env, size, ctx):
+        """`fa` of a memoize: often a marker first (the trace shows each evaluation), then a wait
+        (cede, sleep) so other `get`s subscribe, sometimes a self-cancel (CE-0030) or an error."""
+        self.rids += 1
+        ps = [{'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_000_000 + self.rids}}] if self.r.random() < 0.8 else []
+        x = self.r.random()
+        if x < 0.35:
+            ps.append(self.pick([(3, {'op': 'cede'}), (2, {'op': 'sleep', 'ms': self.pick([(1, 0), (2, 1), (2, 10), (1, 100)])})]))
+        elif x < 0.5:
+            ps.append({'op': 'canceled'})
+        elif x < 0.6:
+            ps.append({'op': 'raise', 'code': self.code()})
+        ps.append(self.prog(a, env, max(1, size), ctx))
+        return ps[0] if len(ps) == 1 else {'op': 'seq', 'ps': ps}
+
+    def tpl_memo(self, t, env, size, ctx):
+        """bind m = memoize(fa) in one of: sequential gets; two get fibers joined; a parent that
+        cancels one of two get fibers; a parent that cancels the only get fiber and runs get again."""
+        a = self.small_type()
+        sf, sk = self.split_size(size, 2)
+        m = self.fresh('m')
+        mv = {'t': 'var', 'x': m}
+        get = {'op': 'memoGet', 'm': mv}
+        env2 = {**env, m: ('val', memo(a))}
+        fa = self.memo_source(a, env, max(1, sf), ctx)
+        shape = self.pick([(2, 'seq'), (3, 'two'), (2, 'cancelOne'), (2, 'rerun')])
+        k = self.prog(t, env2, max(1, sk), ctx)
+        cedes = lambda: [{'op': 'cede'} for _ in range(self.pick([(2, 0), (2, 1), (1, 2), (1, 4)]))]
+        if shape == 'seq':
+            body = {'op': 'seq', 'ps': [get for _ in range(self.pick([(2, 1), (2, 2), (1, 3)]))] + [k]}
+        else:
+            f1, f2 = self.fresh('x'), self.fresh('x')
+            v1, v2 = {'t': 'var', 'x': f1}, {'t': 'var', 'x': f2}
+            env3 = {**env2, f1: ('val', fiber(a)), f2: ('val', fiber(a))}
+            k3 = self.prog(t, env3, max(1, sk), ctx)
+            if shape == 'two':
+                inner = {'op': 'seq', 'ps': cedes() + [self.join_marked(v1, a, self.join_marked(v2, a, k3, env3), env3)]}
+                body = {'op': 'bind', 'x': f1, 'e': {'op': 'start', 'e': get},
+                        'k': {'op': 'bind', 'x': f2, 'e': {'op': 'start', 'e': get}, 'k': inner}}
+            elif shape == 'cancelOne':
+                inner = {'op': 'seq', 'ps': cedes() + [{'op': 'cancel', 'f': v1}, self.join_marked(v2, a, k3, env3)]}
+                body = {'op': 'bind', 'x': f1, 'e': {'op': 'start', 'e': get},
+                        'k': {'op': 'bind', 'x': f2, 'e': {'op': 'start', 'e': get}, 'k': inner}}
+            else:
+                env4 = {**env2, f1: ('val', fiber(a))}
+                k4 = self.prog(t, env4, max(1, sk), ctx)
+                o = self.fresh('x')
+                after = {'op': 'bind', 'x': o, 'e': get,
+                         'k': {'op': 'seq', 'ps': [{'op': 'delay', 'fn': 1, 'arg': {'t': 'var', 'x': o}}, k4]}}
+                body = {'op': 'bind', 'x': f1, 'e': {'op': 'start', 'e': get},
+                        'k': {'op': 'seq', 'ps': cedes() + [{'op': 'cancel', 'f': v1}, after]}}
+        return {'op': 'bind', 'x': m, 'e': {'op': 'memoize', 'e': fa}, 'k': body}
 
     # ------------------------------------------------------- format v1
 
@@ -677,6 +761,12 @@ class Gen:
                 first = self.res_make(s, env, sa, ctx) if self.r.random() < 0.5 else self.g_res(s, env, sa, ctx)
                 return {'op': 'rFlatMap', 'res': first, 'x': x, 'k': k}
             opts.append((w['res_flatMap'], g_flat))
+        if size >= 3 and t[0] == 'pair':
+            # format v2 (track Res): `rBoth(a, b)` of value type pair(a, b)
+            def g_both():
+                sa, sb = self.split_size(size, 2)
+                return {'op': 'rBoth', 'a': self.g_res(t[1], env, sa, ctx), 'b': self.g_res(t[2], env, sb, ctx)}
+            opts.append((w['res_both'], g_both))
         return self.pick(opts)()
 
     def res_make(self, t, env, size, ctx):
@@ -701,6 +791,21 @@ class Gen:
                           (1, {'op': 'sleep', 'ms': 1}), (1, {'op': 'never'})])
         rest = {'op': 'rEval', 'e': {'op': 'seq', 'ps': [stop, self.prog(t, kenv, max(1, sk - 2), ctx)]}}
         return {'op': 'allocatedCase', 'res': {'op': 'rFlatMap', 'res': self.res_make(s, renv, sm, ctx), 'x': y, 'k': rest}}
+
+    def tpl_res_both(self, t, env, size, ctx):
+        """rUse(rBoth(rMake(..), rMake(..)), x, k) (format v2, track Res). The release of one side
+        often raises an error (the shape of CE-0020: the other side's release can be canceled)."""
+        renv = self.res_env(env)
+        a, b = self.small_type(), self.small_type()
+        sa, sb, sk = self.split_size(size - 1, 3)
+        ra, rb = self.res_make(a, renv, sa, ctx), self.res_make(b, renv, sb, ctx)
+        if self.r.random() < 0.5:
+            ra['rel'] = {'op': 'seq', 'ps': [ra['rel'], {'op': 'raise', 'code': self.code()}]}
+        if self.r.random() < 0.3:
+            a, b, ra, rb = b, a, rb, ra
+        x = self.fresh('x', env)
+        k = self.prog(t, {**env, x: ('val', pair(a, b))}, sk, ctx)
+        return {'op': 'rUse', 'res': {'op': 'rBoth', 'a': ra, 'b': rb}, 'x': x, 'k': k}
 
     def tpl_queue(self, t, env, size, ctx):
         """bind q = queueNew in a producer/consumer scenario: consumers `take` (often with

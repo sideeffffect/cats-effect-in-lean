@@ -58,5 +58,13 @@ import CatsEffectInLean.Model.BracketExamples
 import CatsEffectInLean.Props.Phase6.Bracket
 import CatsEffectInLean.Proofs.Phase6.BracketFullTwin
 import CatsEffectInLean.Proofs.Lemmas.Frame
+import CatsEffectInLean.Model.Memoize
+import CatsEffectInLean.Props.Phase6.Memoize
+import CatsEffectInLean.Proofs.Phase6.MemoizeStuck
+import CatsEffectInLean.Model.ResourceUse
+import CatsEffectInLean.Model.ResourceUseExamples
+import CatsEffectInLean.Props.Phase6.Resource
+import CatsEffectInLean.Proofs.Phase6.ResourceBoth
+import CatsEffectInLean.Proofs.Phase6.RaceWitness
 import CatsEffectInLean.Proofs.Lemmas.CertP
 import CatsEffectInLean.RegistryHeavy
