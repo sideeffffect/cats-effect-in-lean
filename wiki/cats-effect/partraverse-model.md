@@ -36,7 +36,7 @@ Smoke: 11,200 stopped runs, 0 violations; reversed result, dropped result and "n
 
 ## Difftest
 
-Op `parTraverseN` (format v2). Fixed cases `partraverse.jsonl` (74). Generated cases: see the raw note and the batch report (per-op counts with the `runtime` field).
+Op `parTraverseN` (format v2). Fixed cases `partraverse.jsonl` (74, all agree). Generated cases (`difftest/py/opcount.py --seeds 31 32 33 34 --n 50000 --ops parTraverseN --boost tpl_parTraverse=6 tpl_parTraverseCancel=6`, about 25 % of cases with small `runtime` thresholds): 200,000 cases, all agree; 56,654 use `parTraverseN` (14,071 to 14,235 per seed).
 
 ## See Also
 
