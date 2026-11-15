@@ -178,6 +178,19 @@ inductive Prog where
   -- format v2 (batch 6.3)
   /-- `IO.parTraverseN(n)(xs)(x => I(f)).map(list)`; `f` binds `x`. -/
   | parTraverseN (n : Nat) (xs : List Atom) (f : Prog)
+  -- format v2 (Phase 7, track Q): the `Queue` factories of both families and their ops
+  /-- `Queue.<kind>[IO, Val](cap).map(q => VQueue(h.newQueue(q)))`; `kind` = `qKinds` index. -/
+  | qNew (kind : Nat) (cap : Nat)
+  /-- `queueOf(q).offer(v).as(VUnit)`. -/
+  | qOffer (q v : Atom)
+  /-- `queueOf(q).tryOffer(v).map(VBool(_))`. -/
+  | qTryOffer (q v : Atom)
+  /-- `queueOf(q).take`. -/
+  | qTake (q : Atom)
+  /-- `queueOf(q).tryTake.map { case Some(v) => VRight(v); case None => VLeft(VUnit) }`. -/
+  | qTryTake (q : Atom)
+  /-- `queueOf(q).size.map(n => VNat(n))`. -/
+  | qSize (q : Atom)
   -- format v2 (Phase 7, track S): `std.Semaphore` and `std.Mutex`
   /-- `Semaphore[IO](n).map(s => VSem(h.newSem(s)))`. -/
   | semNew (n : Nat)
@@ -256,6 +269,8 @@ def Prog.opName : Prog → String
   | .memoize .. => "memoize" | .memoGet .. => "memoGet"
   | .rUse .. => "rUse" | .rAllocated .. => "rAllocated" | .rBoth .. => "rBoth"
   | .parTraverseN .. => "parTraverseN"
+  | .qNew .. => "qNew" | .qOffer .. => "qOffer" | .qTryOffer .. => "qTryOffer" | .qTake .. => "qTake"
+  | .qTryTake .. => "qTryTake" | .qSize .. => "qSize"
   | .semNew .. => "semNew" | .semAcquireN .. => "semAcquireN" | .semReleaseN .. => "semReleaseN"
   | .semTryAcquireN .. => "semTryAcquireN" | .semAvailable .. => "semAvailable"
   | .semCount .. => "semCount" | .semPermit .. => "semPermit" | .mutexNew => "mutexNew"
@@ -359,10 +374,15 @@ def v1Ops : List String :=
 /-- Ops of format v2 (`Json.V2Ops`): a decode error in a v0 or v1 case. -/
 def v2Ops : List String := ["race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket",
   "bracketCase", "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth",
-  "parTraverseN",
+  "parTraverseN", "qNew", "qOffer", "qTryOffer", "qTake", "qTryTake", "qSize",
   -- Phase 7, track S
   "semNew", "semAcquireN", "semReleaseN", "semTryAcquireN", "semAvailable", "semCount",
   "semPermit", "mutexNew", "mutexLock"]
+/-- The queue kinds of `qNew` (format v2, track Q), by index: the public factories, then the
+`Concurrent` factories that `IO` reaches only through `bounded(1)`, `bounded(n >= 65534)`,
+`dropping(1)` (`Queue.scala:93-110`). -/
+def qKinds : List String := ["bounded", "dropping", "circularBuffer", "synchronous", "unbounded",
+  "boundedConc", "unboundedConc", "droppingConc"]
 /-- The resource ops. -/
 def resOps : List String := ["rPure", "rEval", "rMake", "rFlatMap", "rBoth"]
 /-- `Json.DefaultMaxSteps` in `Json.scala`. -/
@@ -505,7 +525,25 @@ partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .i
     if i ≥ userFnCount then fail s!"{ctx}.{k}: unknown user function {i}" else pure i
   -- format v2 (batch 6.3): handled before the big `match` (adding an alternative there made the
   -- pattern-match compiler fail on the string literals)
-  if op == "parTraverseN" then do
+  -- format v2 (Phase 7, track Q): the queue ops, also before the big `match`
+  if op == "qNew" then do
+    only ["kind", "cap"]
+    let k ← s "kind"
+    let cap ← n "cap"
+    match qKinds.idxOf? k with
+    | some i =>
+      -- `capacity` is an `Int`; `dropping`/`circularBuffer` throw for `capacity <= 0` before an `IO`
+      -- exists (`Queue.scala:236-240`), so the format allows only `1..2^31-1` there
+      if cap > maxLimit then fail s!"{ctx}.cap: at most {maxLimit}"
+      else if (i == 1 || i == 2 || i == 5 || i == 7) && cap == 0 then fail s!"{ctx}.cap: {k} needs cap >= 1"
+      else pure (.qNew i cap)
+    | none => fail s!"{ctx}.kind: unknown queue kind '{k}'"
+  else if op == "qOffer" then do only ["q", "v"]; pure (.qOffer (← a "q") (← a "v"))
+  else if op == "qTryOffer" then do only ["q", "v"]; pure (.qTryOffer (← a "q") (← a "v"))
+  else if op == "qTake" then do only ["q"]; .qTake <$> a "q"
+  else if op == "qTryTake" then do only ["q"]; .qTryTake <$> a "q"
+  else if op == "qSize" then do only ["q"]; .qSize <$> a "q"
+  else if op == "parTraverseN" then do
     only ["n", "xs", "x", "f"]; let x ← s "x"
     let k ← n "n"
     if k < 1 || k > 1000 then fail s!"{ctx}.n: expected 1..1000, got {k}"

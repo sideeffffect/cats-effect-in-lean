@@ -51,6 +51,7 @@ No existing model file changed. Library code is written over the public API, so 
 
 ## See Also
 
+- [Queue families model (Phase 7)](queue-families-model.md): the `Concurrent` and `Async` families as twins (this v1 mirror stays for CE-0003)
 - [race, both and fiber leaks](race-both-model.md) (`timeout` no-leak statement)
 
 - [Bug history](bug-history.md)

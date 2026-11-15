@@ -281,12 +281,15 @@ def valJson (hOf : Ren) : Val → Json
     | some q => Json.mkObj [("t", "queue"), ("id", toJson q)]
     | none => Json.mkObj [("t", "ref"), ("id", toJson (hOf.refOf.getD i (1000000 + i)))]
   | .deferred i => Json.mkObj [("t", "deferred"), ("id", toJson (hOf.dOf.getD i (1000000 + i)))]
-  -- Phase 7, track S: a semaphore or mutex is a reference to its object closure
+  -- Phase 7: a semaphore, mutex (track S) or `qNew` queue (track Q) is a reference to its object closure
   | .fn k =>
     match CatsEffectInLean.Model.Semaphore.semRef? k, CatsEffectInLean.Model.Mutex.mutexRef? k with
     | some q, _ => Json.mkObj [("t", "sem"), ("id", toJson (hOf.sOf.getD q (1000000 + q)))]
     | _, some q => Json.mkObj [("t", "mutex"), ("id", toJson (hOf.muOf.getD q (1000000 + q)))]
-    | _, _ => Json.mkObj [("t", .str s!"model:fn {k}")]
+    | _, _ =>
+      match hOf.qOf.get? k with
+      | some q => Json.mkObj [("t", "queue"), ("id", toJson q)]
+      | none => Json.mkObj [("t", .str s!"model:{(repr (Val.fn k)).pretty}")]
   | v => Json.mkObj [("t", .str s!"model:{(repr v).pretty}")]
 
 /-- The `op` of a format v2 `fin` event. -/

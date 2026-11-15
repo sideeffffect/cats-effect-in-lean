@@ -107,6 +107,19 @@ enum Prog:
   // ---- format v2 (Phase 6, batch 6.3)
   /** `IO.parTraverseN(n)(xs)(x => f).map(list)`; the list result is right-nested pairs ending in unit. */
   case ParTraverseN(n: Int, xs: List[Atom], x: String, f: Prog)
+  // ---- format v2 (Phase 7, track Q): the `Queue` factories of both families and their ops
+  /** `Queue.<kind>[IO, Val](cap).map(q => VQueue(h.newQueue(q)))` (see `Interp.newQueueOf`). */
+  case QNew(kind: String, cap: Int)
+  /** `queueOf(q).offer(v).as(VUnit)`. */
+  case QOffer(q: Atom, a: Atom)
+  /** `queueOf(q).tryOffer(v).map(VBool(_))`. */
+  case QTryOffer(q: Atom, a: Atom)
+  /** `queueOf(q).take`. */
+  case QTake(q: Atom)
+  /** `queueOf(q).tryTake.map { case Some(v) => VRight(v); case None => VLeft(VUnit) }`. */
+  case QTryTake(q: Atom)
+  /** `queueOf(q).size.map(n => VNat(n))`. */
+  case QSize(q: Atom)
   // ---- format v2 (Phase 7, track S): `std.Semaphore`, `std.Mutex`
   /** `Semaphore[IO](n).map(s => VSem(h.newSem(s)))`. */
   case SemNew(n: Long)

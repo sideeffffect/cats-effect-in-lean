@@ -83,6 +83,12 @@ lean_exe ptsmoke where
   srcDir := "tools"
   root := `PtSmoke.Main
 
+-- Random-schedule smoke test of the `Queue` statements (Phase 7, track Q).
+-- `lake exe qsmoke [cases] [runs] [seed]`. Test code, not part of the library.
+lean_exe qsmoke where
+  srcDir := "tools"
+  root := `QSmoke.Main
+
 -- Random-schedule smoke test of the `Semaphore`/`Mutex` statements (Phase 7, track S).
 -- `lake exe semsmoke [runs]`. Test code, not part of the library.
 lean_exe semsmoke where

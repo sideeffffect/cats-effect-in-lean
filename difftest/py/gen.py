@@ -110,6 +110,9 @@ WEIGHTS = {
     # minimum); `gen_case` appends it with its own RNG (`p_par_traverse`). Weights here only
     # scale how often the two shapes are chosen there (`--boost` in opcount.py).
     'tpl_parTraverse': 1.2, 'tpl_parTraverseCancel': 0.6,
+    # format v2 (Phase 7, track Q): the `qNew` queue scenario, appended by `gen_case` with its own
+    # RNG (`p_queue2`), as `parTraverseN`; the weight only scales that probability (`--boost`)
+    'tpl_queue2': 1.0,
     # format v2 (Phase 7, track S): `Semaphore` and `Mutex`, appended by `gen_case` with its own RNG
     # (`p_sem`), as `parTraverseN`; the weights scale the two shapes (`--boost` in opcount.py)
     'tpl_sem': 1.0, 'tpl_mutex': 0.6,
@@ -136,6 +139,7 @@ CONFIG = {
     'p_queue_type': 0.1,       # bind_type gives a queue type
     # preempt coverage (Phase 5 gate caveat 3): small IORuntimeConfig thresholds
     'p_runtime': 0.25,
+    'p_queue2': 0.08,          # Phase 7, track Q: append a `qNew` queue scenario (own RNG, see gen_case)
     'p_sem': 0.08,             # Phase 7, track S: append a `Semaphore`/`Mutex` part (own RNG, see gen_case)
     'p_par_traverse': 0.08,    # batch 6.3: append a `parTraverseN` part (own RNG, see gen_case)         # replay case gets a `runtime` field (auto-yield every few iterations)
 }
@@ -1007,6 +1011,100 @@ class Gen:
             body = {'op': 'bind', 'x': f, 'e': e, 'k': body}
         return {'op': 'bind', 'x': q, 'e': {'op': 'queueNew'}, 'k': body}
 
+    # ---- format v2 (Phase 7, track Q): `qNew` queues of every kind and both families
+    Q2_KINDS = [(3, ('bounded', 1)), (3, ('bounded', 2)), (2, ('bounded', 3)), (1, ('bounded', 0)),
+                (0.3, ('bounded', 70000)), (1, ('dropping', 1)), (2, ('dropping', 2)),
+                (1, ('circularBuffer', 1)), (2, ('circularBuffer', 2)), (3, ('synchronous', 0)),
+                (3, ('unbounded', 0)), (1, ('boundedConc', 1)), (2, ('boundedConc', 2)),
+                (2, ('unboundedConc', 0)), (1, ('droppingConc', 2))]
+
+    def q2_emit(self, e):
+        """bind r = e in delay fn1 r: the trace shows the result."""
+        r = self.fresh('x')
+        return {'op': 'bind', 'x': r, 'e': e, 'k': {'op': 'delay', 'fn': 1, 'arg': {'t': 'var', 'x': r}}}
+
+    def q2_take(self, qv):
+        """A take: plain, the atomic pattern `uncancelable(poll => poll(take).flatMap(emit))`
+        (QueueSuite "not lose data on canceled take"), or `take.timeout` (the CE-0003 shape)."""
+        take = {'op': 'qTake', 'q': qv}
+        x = self.r.random()
+        if x < 0.4:
+            return self.q2_emit(take)
+        if x < 0.75:
+            pv = self.fresh('p')
+            return {'op': 'uncancelable', 'poll': pv,
+                    'body': {'op': 'poll', 'poll': pv, 'e': self.q2_emit(take)}}
+        return {'op': 'map', 'e': {'op': 'attempt', 'e': {'op': 'timeout', 'e': self.q2_emit(take),
+                                                          'ms': self.timeout_ms()}}, 'fn': 1}
+
+    def q2_op(self, qv, child):
+        """One queue operation (results in the trace)."""
+        self.q2_next += 1
+        lit = {'t': 'nat', 'v': self.q2_next}
+        k = self.pick([(4, 'offer'), (2, 'tryOffer'), (3 if child else 1, 'take'), (2, 'tryTake'),
+                       (1, 'size'), (2, 'cede')])
+        if k == 'offer':
+            return {'op': 'qOffer', 'q': qv, 'v': lit}
+        if k == 'tryOffer':
+            return self.q2_emit({'op': 'qTryOffer', 'q': qv, 'v': lit})
+        if k == 'take':
+            return self.q2_take(qv)
+        if k == 'tryTake':
+            return self.q2_emit({'op': 'qTryTake', 'q': qv})
+        if k == 'size':
+            return self.q2_emit({'op': 'qSize', 'q': qv})
+        return {'op': 'cede'}
+
+    def tpl_queue2(self, t, env, size, ctx):
+        """bind q = qNew(kind, cap) in a scenario: 0-3 child fibers run 1-4 queue operations each
+        (often an atomic take, sometimes guarded by onCancel); the parent runs queue operations,
+        cedes, sleeps, cancels or joins children; then it uses every queue op once more and drains
+        with tryTake. Elements are distinct literals."""
+        self.q2_next = getattr(self, 'q2_next', 0)
+        kind, cap = self.pick(self.Q2_KINDS)
+        q = self.fresh('x')
+        qv = {'t': 'var', 'x': q}
+        binds = []
+        kids = []
+        for _ in range(self.pick([(1, 0), (3, 1), (3, 2), (1, 3)])):
+            ops = [self.q2_op(qv, True) for _ in range(self.r.randint(1, 4))]
+            c = ops[0] if len(ops) == 1 else {'op': 'seq', 'ps': ops}
+            if self.r.random() < 0.2:
+                c = self.tag({'op': 'onCancel', 'e': c, 'fin': {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 77}}})
+            f = self.fresh('x')
+            kids.append(f)
+            binds.append((f, {'op': 'start', 'e': c}))
+        steps = []
+        for _ in range(self.r.randint(1, 6)):
+            k = self.pick([(5, 'op'), (2, 'cede'), (1, 'sleep'), (2.5 if kids else 0, 'cancel'),
+                           (1.5 if kids else 0, 'join')])
+            if k == 'op':
+                steps.append(self.q2_op(qv, False))
+            elif k == 'cede':
+                steps.append({'op': 'cede'})
+            elif k == 'sleep':
+                steps.append({'op': 'sleep', 'ms': self.pick([(2, 0), (3, 1), (1, 10)])})
+            elif k == 'cancel':
+                steps.append({'op': 'cancel', 'f': {'t': 'var', 'x': self.r.choice(kids)}})
+            else:
+                # join with a timeout: a child can wait forever on an empty queue
+                steps.append({'op': 'map', 'e': {'op': 'attempt', 'e': {'op': 'timeout', 'e': {
+                    'op': 'join', 'f': {'t': 'var', 'x': self.r.choice(kids)}}, 'ms': self.timeout_ms()}}, 'fn': 1})
+        # every op at least once (a full queue makes `qOffer` wait, so it gets a timeout)
+        self.q2_next += 1
+        steps.append({'op': 'map', 'e': {'op': 'attempt', 'e': {'op': 'timeout', 'e': {
+            'op': 'qOffer', 'q': qv, 'v': {'t': 'nat', 'v': self.q2_next}}, 'ms': self.timeout_ms()}}, 'fn': 1})
+        self.q2_next += 1
+        steps.append(self.q2_emit({'op': 'qTryOffer', 'q': qv, 'v': {'t': 'nat', 'v': self.q2_next}}))
+        steps.append({'op': 'map', 'e': {'op': 'attempt', 'e': {'op': 'timeout', 'e': self.q2_emit(
+            {'op': 'qTake', 'q': qv}), 'ms': self.timeout_ms()}}, 'fn': 1})
+        steps.append(self.q2_emit({'op': 'qSize', 'q': qv}))
+        steps += [self.q2_emit({'op': 'qTryTake', 'q': qv}) for _ in range(self.pick([(1, 1), (2, 2), (1, 3)]))]
+        body = {'op': 'seq', 'ps': steps}
+        for f, e in reversed(binds):
+            body = {'op': 'bind', 'x': f, 'e': e, 'k': body}
+        return {'op': 'bind', 'x': q, 'e': {'op': 'qNew', 'kind': kind, 'cap': cap}, 'k': body}
+
     def trytake_marked(self, qv, a, env):
         """bind r = tryTake q in delay fn1 r: the trace shows the result."""
         r = self.fresh('x')
@@ -1531,13 +1629,22 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
         extra = g2.tpl_par_traverse(UNIT, {}, pr.randint(3, 12), {}, cancel)
         prog = {'op': 'seq', 'ps': [prog, extra]}
         check_prog(prog)
+    # Phase 7, track Q: append a `qNew` queue scenario. Own RNG, so the rest of the case does not
+    # change; the probability scales with the template weight (`--boost tpl_queue2=F`).
+    qr = random.Random(f"difftest-queue2:{seed}:{i}")
+    if prog.get('op') != 'syncStep' and qr.random() < g.c['p_queue2'] * w['tpl_queue2']:
+        g3 = Gen(qr, weights, config)
+        g3.names = 20000
+        extra = g3.tpl_queue2(UNIT, {}, qr.randint(3, 12), {})
+        prog = {'op': 'seq', 'ps': [prog, extra]}
+        check_prog(prog)
     # Phase 7, track S: append a `Semaphore` or `Mutex` scenario. Own RNG, so the rest of the case
     # does not change; the probability scales with the template weights.
     sr = random.Random(f"difftest-semaphore:{seed}:{i}")
     ps = g.c['p_sem'] * (w['tpl_sem'] + w['tpl_mutex']) / 1.6
     if prog.get('op') != 'syncStep' and sr.random() < ps:
         g3 = Gen(sr, weights, config)
-        g3.names = 20000
+        g3.names = 30000
         mutex = sr.random() * (w['tpl_sem'] + w['tpl_mutex']) < w['tpl_mutex']
         extra = g3.tpl_mutex({}, sr.randint(3, 10)) if mutex else g3.tpl_sem({}, sr.randint(3, 10))
         prog = {'op': 'seq', 'ps': [prog, extra]}

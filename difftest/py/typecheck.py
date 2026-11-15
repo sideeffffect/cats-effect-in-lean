@@ -307,6 +307,24 @@ class Checker:
             for _ in p['xs']:
                 t = ('pair', b, t)
             return t
+        # ---- format v2 (Phase 7, track Q): `qNew` queues are their own type ('queue2', A): the
+        # Lean side keeps them as object references, the v1 queue ops take a buffer cell
+        if op == 'qNew':
+            kinds = ('bounded', 'dropping', 'circularBuffer', 'synchronous', 'unbounded',
+                     'boundedConc', 'unboundedConc', 'droppingConc')
+            cap = p.get('cap')
+            if p.get('kind') not in kinds or not isinstance(cap, int) or isinstance(cap, bool) or not 0 <= cap <= 2**31 - 1:
+                raise TypeErr(f"qNew {p.get('kind')!r} {cap!r}")
+            if p['kind'] in ('dropping', 'circularBuffer', 'boundedConc', 'droppingConc') and cap == 0:
+                raise TypeErr(f"qNew {p['kind']} needs cap >= 1")
+            return ('queue2', f())
+        if op in ('qOffer', 'qTryOffer'):
+            u(self.atom(p['q'], env), ('queue2', self.atom(p['v'], env)), op)
+            return ('unit',) if op == 'qOffer' else ('bool',)
+        if op in ('qTake', 'qTryTake', 'qSize'):
+            a = f()
+            u(self.atom(p['q'], env), ('queue2', a), op)
+            return a if op == 'qTake' else (('either', ('unit',), a) if op == 'qTryTake' else ('nat',))
         # ---- format v2 (Phase 7, track S): `Semaphore`, `Mutex`
         if op in SEM_OPS:
             if op in ('semNew', 'semAcquireN', 'semReleaseN', 'semTryAcquireN'):

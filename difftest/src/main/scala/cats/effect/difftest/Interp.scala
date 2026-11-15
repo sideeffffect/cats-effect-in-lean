@@ -321,6 +321,32 @@ final class Interp(h: Harness):
     case Prog.SemPermit(s, e) => semOf(atom(s, env)).permit.use(_ => run(e, env))
     case Prog.MutexNew => Mutex[IO].map(m => VMutex(h.newMutex(m)))
     case Prog.MutexLock(m, e) => mutexOf(atom(m, env)).lock.use(_ => run(e, env))
+    // ---- format v2 (Phase 7, track Q): `Queue` factories (Queue.scala:74-228) and ops
+    case Prog.QNew(kind, cap) => newQueueOf(kind, cap).map(q => VQueue(h.newQueue(q)))
+    case Prog.QOffer(q, a) => queueOf(atom(q, env)).offer(atom(a, env)).as(VUnit)
+    case Prog.QTryOffer(q, a) => queueOf(atom(q, env)).tryOffer(atom(a, env)).map(b => VBool(b))
+    case Prog.QTake(q) => queueOf(atom(q, env)).take
+    case Prog.QTryTake(q) =>
+      queueOf(atom(q, env)).tryTake.map {
+        case Some(v) => VRight(v)
+        case None => VLeft(VUnit)
+      }
+    case Prog.QSize(q) => queueOf(atom(q, env)).size.map(n => VNat(n.toLong))
+
+  /** The factory of a `qNew` kind (format v2, track Q). The `*Conc` kinds are the private
+    * `Concurrent` factories (`Queue.scala:93-110`), reachable here because this file is in
+    * package `cats.effect`.
+    */
+  private def newQueueOf(kind: String, cap: Int): IO[Queue[IO, Val]] = kind match
+    case "bounded" => Queue.bounded[IO, Val](cap)
+    case "dropping" => Queue.dropping[IO, Val](cap)
+    case "circularBuffer" => Queue.circularBuffer[IO, Val](cap)
+    case "synchronous" => Queue.synchronous[IO, Val]
+    case "unbounded" => Queue.unbounded[IO, Val]
+    case "boundedConc" => Queue.boundedForConcurrent[IO, Val](cap)
+    case "unboundedConc" => Queue.unboundedForConcurrent[IO, Val]
+    case "droppingConc" => Queue.droppingForConcurrent[IO, Val](cap)
+    case other => IO.raiseError(TypeError(s"qNew: unknown kind $other"))
 
   /** `(a, oc) => ocVal(oc).flatMap(o => IO.delay(emit fin) *> run(rel, env + x + y).void)` (format v2). */
   private def caseRelease(op: String, x: String, y: String, rel: Prog, tag: Long, env: Env)

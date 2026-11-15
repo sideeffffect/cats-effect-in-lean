@@ -78,6 +78,12 @@ import CatsEffectInLean.Props.Phase6.ParTraverse
 import CatsEffectInLean.Proofs.Phase6.ParTraverseWitness
 import CatsEffectInLean.Proofs.Phase6.ParTraversePrivacy
 import CatsEffectInLean.Proofs.Phase6.ResourceWrongFunction
+import CatsEffectInLean.Std.QueueConcurrent
+import CatsEffectInLean.Std.QueueAsync
+import CatsEffectInLean.Std.QueueFactory
+import CatsEffectInLean.Props.Phase7.Queue
+import CatsEffectInLean.Proofs.Phase7.QueueWitness
+import CatsEffectInLean.Proofs.Phase7.QueueWrongFunction
 import CatsEffectInLean.Model.Semaphore
 import CatsEffectInLean.Model.Mutex
 import CatsEffectInLean.Props.Phase7.Semaphore

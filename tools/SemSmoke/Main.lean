@@ -161,7 +161,7 @@ def skip (e : UserEnv) : UserEnv where
   call := e.call
   callV id a v :=
     match SL.ofId? id with
-    | some (.modRel s n) =>
+    | some (.modRel _ _) =>
       let r := e.callV id a v
       match r.out with
       | .ret d =>
