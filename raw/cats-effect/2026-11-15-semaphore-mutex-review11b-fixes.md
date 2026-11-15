@@ -47,8 +47,10 @@ binary does not depend on the statement changes above. Result: 51,000 cases (17,
 semAcquireN 15,846; semReleaseN 22,456; semTryAcquireN 10,485; semAvailable 28,793; semCount
 28,793; semPermit 19,698; mutexNew 17,502; mutexLock 17,502. (A first start of seeds 101 and 102
 failed before any case: three parallel `run.sh` calls rebuilt the sbt class path at once, "Address
-already in use"; rerun after the cache existed.) The `parTraverseN` `rankOrder` fix of track G was not on origin/main at the
-merge (2026-11-15).
+already in use"; rerun after the cache existed.) The `parTraverseN` `rankOrder` fix of track G (b838472) came later and is merged (9ca98d6).
+After it, the batch of `g61-9094` (seed 61, cases 5000-9999, `--boost tpl_sem=20 tpl_mutex=0`,
+regenerated with the merged generator, so the programs also have the track Q/L parts) gives 5,000
+of 5,000 agree, `g61-9094` included. Track G keeps the original case as a regression case.
 
 ## Note for track L (item 6 of the coordinator; track L owns the file)
 

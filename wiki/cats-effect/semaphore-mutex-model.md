@@ -59,7 +59,7 @@ generator appends a `tpl_sem`/`tpl_mutex` scenario with its own RNG (`p_sem`).
 
 The one mismatch is in the `parTraverseN` part of a mixed case (a `HashSet` of 5 children whose
 `f` starts fibers): `rankOrder` assumes consecutive child fiber ids, so the Lean `alternatives` miss
-the order of that JVM run. The same case alone agrees. Mutation checks: a `reclaim` that keeps the
+the order of that JVM run. The same case alone agrees. Track G fixed `rankOrder` (b838472); after the merge the batch of that case agrees 5,000 of 5,000. Mutation checks: a `reclaim` that keeps the
 sunk permits, and a mutex waiter that hands on `EmptyCell`, give 5 and 10 mismatches in 1,500
 cases.
 
