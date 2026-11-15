@@ -409,3 +409,8 @@
 ## [2026-11-15] ingest | Track Q: review batch 12 H3 fix, SeqSpec, decision 63 battery
 - Updated: Queue families model (join outcomes in TakerLiveness, SeqSpec entries, battery, FailureSignal rows)
 - Raw: raw/cats-effect/2026-11-15-queue-review12-battery.md
+
+## [2026-11-15] review | Review batch 13: decision-63 batteries, batch 7.1 changes
+- Created: review/2026-11-15-review-batch-13.md
+- Updated: Agent workflow and review protocol (review log, battery rules), Queue families model, Semaphore and Mutex model, CountDownLatch and CyclicBarrier model
+- Raw: raw/project-decisions/2026-11-15-review-batch-13-notes.md
