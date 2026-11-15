@@ -286,3 +286,7 @@
 ## [2026-11-15] ingest | Heavy CI fixes after run 43651882144 and review batch 8
 - Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md (section "Fixes after CI run 43651882144")
 - Updated: Registry and audit (heavy CI fixes)
+
+## [2026-11-15] ingest | Twin checks as a parallel matrix (twin-checks)
+- Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md (section "Twin checks as a matrix")
+- Updated: Registry and audit (twin layout)
