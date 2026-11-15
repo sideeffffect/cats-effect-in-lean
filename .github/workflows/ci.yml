@@ -36,6 +36,11 @@ jobs:
           axiom-audit: "true"
           axiom-audit-allow: "propext,Classical.choice,Quot.sound"
           axiom-audit-root: "CatsEffectInLean"
+          # No GitHub cache: `lake env leanchecker CatsEffectInLean` replays every
+          # CatsEffectInLean.* .olean on disk, also stale ones that a restored cache carries
+          # (CI run 43679857057: `Model/ValCodec.olean`, deleted in decision 31, no longer
+          # matched `Val` after decision 58). A cold build costs a few minutes.
+          use-github-cache: "false"
 
       # `lake check` builds in a bwrap sandbox. Ubuntu restricts the user
       # namespaces that bwrap needs, so grant them to bwrap only.
