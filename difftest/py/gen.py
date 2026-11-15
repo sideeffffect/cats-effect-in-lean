@@ -113,8 +113,6 @@ WEIGHTS = {
     # format v2 (Phase 7, track Q): the `qNew` queue scenario, appended by `gen_case` with its own
     # RNG (`p_queue2`), as `parTraverseN`; the weight only scales that probability (`--boost`)
     'tpl_queue2': 1.0,
-        prog = {'op': 'seq', 'ps': [prog, extra]}
-        check_prog(prog)
     # format v2 (Phase 7, track L): `CountDownLatch` and `CyclicBarrier` scenarios, appended by
     # `gen_case` with their own RNG (`p_latch`), like `parTraverseN`. Weights scale the two shapes.
     'tpl_cdl': 1.0, 'tpl_cb': 1.0,
@@ -142,8 +140,6 @@ CONFIG = {
     # preempt coverage (Phase 5 gate caveat 3): small IORuntimeConfig thresholds
     'p_runtime': 0.25,
     'p_queue2': 0.08,          # Phase 7, track Q: append a `qNew` queue scenario (own RNG, see gen_case)
-        prog = {'op': 'seq', 'ps': [prog, extra]}
-        check_prog(prog)
     'p_latch': 0.08,           # Phase 7, track L: append a latch/barrier part (own RNG, see gen_case)
     'p_par_traverse': 0.08,    # batch 6.3: append a `parTraverseN` part (own RNG, see gen_case)         # replay case gets a `runtime` field (auto-yield every few iterations)
 }

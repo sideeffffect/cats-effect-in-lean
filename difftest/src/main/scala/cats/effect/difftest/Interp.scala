@@ -320,6 +320,13 @@ final class Interp(h: Harness):
         case None => VLeft(VUnit)
       }
     case Prog.QSize(q) => queueOf(atom(q, env)).size.map(n => VNat(n.toLong))
+    // ---- format v2 (Phase 7, track L): std.CountDownLatch (CountDownLatch.scala:57-82),
+    // std.CyclicBarrier (CyclicBarrier.scala:58-91)
+    case Prog.CdlNew(n) => CountDownLatch[IO](n).map(l => VLatch(h.newLatch(l)))
+    case Prog.CdlRelease(l) => latchOf(atom(l, env)).release.as(VUnit)
+    case Prog.CdlAwait(l) => latchOf(atom(l, env)).await.as(VUnit)
+    case Prog.CbNew(n) => CyclicBarrier[IO](n).map(b => VBarrier(h.newBarrier(b)))
+    case Prog.CbAwait(b) => barrierOf(atom(b, env)).await.as(VUnit)
 
   /** The factory of a `qNew` kind (format v2, track Q). The `*Conc` kinds are the private
     * `Concurrent` factories (`Queue.scala:93-110`), reachable here because this file is in
@@ -335,13 +342,6 @@ final class Interp(h: Harness):
     case "unboundedConc" => Queue.unboundedForConcurrent[IO, Val]
     case "droppingConc" => Queue.droppingForConcurrent[IO, Val](cap)
     case other => IO.raiseError(TypeError(s"qNew: unknown kind $other"))
-    // ---- format v2 (Phase 7, track L): std.CountDownLatch (CountDownLatch.scala:57-82),
-    // std.CyclicBarrier (CyclicBarrier.scala:58-91)
-    case Prog.CdlNew(n) => CountDownLatch[IO](n).map(l => VLatch(h.newLatch(l)))
-    case Prog.CdlRelease(l) => latchOf(atom(l, env)).release.as(VUnit)
-    case Prog.CdlAwait(l) => latchOf(atom(l, env)).await.as(VUnit)
-    case Prog.CbNew(n) => CyclicBarrier[IO](n).map(b => VBarrier(h.newBarrier(b)))
-    case Prog.CbAwait(b) => barrierOf(atom(b, env)).await.as(VUnit)
 
   /** `(a, oc) => ocVal(oc).flatMap(o => IO.delay(emit fin) *> run(rel, env + x + y).void)` (format v2). */
   private def caseRelease(op: String, x: String, y: String, rel: Prog, tag: Long, env: Env)
