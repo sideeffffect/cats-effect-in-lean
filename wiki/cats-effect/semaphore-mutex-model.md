@@ -1,7 +1,7 @@
 # Semaphore and Mutex model, CE-0060
 
-> Sources: Cats Effect v3.7.1 (`std/.../Semaphore.scala:28-298`, `std/.../Mutex.scala:24-112`, `std/.../LockQueue.scala:24-110`, `kernel/.../Resource.scala:156-208`, `:388-397`, `:879-880`, `:942-944`, `:1229-1234`, `kernel/jvm-native/.../SyncRef.scala:30-95`, `kernel/.../Ref.scala:123-124`, `:208-250`, `IO.scala:1715-1720`, `:1822-1830`, `:1996-2180`, `IODeferred.scala:62-79`, `docs/std/mutex.md`); cats-core 2.13.0 (`cats/instances/queue.scala:136-138`, `cats/Traverse.scala:299-309`, `cats/Foldable.scala:591-596`, `cats/instances/option.scala:145-149`); PR #4648; own Phase 7 track S work and scala-cli runs, 2026-11-15
-> Raw: [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md)
+> Sources: Cats Effect v3.7.1 (`std/.../Semaphore.scala:28-298`, `std/.../Mutex.scala:24-112`, `std/.../LockQueue.scala:24-110`, `kernel/.../Resource.scala:156-208`, `:388-397`, `:879-880`, `:942-944`, `:1229-1234`, `kernel/jvm-native/.../SyncRef.scala:30-95`, `kernel/.../Ref.scala:123-124`, `:208-250`, `IO.scala:1715-1720`, `:1822-1830`, `:1996-2180`, `IODeferred.scala:62-79`, `docs/std/mutex.md:6-7`); cats-core 2.13.0 (`cats/instances/queue.scala:136-138`, `cats/Traverse.scala:299-309`, `cats/Foldable.scala:591-596`, `cats/instances/option.scala:145-149`); PR #4648; own Phase 7 track S work and scala-cli runs, 2026-11-15
+> Raw: [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md); [Review 11b fixes](../../raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md)
 
 ## Overview
 
@@ -17,7 +17,7 @@ random-schedule smoke test with wrong-function checks.
   `reclaim` removes only the head; `releaseN` wakes or sweeps canceled requests later.
 - `Mutex` at v3.7.1 has only `ConcurrentImpl` over `LockQueue.lock` (a CLH queue lock with
   `Deferred` cells, `Ref.access` + CAS). The `AsyncImpl` of earlier versions is gone. The twin is
-  `Semaphore(1).permit` (`docs/std/mutex.md`: "Basically, it's a Semaphore with a single available
+  `Semaphore(1).permit` (`docs/std/mutex.md:6-7`: "Basically, it's a Semaphore with a single available
   permit").
 
 ## Files
@@ -55,6 +55,7 @@ generator appends a `tpl_sem`/`tpl_mutex` scenario with its own RNG (`p_sem`).
 | Semaphore ops | 162,000, seeds 61-64 | 161,999 agree; per op ≥ 53,290 (`semTryAcquireN`), `semPermit` 100,897; 1 mismatch: a `parTraverseN` harness gap (below) |
 | `mutexNew`, `mutexLock` | 78,000, seeds 71-76 | all agree; 51,304 cases with the ops |
 | `cases/semaphore.jsonl` | 24 fixed cases | all agree (golden file) |
+| all 9 ops, merged generator (after `1e84acb`, tracks Q and L) | 51,000, seeds 101-103 | all agree; per op 10,485 (`semTryAcquireN`) to 28,793 |
 
 The one mismatch is in the `parTraverseN` part of a mixed case (a `HashSet` of 5 children whose
 `f` starts fibers): `rankOrder` assumes consecutive child fiber ids, so the Lean `alternatives` miss
@@ -67,19 +68,30 @@ cases.
 | Entry | Status | Claim |
 |---|---|---|
 | `std.Semaphore.noLostPermit` | open | all fibers ended → `available = k + released` (all `WellFormed` user code, cancels anywhere) |
-| `std.Semaphore.noDeadlock` | open | behaviour tables, `need ≤ k`: every stopped run is `Succeeded`, `available = k + released` |
+| `std.Semaphore.noDeadlock` | open | behaviour tables, `need ≤ k`: no stopped run is `blocked`; a `Succeeded` run has `available = k + released` and `Succeeded` join records for the uses that must succeed (review batch 11b form) |
 | `std.Semaphore.permit.atMostK` | open | at most `k` counted holders at once |
 | `std.Mutex.lock.mutualExclusion` | open | at most one counted holder at once |
-| `std.Mutex.lock.noDeadlock` | open | behaviour tables: every stopped run ends `Succeeded(())` (the lock is free at the end) |
+| `std.Mutex.lock.noDeadlock` | open | behaviour tables: no stopped run is `blocked` (the lock is free at the end); a `Succeeded` run returns `()` with `Succeeded` join records (review batch 11b form) |
 | `std.Semaphore.count.atRest` | refuted (CE-0060) | all fibers ended → `count = available` |
 | `std.Semaphore.acquireN.fifo` | open | strict FIFO: after `releaseN(r)` the longest prefix with sum ≤ r is served |
-| `std.Mutex.lock.semaphoreTwin` | open | each (outcome, trace) of `Mutex` is one of `Semaphore(1)` |
+| `std.Mutex.lock.semaphoreTwin` | open | each (outcome, trace) of `Mutex` is one of `Semaphore(1)` (one direction; the converse is a different claim, not registered) |
 
 Smoke (`lake exe semsmoke 40`): 13,920 stopped runs, 0 violations of the open statements; every
 wrong function ('leak a permit', 'release twice', 'skip a waiter', 'LIFO', 'no wait', 'lost
 wakeup', 'wide') breaks its claim; a forging user function is rejected by `WellFormed`. The random
 inputs did not hit CE-0060 (it needs a non-head waiter canceled first and no later release); the
 refutation is a fixed input.
+
+Review batch 11b (2026-11-15): 13 of 15 track S and L entries FAITHFUL, CE-0060 FAITHFUL. H1
+(HOLLOW): the first form of both `noDeadlock` statements claimed "every stopped run ends
+`Succeeded`", but a fatal error in a critical section stops the whole run with `Summary.fatal`
+(`Model/Sched.lean:120`, `IOFiber` `onFatalFailure`), for every implementation. Fix: the conclusion
+is "not `blocked`" plus claims on `Succeeded` runs; the fatal input is a kernel regression
+(`fatal_regression`). W1: "`acquireN(n ≥ 2)` always raises" satisfied every `Semaphore` statement.
+Fix: the harness records each join outcome in the trace, and statement 2 claims `Succeeded` for
+joined, not canceled uses whose own code succeeds; `w1_breaks` (kernel) and `semsmoke` show the wrong
+function fails. Lesson: a behaviour table that takes any `Err` includes fatal errors; claim "not
+blocked", not "Succeeded".
 
 Why open: a proof for all schedules needs a state invariant over `Step`/`SchedP` (for example
 permits + held + sunk = k + released), as the open Phase 6 entries.

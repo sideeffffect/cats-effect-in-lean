@@ -652,11 +652,16 @@ def registry : List Entry := [
       "std.Semaphore.permit"]
     prop := ``Props.Phase7.Semaphore.semNoDeadlock
     status := .«open»
-    note := "Behaviour tables (critical sections: cedes, then pure/raiseError/canceled; no user \
-      code, no WellFormed), need <= k: every run that stops ends Succeeded with available = k + \
-      released (no deadlock, no lost wakeup, no lost permit). Satisfiable \
-      (semNoDeadlock_satisfiable). semsmoke: 0 violations; wrong function 'skip a waiter' \
-      (releaseN drops a woken request without completing its gate) and 'leak' break it. Open." },
+    note := "Behaviour tables (critical sections: cedes, then pure/raiseError (fatal too)/canceled; \
+      no user code, no WellFormed), need <= k: no stopped run is blocked (no deadlock, no lost \
+      wakeup); a Succeeded run has available = k + released and every joined, not canceled use \
+      whose own code succeeds recorded Succeeded (the harness records join outcomes). Review batch \
+      11b: the first form ('every stopped run ends Succeeded') was HOLLOW (H1: a fatal error stops \
+      the run with Summary.fatal for every implementation; regression \
+      SemaphoreWitness.fatal_regression), and 'acquireN(n >= 2) always raises' satisfied it (W1; now \
+      SemaphoreWitness.w1_breaks, kernel, and semsmoke). Satisfiable (semNoDeadlock_satisfiable: \
+      Succeeded with two Succeeded join records). semsmoke: 0 violations; wrong functions 'skip a \
+      waiter', 'leak', 'acquireN raises' break it. Open." },
   { id := "std.Semaphore.permit.atMostK"
     rows := ["std.Semaphore.permit", "std.Semaphore.acquireN", "std.Semaphore.releaseN"]
     prop := ``Props.Phase7.Semaphore.semAtMostK
@@ -679,10 +684,13 @@ def registry : List Entry := [
     rows := ["std.Mutex.apply", "std.Mutex.lock", "std.LockQueue.lock"]
     prop := ``Props.Phase7.Semaphore.mutexNoDeadlock
     status := .«open»
-    note := "Behaviour tables, every user fiber ended: every run that stops ends Succeeded(()) - the \
-      final lock.use(_ => IO.unit) gets the lock (no lost lock, no lost wakeup, canceled waiters \
-      hand on their predecessor's cell). Satisfiable (mutexNoDeadlock_satisfiable). semsmoke: 0 \
-      violations; wrong function 'lost wakeup' (awakeCell never completes the cell) breaks it. Open." },
+    note := "Behaviour tables, every user fiber ended: no stopped run is blocked - the final \
+      lock.use(_ => IO.unit) gets the lock (no lost lock, no lost wakeup, canceled waiters hand on \
+      their predecessor's cell); a Succeeded run returns () and every joined, not canceled use whose \
+      section succeeds recorded Succeeded. Review batch 11b H1: the first form ('every stopped run \
+      ends Succeeded(())') was false for every implementation with a fatal error. Satisfiable \
+      (mutexNoDeadlock_satisfiable). semsmoke: 0 violations; wrong function 'lost wakeup' \
+      (awakeCell never completes the cell) breaks it. Open." },
   { id := "std.Semaphore.count.atRest"
     rows := ["std.Semaphore.count", "std.Semaphore.acquireN", "std.Semaphore.acquire",
       "std.Semaphore.releaseN", "std.Semaphore.apply"]
@@ -710,10 +718,11 @@ def registry : List Entry := [
     rows := ["std.Mutex.lock", "std.Mutex.apply", "std.Semaphore.permit", "std.LockQueue.lock"]
     prop := ``Props.Phase7.Semaphore.mutexSemaphoreTwin
     status := .«open»
-    note := "Twin (docs/std/mutex.md:7-8, 'Basically, it's a Semaphore with a single available \
+    note := "Twin (docs/std/mutex.md:6-7, 'Basically, it's a Semaphore with a single available \
       permit'): every (outcome, user trace) of a program with Mutex.lock.use is one of the same \
       program with Semaphore(1).permit.use (one direction; the final heap holds the lock state, so \
-      only summary and trace are compared). v3.7.1 has no Mutex AsyncImpl any more (LockQueue, \
+      only summary and trace are compared; the trace holds the harness join records). The converse \
+      is a different claim and is not registered. v3.7.1 has no Mutex AsyncImpl any more (LockQueue, \
       commit 8deb2fdabe). Satisfiable (mutexSemaphoreTwin_satisfiable). semsmoke samples both sides. \
       Open." },
   { id := "std.CountDownLatch.awaitNotEarly"

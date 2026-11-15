@@ -10,7 +10,7 @@ Mutex using the shared LockQueue") replaced both by `LockQueue.lock`
 (`std/shared/src/main/scala/cats/effect/std/LockQueue.scala`, `LQ` below), a variant of the
 Craig, Landin and Hagersten (CLH) queue lock with `Deferred` cells. `TransformedMutex`
 (`M:99-111`) only maps with a natural transformation; it is not mirrored. So the twin of
-`Mutex` at v3.7.1 is `Semaphore(1).permit` (the docs, `docs/std/mutex.md:7-8`: "Basically, it's a
+`Mutex` at v3.7.1 is `Semaphore(1).permit` (the docs, `docs/std/mutex.md:6-7`: "Basically, it's a
 `Semaphore` with a single available permit").
 
 ```scala

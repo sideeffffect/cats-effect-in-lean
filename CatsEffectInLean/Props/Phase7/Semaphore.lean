@@ -22,7 +22,7 @@ v3.7.1. Promises:
 * `S:105-109` (`permit`): "acquires a permit, holds it for the lifetime of the resource, then
   releases the permit."
 * `Mutex.scala:24-28`: "A mutex is a concurrency primitive that can be used to give access to a
-  resource to only one fiber at a time"; `docs/std/mutex.md:7-8`: "Basically, it's a `Semaphore`
+  resource to only one fiber at a time"; `docs/std/mutex.md:6-7`: "Basically, it's a `Semaphore`
   with a single available permit."
 
 ## The harness (namespace 62)
@@ -50,7 +50,10 @@ from writing the lock state or the counter (Scala: the state `Ref` is private; t
 passes the lock or the counter to user code). User code may make and use its own semaphores and
 mutexes (the public operations `SL.op*`, `ML.op*`) and the `Bracket` combinators.
 
-Behaviour tables (statements 2, 6, 7): `BUse.permit k b` is `permit` with `g = _ => IO.cede`
+After `join i` the parent writes the join outcome into the trace (`joinRecV i oc`, harness tag 62).
+Only statements 2 and 5 read it; they have no user code, so nothing else can emit such a record.
+
+Behaviour tables (statements 2, 5, 6): `BUse.permit k b` is `permit` with `g = _ => IO.cede`
 `k` times, then the base action `b` (`pure`, `raiseError`, `canceled`). This is Scala code that
 holds no handle, so these statements need no `WellFormed` hypothesis.
 
@@ -178,6 +181,9 @@ inductive HS where
   | fin (c : Nat)
   /-- `_ => x.liftTo[IO]`. -/
   | rethrow (x : Val)
+  /-- `oc => record(i, oc) *> the rest of the acts`: after `join i`, the harness records the join
+  outcome in the trace (`joinRec i oc`), then goes on (review batch 11b, W1). -/
+  | joinRec (c : Nat) (lk : Val) (l i : Nat) (as fs : Val)
   deriving DecidableEq, Repr
 
 def HS.toVal : HS → Val
@@ -200,6 +206,7 @@ def HS.toVal : HS → Val
   | .exit c => cloVal hns 16 [.ref c]
   | .fin c => cloVal hns 17 [.ref c]
   | .rethrow x => cloVal hns 18 [x]
+  | .joinRec c lk l i as fs => cloVal hns 19 [.ref c, lk, .fn l, .nat i, as, fs]
 
 def HS.ofFields : Nat → List Val → Option HS
   | 0, [] => some .newCell
@@ -221,6 +228,7 @@ def HS.ofFields : Nat → List Val → Option HS
   | 16, [.ref c] => some (.exit c)
   | 17, [.ref c] => some (.fin c)
   | 18, [x] => some (.rethrow x)
+  | 19, [.ref c, lk, .fn l, .nat i, as, fs] => some (.joinRec c lk l i as fs)
   | _, _ => none
 
 def HS.id (l : HS) : Nat := 2 * valToNat l.toVal + 1
@@ -256,6 +264,9 @@ def fiberAt (fs : Val) (i : Nat) : Option Nat :=
   | some (.fiber t) => some t
   | _ => none
 
+/-- The trace record of `join i` with outcome `oc` (harness tag 62). -/
+def joinRecV (i : Nat) (oc : Val) : Val := .pair (.nat 62) (.pair (.nat i) oc)
+
 /-- The rest of the parent after the fibers started, in view `v`. -/
 def actsIO (c : Nat) (lk : Lock) (l : Nat) (fs : Val) (v : View) : List Act → IO
   | [] => match lk with
@@ -269,7 +280,7 @@ def actsIO (c : Nat) (lk : Lock) (l : Nat) (fs : Val) (v : View) : List Act → 
       | some t => .flatMap (IO.cancelOf t (v.outcome t)) k
       | none => .flatMap (.pure .unit) k
     | .join i => match fiberAt fs i with
-      | some t => .flatMap (IO.joinOf t (v.outcome t)) k
+      | some t => .flatMap (IO.joinOf t (v.outcome t)) (HS.joinRec c lk.toVal l i (actsV rest) fs).fn
       | none => .flatMap (.pure .unit) k
     | .release n => match lk with
       | .sem _ | .semMutex => .flatMap (releaseNIO l n) k
@@ -338,6 +349,10 @@ def HS.call (h : HS) (arg : Val) (v : View) : UserResult :=
     let (r, hi) := cntOf v c
     { effects := [.writeRef c (.pair (.nat (r - 1)) (.nat hi))], out := .ret .unit }
   | .fin c => { out := .prog (.flatMap (.delay (HS.exit c).fn) (HS.rethrow arg).fn) }
+  | .joinRec c lk l i as fs =>
+    match Lock.ofVal lk with
+    | some lock => { effects := [.emit (joinRecV i arg)], out := .prog (actsIO c lock l fs v (actsOf as)) }
+    | none => illT
   | .rethrow x =>
     match x with
     | .left (.err e) => { out := .prog (.error e) }
@@ -503,14 +518,35 @@ def semNoLostPermit : Prop :=
     ∀ o, outcomesP {} counterMaskModel (env u) (lockRoot (.sem k) us as) o →
       ∀ v, o.summary = .done (.succeeded v) → availOf v = some (k + released as)
 
+/-- A use whose own code ends with a value (no error, no self-cancel): it must succeed. -/
+def BUse.succeeds : BUse → Bool
+  | .permit _ (.ok _) => true
+  | .permit _ _ => false
+  | .acqRel _ | .tryRel _ => true
+
+/-- Fiber `i` is joined, never canceled by the parent, and its use must succeed. -/
+def OkJoined (bus : List BUse) (as : List Act) (i : Nat) : Prop :=
+  ∃ b, bus[i]? = some b ∧ b.succeeds = true ∧ Act.join i ∈ as ∧ Act.cancel i ∉ as
+
 /-- Statement 2 (`std.Semaphore.noDeadlock`): with critical sections that end (behaviour tables)
-and requests that the permits can meet (`need ≤ k`), every run that stops ends `Succeeded` with
-`available = k + released`: no deadlock, no lost wakeup, no lost permit. -/
+and requests that the permits can meet (`need ≤ k`), no run that stops is `blocked` (no deadlock,
+no lost wakeup); a run that ends `Succeeded` has `available = k + released` (no lost permit), and
+every joined, not canceled use whose own code succeeds ended `Succeeded` (the join records its
+outcome: a granted request is served, review batch 11b W1).
+
+Review batch 11b (H1): the first form claimed that every stopped run ends `Succeeded`. A critical
+section that raises a fatal error stops the whole run with `Summary.fatal` (`Model/Sched.lean:120`;
+`IOFiber` `onFatalFailure`), for every implementation. The conclusion is now "not blocked" plus the
+claims on `Succeeded` runs, so fatal errors stay in the domain (regression:
+`Proofs/Phase7/SemaphoreWitness.lean`, `fatalRun`). -/
 def semNoDeadlock : Prop :=
   ∀ (k : Nat) (bus : List BUse) (as : List Act),
     AllEnded bus.length as → (∀ b ∈ bus, b.need ≤ k) →
     ∀ o, outcomesP {} counterMaskModel (env behaved) (lockRoot (.sem k) (bus.map BUse.toUse) as) o →
-      ∃ v, o.summary = .done (.succeeded v) ∧ availOf v = some (k + released as)
+      o.summary ≠ .blocked ∧
+      ∀ v, o.summary = .done (.succeeded v) →
+        availOf v = some (k + released as) ∧
+        ∀ i, OkJoined bus as i → ∃ x, joinRecV i (.ocSucceeded x) ∈ o.out
 
 /-- Statement 3 (`std.Semaphore.permit.atMostK`): at most `k` fibers hold a permit of
 `Semaphore(k)` at once (the counted fibers; other uses also take permits). -/
@@ -528,14 +564,18 @@ def mutexMutualExclusion : Prop :=
     ∀ o, outcomesP {} counterMaskModel (env u) (lockRoot .mutex us as) o →
       ∃ h, highest o = some h ∧ h ≤ 1
 
-/-- Statement 5 (`std.Mutex.lock.noDeadlock`): with critical sections that end, every run that
-stops ends `Succeeded(())`: the last `lock.use` gets the lock, no waiter is lost. Only `permit`
-uses (a mutex has no `acquireN`). -/
+/-- Statement 5 (`std.Mutex.lock.noDeadlock`): with critical sections that end, no run that stops
+is `blocked` (the last `lock.use` gets the lock, no waiter is lost); a run that ends `Succeeded`
+returns `()`, and every joined, not canceled use whose own code succeeds ended `Succeeded`. Only
+`permit` uses (a mutex has no `acquireN`). Review batch 11b (H1): as statement 2, the first form
+("every stopped run ends `Succeeded`") was false for every implementation with a fatal error. -/
 def mutexNoDeadlock : Prop :=
   ∀ (bus : List BUse) (as : List Act),
     AllEnded bus.length as → (∀ b ∈ bus, ∃ k bb, b = .permit k bb) →
     ∀ o, outcomesP {} counterMaskModel (env behaved) (lockRoot .mutex (bus.map BUse.toUse) as) o →
-      o.summary = .done (.succeeded .unit)
+      o.summary ≠ .blocked ∧
+      ∀ v, o.summary = .done (.succeeded v) →
+        v = .unit ∧ ∀ i, OkJoined bus as i → ∃ x, joinRecV i (.ocSucceeded x) ∈ o.out
 
 /-- Statement 6 (`std.Semaphore.count.atRest`): when every user fiber has ended, nobody waits, so
 `count` equals `available` (`S:48-52`: `count` is "Like [[available]] when permits are available but
@@ -656,9 +696,10 @@ def core (o : Obs) : Summary × List Val := (o.summary, o.out)
 
 /-- Statement 8 (`std.Mutex.lock.semaphoreTwin`): `Mutex[IO]` and `Semaphore[IO](1)` used through
 `lock.use(g)` / `permit.use(g)` (and counted uses) give the same outcomes and traces, over all
-schedules (`docs/std/mutex.md:7-8`). One direction: every outcome of the mutex program is an
-outcome of the semaphore program (the converse is the same claim with the roles swapped; the smoke
-test samples both). -/
+schedules (`docs/std/mutex.md:6-7`). One direction only: every outcome of the mutex program is an
+outcome of the semaphore program. The converse (every `Semaphore(1)` outcome is a mutex outcome) is
+a different claim and is not registered. The smoke test samples only this direction, and a sampled
+miss is printed but not counted as a failure (sampling cannot show that an outcome is missing). -/
 def mutexSemaphoreTwin : Prop :=
   ∀ (u : UserEnv) (gs : List Use) (as : List Act),
     (∀ x ∈ gs, ∃ g, x = .permit g ∨ x = .counted g) →

@@ -10,12 +10,14 @@ and `PChoice` list, kernel-checked) that reaches the interesting case. User code
 * `semNoLostPermit_satisfiable`: `Semaphore(1)`, uses `[permit g, acqRel 1]`, acts
   `[cede, cancel 1, join 0]`: a run ends `Succeeded((1, 1))`.
 * `semNoDeadlock_satisfiable`: `Semaphore(1)`, `[permit (cede, then ()), acqRel 1, tryRel 1]`, acts
-  `[join 0, cancel 1, join 2, release 1]`: a run ends `Succeeded((2, 2))`.
+  `[join 0, cancel 1, join 2, release 1]`: a run ends `Succeeded((2, 2))`, and the joins of uses 0
+  and 2 recorded `Succeeded`. Regressions of review batch 11b: `fatal_regression` (H1) and
+  `w1_breaks` (W1, wrong function "`acquireN(n ≥ 2)` always raises").
 * `semAtMostK_satisfiable`: `Semaphore(1)`, two counted uses, both joined: a run with highest
   count 1 (two fibers wanted the permit, one at a time).
 * `mutexMutualExclusion_satisfiable`: the same with `Mutex`.
 * `mutexNoDeadlock_satisfiable`: `Mutex`, `[permit (cede, then ()), permit canceled]`, acts
-  `[join 0, join 1]`: a run ends `Succeeded(())`.
+  `[join 0, join 1]`: a run ends `Succeeded(())`, and the join of use 0 recorded `Succeeded`.
 * `semFifo_satisfiable`: `n = [2, 1]`, `r = 2`: a run ends `Succeeded(-1)` (the first request is
   served, the second waits).
 * `mutexSemaphoreTwin_satisfiable`: two counted uses: the mutex and the `Semaphore(1)` program each
@@ -111,22 +113,99 @@ def as2 : List Act := [.join 0, .cancel 1, .join 2, .release 1]
 def run2 : Option Obs :=
   runObsP {} counterMaskModel (env behaved) 3000 [] (lockRoot (.sem 1) (bus2.map BUse.toUse) as2)
 
-theorem run2_ok : run2.map (fun o => o.summary == .done (.succeeded (.pair (.nat 2) (.int 2)))) = some true := by
+theorem run2_ok : run2.map (fun o => o.summary == .done (.succeeded (.pair (.nat 2) (.int 2))) &&
+    o.out.contains (joinRecV 0 (.ocSucceeded .unit)) && o.out.contains (joinRecV 2 (.ocSucceeded .unit))) = some true := by
   decide +kernel
 
+/-- The interesting case of the new conclusion (review batch 11b): a run that ends `Succeeded`, with
+`available = k + released`, in which the two joined uses that must succeed (`permit` with an `ok`
+section, `tryRel`) recorded `Succeeded` (and the canceled `acqRel` is not one of them). -/
 theorem semNoDeadlock_satisfiable :
     ∃ (k : Nat) (bus : List BUse) (as : List Act),
       AllEnded bus.length as ∧ (∀ b ∈ bus, b.need ≤ k) ∧
       ∃ o, outcomesP {} counterMaskModel (env behaved) (lockRoot (.sem k) (bus.map BUse.toUse) as) o ∧
-        o.summary = .done (.succeeded (.pair (.nat (k + released as)) (.int 2))) := by
+        o.summary = .done (.succeeded (.pair (.nat (k + released as)) (.int 2))) ∧
+        OkJoined bus as 0 ∧ OkJoined bus as 2 ∧
+        joinRecV 0 (.ocSucceeded .unit) ∈ o.out ∧ joinRecV 2 (.ocSucceeded .unit) ∈ o.out := by
   obtain ⟨o, ho, hp⟩ := exists_of_map run2_ok
-  refine ⟨1, bus2, as2, ?_, by decide, o, ⟨3000, [], ho⟩, by simpa [released, as2] using hp⟩
+  simp only [Bool.and_eq_true, beq_iff_eq, List.contains_iff_mem] at hp
+  refine ⟨1, bus2, as2, ?_, by decide, o, ⟨3000, [], ho⟩, by simpa [released, as2] using hp.1.1,
+    ⟨_, rfl, rfl, by decide, by decide⟩, ⟨_, rfl, rfl, by decide, by decide⟩, hp.1.2, hp.2⟩
   intro i hi
   simp only [bus2, List.length_cons, List.length_nil] at hi
   match i, hi with
   | 0, _ => exact .inr (by decide)
   | 1, _ => exact .inl (by decide)
   | 2, _ => exact .inr (by decide)
+
+/-! ## Statement 2: regressions of review batch 11b
+
+H1: a fatal error in a critical section stops the whole run with `Summary.fatal` (as `IOFiber`
+`onFatalFailure` does). The first form of statement 2 ("every stopped run ends `Succeeded`") was
+false on this input for every implementation; the new form ("not blocked") holds on it.
+
+W1: the wrong function "`acquireN(n)` always raises for `n ≥ 2`" satisfied every first-form
+`Semaphore` statement. On `Semaphore(2)` with one joined `acqRel 2`, it records `Errored` for the
+join, which the new form of statement 2 rejects; v3.7.1 records `Succeeded`. -/
+
+def fatalErr : Err := { code := 0, kind := .fatal }
+def busF : List BUse := [.permit 0 (.err fatalErr)]
+def asF : List Act := [.join 0]
+
+def fatalRun : Option Obs :=
+  runObsP {} counterMaskModel (env behaved) 3000 [] (lockRoot (.sem 1) (busF.map BUse.toUse) asF)
+
+theorem fatalRun_ok : fatalRun.map Obs.summary = some (.fatal fatalErr) := by
+  decide +kernel
+
+/-- The fatal input meets the hypotheses of statement 2, and a run of it ends `fatal`: it refutes the
+first form, and it is not `blocked` (the new form holds on it). -/
+theorem fatal_regression :
+    AllEnded busF.length asF ∧ (∀ b ∈ busF, b.need ≤ 1) ∧
+    ∃ o, outcomesP {} counterMaskModel (env behaved) (lockRoot (.sem 1) (busF.map BUse.toUse) asF) o ∧
+      (¬ ∃ v, o.summary = .done (.succeeded v)) ∧ o.summary ≠ .blocked := by
+  have h := fatalRun_ok
+  cases hr : fatalRun with
+  | none => rw [hr] at h; simp at h
+  | some o =>
+    rw [hr] at h
+    simp only [Option.map_some, Option.some.injEq] at h
+    refine ⟨?_, by decide, o, ⟨3000, [], hr⟩, ?_, ?_⟩
+    · intro i hi
+      simp only [busF, List.length_cons, List.length_nil] at hi
+      match i, hi with
+      | 0, _ => exact .inr (by decide)
+    · rintro ⟨v, hv⟩; rw [h] at hv; cases hv
+    · rw [h]; intro hb; cases hb
+
+/-- W1 wrong function: `acquireN(n)` raises `E9` for `n ≥ 2` (`acqBody` replaced). -/
+def acqRaises (e : UserEnv) : UserEnv where
+  call := e.call
+  callV id a v :=
+    match SL.ofId? id with
+    | some (.acqBody _ n) => if 2 ≤ n then { out := .prog (.error { code := 9 }) } else e.callV id a v
+    | _ => e.callV id a v
+
+def busW : List BUse := [.acqRel 2]
+def asW : List Act := [.join 0]
+
+def w1Run : Option Obs :=
+  runObsP {} counterMaskModel (acqRaises (env behaved)) 3000 [] (lockRoot (.sem 2) (busW.map BUse.toUse) asW)
+def w1Good : Option Obs :=
+  runObsP {} counterMaskModel (env behaved) 3000 [] (lockRoot (.sem 2) (busW.map BUse.toUse) asW)
+
+/-- The wrong function ends `Succeeded`, but the join of the `acqRel 2` use recorded `Errored`, and no
+`Succeeded` record exists: the conclusion of statement 2 fails on an input that meets its
+hypotheses (`OkJoined busW asW 0`). v3.7.1 records `Succeeded`. -/
+theorem w1_breaks :
+    w1Run.map (fun o => o.summary == .done (.succeeded (.pair (.nat 2) (.int 2))) &&
+      o.out.contains (joinRecV 0 (.ocErrored { code := 9 })) &&
+      !(o.out.any fun x => match x with | .pair (.nat 62) (.pair (.nat 0) (.ocSucceeded _)) => true | _ => false)) = some true ∧
+    w1Good.map (fun o => o.summary == .done (.succeeded (.pair (.nat 2) (.int 2))) &&
+      o.out.contains (joinRecV 0 (.ocSucceeded .unit))) = some true := by
+  constructor <;> decide +kernel
+
+theorem okJoinedW : OkJoined busW asW 0 := ⟨_, rfl, rfl, by decide, by decide⟩
 
 /-! ## Statements 3 and 4: two counted uses, one at a time -/
 
@@ -175,16 +254,19 @@ def as5 : List Act := [.join 0, .join 1]
 def run5 : Option Obs :=
   runObsP {} counterMaskModel (env behaved) 3000 [] (lockRoot .mutex (bus5.map BUse.toUse) as5)
 
-theorem run5_ok : run5.map (fun o => o.summary == .done (.succeeded .unit)) = some true := by
+theorem run5_ok : run5.map (fun o => o.summary == .done (.succeeded .unit) &&
+    o.out.contains (joinRecV 0 (.ocSucceeded .unit))) = some true := by
   decide +kernel
 
 theorem mutexNoDeadlock_satisfiable :
     ∃ (bus : List BUse) (as : List Act),
       AllEnded bus.length as ∧ (∀ b ∈ bus, ∃ k bb, b = .permit k bb) ∧
       ∃ o, outcomesP {} counterMaskModel (env behaved) (lockRoot .mutex (bus.map BUse.toUse) as) o ∧
-        o.summary = .done (.succeeded .unit) := by
+        o.summary = .done (.succeeded .unit) ∧ OkJoined bus as 0 ∧
+        joinRecV 0 (.ocSucceeded .unit) ∈ o.out := by
   obtain ⟨o, ho, hp⟩ := exists_of_map run5_ok
-  refine ⟨bus5, as5, ?_, ?_, o, ⟨3000, [], ho⟩, by simpa using hp⟩
+  simp only [Bool.and_eq_true, beq_iff_eq, List.contains_iff_mem] at hp
+  refine ⟨bus5, as5, ?_, ?_, o, ⟨3000, [], ho⟩, hp.1, ⟨_, rfl, rfl, by decide, by decide⟩, hp.2⟩
   · intro i hi
     simp only [bus5, List.length_cons, List.length_nil] at hi
     match i, hi with
@@ -212,8 +294,7 @@ theorem semFifo_satisfiable :
 def run8m : Option Obs := runObsP {} counterMaskModel (env cu) 3000 [] (lockRoot .mutex us3 as3)
 def run8s : Option Obs := runObsP {} counterMaskModel (env cu) 3000 [] (lockRoot .semMutex us3 as3)
 
-theorem run8_ok : (run8m.map core, run8s.map core) =
-    (some (.done (.succeeded .unit), []), some (.done (.succeeded .unit), [])) := by
+theorem run8_ok : (run8m.map core == run8s.map core && run8m.map Obs.summary == some (.done (.succeeded .unit))) = true := by
   decide +kernel
 
 theorem mutexSemaphoreTwin_satisfiable :
@@ -231,9 +312,9 @@ theorem mutexSemaphoreTwin_satisfiable :
     | none => rw [hm, hs] at h; simp at h
     | some o' =>
       rw [hm, hs] at h
-      simp only [Option.map_some, Prod.mk.injEq, Option.some.injEq] at h
+      simp only [Option.map_some, Bool.and_eq_true, beq_iff_eq, Option.some.injEq] at h
       refine ⟨cu, us3, as3, ?_, noRelease3, wfConst _ (by decide +kernel), wfConst _ (by decide +kernel),
-        o, o', ⟨3000, [], hm⟩, ⟨3000, [], hs⟩, by rw [h.1, h.2]⟩
+        o, o', ⟨3000, [], hm⟩, ⟨3000, [], hs⟩, h.1.symm⟩
       intro x hx
       simp only [us3, List.mem_cons, List.not_mem_nil, or_false] at hx
       rcases hx with h | h <;> exact ⟨2, .inr h⟩

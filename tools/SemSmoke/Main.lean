@@ -22,7 +22,12 @@ Wrong-function tests (each must break its claim in some run):
 * "LIFO": `releaseN` serves the newest request first: statement 7;
 * "no wait": the mutex `loop` treats every cell as free: statement 4 (two holders);
 * "lost wakeup": the mutex `release` never completes its cell: statement 5;
-* "wide": `Semaphore(k + 1)` in place of `Semaphore(k)`: statement 3.
+* "wide": `Semaphore(k + 1)` in place of `Semaphore(k)`: statement 3;
+* "acquireN raises" (review batch 11b, W1): `acquireN(n)` raises for `n ≥ 2`: statement 2 (the join
+  of a use that must succeed records `Errored`).
+
+Statements 2 and 5 use the review batch 11b form: not `blocked`, and claims on `Succeeded` runs
+(join outcomes recorded by the harness). Random behaviour tables include fatal errors (H1).
 
 Forgery: a user function whose closure value is the lock state `Ref` (it captured the cell) writes
 1000 permits. `WellFormed` rejects the root; when it runs, it breaks statement 1.
@@ -129,9 +134,10 @@ def randUse (g : StdGen) (sem : Bool) (k : Nat) : Use × StdGen :=
 def randBUse (g : StdGen) (sem : Bool) (k : Nat) : BUse × StdGen :=
   let (x, g1) := randNat g 0 9
   let (c, g2) := randNat g1 0 2
-  let (b, g3) := randNat g2 0 3
+  let (b, g3) := randNat g2 0 4
   let base : Base := match b with
-    | 0 => .ok (.nat 1) | 1 => .err { code := 3 } | 2 => .canc | _ => .ok .unit
+    | 0 => .ok (.nat 1) | 1 => .err { code := 3 } | 2 => .canc | 3 => .ok .unit
+    | _ => .err { code := 1, kind := .fatal }
   let (n, g4) := randNat g3 0 k
   if (!sem || x < 5) && (!sem || 1 ≤ k) then (.permit c base, g4)
   else if x < 8 then (.acqRel n, g4)
@@ -207,6 +213,14 @@ def lostWake (e : UserEnv) : UserEnv where
     | some (.awB _ _), .bool false => { out := .prog (.pure .unit) }
     | _, _ => e.callV id a v
 
+/-- W1 of review batch 11b: `acquireN(n)` raises `E9` for `n ≥ 2`. -/
+def acqRaises (e : UserEnv) : UserEnv where
+  call := e.call
+  callV id a v :=
+    match SL.ofId? id with
+    | some (.acqBody _ n) => if 2 ≤ n then { out := .prog (.error { code := 9 }) } else e.callV id a v
+    | _ => e.callV id a v
+
 /-- "wide": `Semaphore(k + 1)` (the harness `afterCell` makes one more permit). -/
 def wide (e : UserEnv) : UserEnv where
   call := e.call
@@ -234,10 +248,33 @@ def claim1 (k r : Nat) (o : Obs) : Bool :=
   | .done (.succeeded v) => availOf v == some (k + r)
   | _ => true
 
-def claim2 (k r : Nat) (o : Obs) : Bool :=
+/-- `OkJoined` as a test. -/
+def okJoinedB (bus : List BUse) (as : List Act) (i : Nat) : Bool :=
+  match bus[i]? with
+  | some b => b.succeeds && as.contains (.join i) && !as.contains (.cancel i)
+  | none => false
+
+/-- Every joined, not canceled use that must succeed recorded `Succeeded`. -/
+def joinsOk (bus : List BUse) (as : List Act) (o : Obs) : Bool :=
+  (List.range bus.length).all fun i => !okJoinedB bus as i || o.out.any fun x =>
+    match x with
+    | .pair (.nat 62) (.pair (.nat j) (.ocSucceeded _)) => j == i
+    | _ => false
+
+/-- Statement 2 (review batch 11b form): not blocked; a `Succeeded` run has `available = k + r` and
+the joins of the uses that must succeed recorded `Succeeded`. -/
+def claim2 (bus : List BUse) (as : List Act) (k r : Nat) (o : Obs) : Bool :=
+  o.summary != .blocked &&
   match o.summary with
-  | .done (.succeeded v) => availOf v == some (k + r)
-  | _ => false
+  | .done (.succeeded v) => availOf v == some (k + r) && joinsOk bus as o
+  | _ => true
+
+/-- Statement 5 (review batch 11b form). -/
+def claim5 (bus : List BUse) (as : List Act) (o : Obs) : Bool :=
+  o.summary != .blocked &&
+  match o.summary with
+  | .done (.succeeded v) => v == .unit && joinsOk bus as o
+  | _ => true
 
 def claimHi (n : Nat) (o : Obs) : Bool :=
   match highest o with
@@ -299,7 +336,7 @@ def main (args : List String) : IO UInt32 := do
     let (as2, g5) := randActs g m true
     g := g5
     let r2 := lockRoot (.sem k) (bus.toList.map BUse.toUse) as2
-    let (d2, b2, _) := randCheck (env behaved) r2 runs seed (claim2 k (released as2))
+    let (d2, b2, _) := randCheck (env behaved) r2 runs seed (claim2 bus.toList as2 k (released as2))
     seed := seed + 1; stoppedTot := stoppedTot + d2; bad := bad + b2
     inputs := inputs.modify 1 (· + 1)
     if b2 > 0 then IO.println s!"VIOLATION 2 k={k} bus={repr bus} as={repr as2}: {b2}"
@@ -314,7 +351,7 @@ def main (args : List String) : IO UInt32 := do
     if b6 > 0 && cex6.isNone then cex6 := f6.map fun cs => (k, bus6.toList, as2, cs)
     -- the CE-0060 fixed twin: statements 2 and 6 hold
     let (_, bf6, _) := randCheck (CatsEffectInLean.Proofs.Phase7.fixedEnv (env behaved)) r6 runs seed claim6
-    let (_, bf2, _) := randCheck (CatsEffectInLean.Proofs.Phase7.fixedEnv (env behaved)) r2 runs seed (claim2 k (released as2))
+    let (_, bf2, _) := randCheck (CatsEffectInLean.Proofs.Phase7.fixedEnv (env behaved)) r2 runs seed (claim2 bus.toList as2 k (released as2))
     fixedBad := fixedBad + bf6 + bf2
     if b6 > 0 then v6inputs := v6inputs + 1
     -- statements 4, 5, 8 (mutex)
@@ -335,7 +372,7 @@ def main (args : List String) : IO UInt32 := do
       let (x, g') := randBUse g false 1
       g := g'; mbus := mbus.push x
     let rm5 := lockRoot .mutex (mbus.toList.map BUse.toUse) am
-    let (d5, b5, _) := randCheck (env behaved) rm5 runs seed (fun o => o.summary == .done (.succeeded .unit))
+    let (d5, b5, _) := randCheck (env behaved) rm5 runs seed (claim5 mbus.toList am)
     seed := seed + 1; stoppedTot := stoppedTot + d5; bad := bad + b5
     inputs := inputs.modify 4 (· + 1)
     if b5 > 0 then IO.println s!"VIOLATION 5 bus={repr mbus}: {b5}"
@@ -380,12 +417,16 @@ def main (args : List String) : IO UInt32 := do
   let (_, w1, _) := randCheck (leak (env u)) (lockRoot (.sem 1) usA asA) (4 * runs) 101 (claim1 1 0)
   let (_, w2, _) := randCheck (twice (env u)) (lockRoot (.sem 1) usA (asA ++ [.release 1])) (4 * runs) 102 (claim1 1 1)
   let busB : List BUse := [.acqRel 1, .acqRel 1, .permit 1 (.ok .unit)]
-  let (_, w3, _) := randCheck (skip (env behaved)) (lockRoot (.sem 1) (busB.map BUse.toUse) [.join 0, .join 1, .join 2]) (4 * runs) 103 (claim2 1 0)
+  let (_, w3, _) := randCheck (skip (env behaved)) (lockRoot (.sem 1) (busB.map BUse.toUse) [.join 0, .join 1, .join 2]) (4 * runs) 103 (claim2 busB [.join 0, .join 1, .join 2] 1 0)
   let (_, w4, _) := randCheck (lifo fifoEnv) (fifoRoot [1, 2] 1) (4 * runs) 104 (claim7 [1, 2] 1)
   let (_, w5, _) := randCheck (noWait (env u)) (lockRoot .mutex [.counted 4, .counted 4] [.join 0, .join 1]) (4 * runs) 105 (claimHi 1)
   let busM : List BUse := [.permit 1 (.ok .unit), .permit 0 (.ok .unit)]
   let (_, w6, _) := randCheck (lostWake (env behaved)) (lockRoot .mutex (busM.map BUse.toUse) [.join 0, .join 1]) (4 * runs) 106
-    (fun o => o.summary == .done (.succeeded .unit))
+    (claim5 busM [.join 0, .join 1])
+  -- W1 (review batch 11b): `acquireN(n)` always raises for `n ≥ 2`
+  let busW : List BUse := [.acqRel 2, .permit 0 (.ok .unit)]
+  let (_, w8, _) := randCheck (acqRaises (env behaved)) (lockRoot (.sem 2) (busW.map BUse.toUse) [.join 0, .join 1]) (4 * runs) 108
+    (claim2 busW [.join 0, .join 1] 2 0)
   let (_, w7, _) := randCheck (wide (env u)) (lockRoot (.sem 1) [.counted 4, .counted 4] [.join 0, .join 1]) (4 * runs) 107 (claimHi 1)
   -- forgery
   let mut forgeAccepted := false
@@ -397,5 +438,5 @@ def main (args : List String) : IO UInt32 := do
     wF := wF + b
   IO.println s!"forgery: accepted by WellFormed {forgeAccepted}; runs that break statement 1: {wF}"
   if forgeAccepted || wF == 0 then bad := bad + 1
-  IO.println s!"wrong functions (runs that break the claim, expected > 0): leak {w1}, twice {w2}, skip {w3}, lifo {w4}, noWait {w5}, lostWake {w6}, wide {w7}"
-  return if bad == 0 && w1 > 0 && w2 > 0 && w3 > 0 && w4 > 0 && w5 > 0 && w6 > 0 && w7 > 0 then 0 else 1
+  IO.println s!"wrong functions (runs that break the claim, expected > 0): leak {w1}, twice {w2}, skip {w3}, lifo {w4}, noWait {w5}, lostWake {w6}, wide {w7}, acquireN raises {w8}"
+  return if bad == 0 && w1 > 0 && w2 > 0 && w3 > 0 && w4 > 0 && w5 > 0 && w6 > 0 && w7 > 0 && w8 > 0 then 0 else 1
