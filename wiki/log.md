@@ -364,3 +364,7 @@
 - Created: review/2026-11-15-review-batch-11a.md
 - Updated: Agent workflow and review protocol (review log, raw link)
 - Raw: raw/project-decisions/2026-11-15-review-batch-11a-notes.md
+
+## [2026-11-15] ingest | Track Q: fixes after review batch 11a
+- Updated: Queue families model (fifo per remover, takerLiveness QuietBlock, D1-D5, merged-generator difftest)
+- Raw: raw/cats-effect/2026-11-15-queue-review11a-fixes.md
