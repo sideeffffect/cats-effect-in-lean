@@ -580,32 +580,43 @@ def twinSeq : Prop :=
   ∀ cap, 2 ≤ cap → cap < asyncLimit → ∀ p ∈ twinPairs cap, ∀ s,
     SameResults p.1 p.2 s ∧ SameResults p.2 p.1 s
 
-/-! ## Statement 8: `Synchronous#tryTake` takes from a waiting offerer (decision 63 gap)
+/-! ## Statement 8: `Synchronous#tryTake` and `#tryOffer` meet a waiting partner (decision 63 gap)
 
 Scaladoc: `tryTake` "Attempts to dequeue an element from the front of the queue, if one is
 available without fiber blocking" (`std/.../QueueSource.scala:31-38`); `synchronous`: "a single
 element can pass only in the case when there are at least one taking fiber and at least one
-offering fiber ... at which point both fibers are freed" (`Q:139-148`). Code: with an offerer in
+offering fiber ... at which point both fibers are freed" (`Q:139-148`); `tryOffer` (`QueueSink`):
+"Attempts to enqueue the given element without semantically blocking". Code: with an offerer in
 `offerers`, `tryTake` dequeues it, completes its latch with `true` and returns `Some(value)`
-(`Q:347-353`); the offerer's `checkCommit` then returns (`Q:251`).
+(`Q:347-353`); the offerer's `checkCommit` then returns (`Q:251`). With a taker in `takers`,
+`tryOffer` completes the taker's latch with `(a, latch)` and returns what the taker answers,
+`true` (`Q:274-290`, `:336-338`); review batch 13 G1: a `tryOffer` that always answers `false`
+passed every other statement.
 
 A per-run claim over all schedules cannot see this: a `tryTake` that runs before the offerer
 registers correctly returns `None`, with the same observation as a broken `tryTake` that ignores a
-registered offerer. So the statement fixes the order with the FIFO replay schedule (`PChoice` list
-`[]`): the root starts the offerer (fiber 0) and the taker (fiber 1) and joins fiber 0; fiber 0 runs
-until it suspends in `offer` (registered in `offerers`) before fiber 1 starts. For every element
-`x` and every fuel, a run that stops has `tryTake` = `Some(x)`, both joins `Succeeded`, and ends
-`Succeeded`. -/
+registered offerer (the same for `tryOffer` and `false`). So the statement fixes the order with the
+FIFO replay schedule (`PChoice` list `[]`): the root starts the waiting partner (fiber 0) and the
+`try` fiber (fiber 1) and joins both; fiber 0 runs until it suspends in `offer` (or `take`) before
+fiber 1 starts. For every element `x` and every fuel, a run that stops has `tryTake` = `Some(x)`
+(resp. `tryOffer` = `true` and the taker took `x`), both joins `Succeeded`, and ends `Succeeded`. -/
 
 /-- The input of statement 8. -/
 def handoffRoot (x : Val) : IO := rootIO .synchronous [[.offer x], [.tryTake]] [] (.join [0, 1])
 
+/-- The `tryOffer` input of statement 8: a waiting taker, then `tryOffer(x)`. -/
+def handoffOfferRoot (x : Val) : IO := rootIO .synchronous [[.take], [.tryOffer x]] [] (.join [0, 1])
+
 /-- Statement 8. -/
-def syncTryTakeHandoff : Prop :=
-  ∀ (x : Val) (fuel : Nat) (o : Obs),
-    runObsP {} counterMaskModel henv fuel [] (handoffRoot x) = some o →
+def syncHandoff : Prop :=
+  ∀ (x : Val) (fuel : Nat),
+    (∀ o, runObsP {} counterMaskModel henv fuel [] (handoffRoot x) = some o →
       (evTryTook, 1, Val.some x) ∈ events o.out ∧ (evJoined, 0, Val.ocSucceeded .unit) ∈ events o.out ∧
-      (evJoined, 1, Val.ocSucceeded .unit) ∈ events o.out ∧ o.summary = .done (.succeeded .unit)
+      (evJoined, 1, Val.ocSucceeded .unit) ∈ events o.out ∧ o.summary = .done (.succeeded .unit)) ∧
+    (∀ o, runObsP {} counterMaskModel henv fuel [] (handoffOfferRoot x) = some o →
+      (evTryOffered, 1, Val.pair x (.bool true)) ∈ events o.out ∧ (evTook, 0, x) ∈ events o.out ∧
+      (evJoined, 0, Val.ocSucceeded .unit) ∈ events o.out ∧ (evJoined, 1, Val.ocSucceeded .unit) ∈ events o.out ∧
+      o.summary = .done (.succeeded .unit))
 
 def concSeqSpec : Prop := SeqSpec ConcAny
 def asyncSeqSpec : Prop := SeqSpec AsyncAny

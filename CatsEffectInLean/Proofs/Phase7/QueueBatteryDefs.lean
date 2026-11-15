@@ -130,4 +130,36 @@ def runOp (e : UserEnv) (k : QKind) (op : OpK) : Option Obs :=
 /-- The claim of `SeqSpec` on that run. -/
 def specOK (e : UserEnv) (k : QKind) (op : OpK) : Option Bool := (runOp e k op).map (specB k (inputOf op))
 
+/-! ## Factory rows (review batch 13 L2)
+
+A wrong factory replaces the `IO` that `Queue.bounded` (etc.) returns: `raises` = `raiseError(E77)`,
+`hangs` = an `IOCont` that never resumes. `drops`/`doubles` are meaningless for a factory: it has
+no effect on an existing queue (allocating twice and keeping one queue is the same as once). -/
+
+/-- The harness root with factory term `fac` in place of `newIO k`. -/
+def rootWith (fac : IO) (scripts : List (List Op)) (plan : List (Nat × Nat)) (mode : Mode) : IO :=
+  .flatMap fac
+    (QH.afterNew (listV (scripts.map fun s => listV (s.map Op.toVal)))
+      (listV (plan.map fun (n, i) => .pair (.nat n) (.nat i))) mode.toVal).fn
+
+theorem rootWith_newIO (k : QKind) (s : List (List Op)) (p : List (Nat × Nat)) (m : Mode) :
+    rootWith (newIO k) s p m = rootIO k s p m := rfl
+
+/-- `henv` plus the wrong closures (namespace 59). -/
+def wOnly : UserEnv :=
+  let f (id : Nat) (arg : Val) (v : View) : UserResult :=
+    match wCall id arg with
+    | some r => r
+    | none => henv.callV id arg v
+  { call := fun id arg refs => f id arg { refs }, callV := f }
+
+/-- The wrong factory term. -/
+def wrongFactory : Var → IO
+  | .raises => .error { code := 77 }
+  | _ => .ioCont (.user (wId 0 []))
+
+/-- `SeqSpec` on input `[size]` for kind `k` with factory term `fac`. -/
+def factoryOK (fac : IO) (k : QKind) : Option Bool :=
+  (runObsP {} counterMaskModel wOnly 3000 [] (rootWith fac [[.size]] [] (.join [0]))).map (specB k [.size])
+
 end CatsEffectInLean.Proofs.Phase7.QueueBattery

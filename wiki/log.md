@@ -413,3 +413,7 @@
 ## [2026-11-15] ingest | Track Q: Synchronous tryTake handoff (decision 63 gap closed)
 - Updated: Queue families model (statement 8, battery table complete)
 - Raw: raw/cats-effect/2026-11-15-queue-sync-trytake-handoff.md
+
+## [2026-11-15] ingest | Track Q: review batch 13 follow-ups (G1 tryOffer handoff, battery on all classes, factory rows)
+- Updated: Queue families model
+- Raw: raw/cats-effect/2026-11-15-queue-review13-battery.md

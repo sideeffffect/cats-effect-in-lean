@@ -1,7 +1,7 @@
 # Queue families model (Phase 7, track Q)
 
 > Sources: Cats Effect v3.7.1 (`std/.../Queue.scala:31-1206`, `UnsafeUnbounded.scala:23-113`, `QueueSource.scala:23-80`, `kernel/jvm-native/.../SyncRef.scala`, `kernel/.../Ref.scala:123-124`, `IO.scala:1353-1431`, `:1548`, `:1996-2163`, `IOFiber.scala:225-260`, `:1210-1266`, `tests/.../QueueSuite.scala:787-890`); own Lean work, difftest and smoke runs, 2026-11-15
-> Raw: [Synchronous tryTake handoff](../../raw/cats-effect/2026-11-15-queue-sync-trytake-handoff.md); [Review 12 fixes and battery](../../raw/cats-effect/2026-11-15-queue-review12-battery.md); [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Review 11a fixes](../../raw/cats-effect/2026-11-15-queue-review11a-fixes.md); [Review batch 11a notes](../../raw/project-decisions/2026-11-15-review-batch-11a-notes.md); [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
+> Raw: [Review 13 battery](../../raw/cats-effect/2026-11-15-queue-review13-battery.md); [Synchronous tryTake handoff](../../raw/cats-effect/2026-11-15-queue-sync-trytake-handoff.md); [Review 12 fixes and battery](../../raw/cats-effect/2026-11-15-queue-review12-battery.md); [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Review 11a fixes](../../raw/cats-effect/2026-11-15-queue-review11a-fixes.md); [Review batch 11a notes](../../raw/project-decisions/2026-11-15-review-batch-11a-notes.md); [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
 
 ## Overview
 
@@ -70,6 +70,12 @@ Fixes of review batch 12 (2026-11-15):
 - New statements `std.Queue.Concurrent.seqSpec`, `std.Queue.Async.seqSpec` (`SeqSpec`): one fiber, any script; trace and summary equal a sequential FIFO specification with the factory's capacity rule (`specRun`). This is the success claim of decision 63 item 3 for all five operations.
 - Decision 63 battery: for `offer`, `tryOffer`, `take`, `tryTake`, `size` × raises, hangs, drops, doubles, a kernel-checked break in each family (`QueueBatteryConc`: `BoundedQueue`; `QueueBatteryAsync`: `BoundedAsyncQueue`; `QueueBatterySync`: `Synchronous`). `size` drops/doubles are meaningless (read only). The `Synchronous#tryTake` "drops" row (None while an offerer waits) is closed by statement 8, `std.Queue.Synchronous.tryTakeHandoff` (FIFO schedule: the offerer is registered when `tryTake` runs; Scaladoc and `Q:347-353` hand the element over; kernel-checked break `sync_tryTake_drops`). A per-run claim over all schedules cannot see this row: a `tryTake` before the offerer registers correctly returns `None` with the same observation. Table: [raw note](../../raw/cats-effect/2026-11-15-queue-review12-battery.md).
 - The two `FailureSignal` rows: `deferred: phase 9 (weak memory model)`.
+
+Review batch 13 (all 13 queue entries FAITHFUL; 2026-11-15 follow-ups):
+
+- G1: statement 8 is `syncHandoff` (entry `std.Queue.Synchronous.tryHandoff`): both `tryTake` with a waiting offerer and `tryOffer` with a waiting taker (FIFO schedule). `wSyncTryOfferFalse` (always `false`) breaks it (kernel-checked).
+- L1: the operation battery also runs on `DroppingQueue`, `CircularBufferQueue`, `UnboundedAsyncQueue`, `DroppingAsyncQueue` (`QueueBatteryConcOther`, `QueueBatteryAsyncOther`, every row kernel-checked).
+- L2: factory rows (`QueueBatteryFactory`): seven factory kinds × raises, hangs break `SeqSpec`. Full table: [raw note](../../raw/cats-effect/2026-11-15-queue-review13-battery.md).
 
 Open points: proofs need invariants over `SchedP` runs (as the Phase 6 entries). No linearizability statement yet (only the sequential twin and FIFO). `mapK` (`Q:51-58`, open issue #4483), `tryTakeN`/`tryOfferN`, `unsafeBounded`, `unsafeUnbounded` are not mirrored.
 
