@@ -344,3 +344,8 @@
 ## [2026-11-15] ingest | Phase 7 start: tracks Q, S, L (decisions 59-62)
 - Updated: Project plan (Phase 7 status)
 - Raw: raw/project-decisions/2026-11-15-phase7-start.md
+
+## [2026-11-15] ingest | Phase 7 track S: Semaphore and Mutex mirrors, difftest, 8 statements, CE-0060
+- Created: Semaphore and Mutex model (cats-effect/semaphore-mutex-model.md)
+- Updated: Difftest program format (track S ops), Bug history (CE-0060), parTraverseN model (See Also; `rankOrder` gap), index
+- Raw: raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md

@@ -1,7 +1,7 @@
 package cats.effect.difftest
 
 import cats.effect.{Deferred, Fiber, IO, Outcome, Poll, Ref, Resource}
-import cats.effect.std.Queue
+import cats.effect.std.{Mutex, Queue, Semaphore}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.*
@@ -59,6 +59,10 @@ final class Harness:
   def newQueue(q: Queue[IO, Val]): Int = synchronized { queues += q; queues.size - 1 }
   val memos = ArrayBuffer.empty[IO[Val]]
   def newMemo(g: IO[Val]): Int = synchronized { memos += g; memos.size - 1 }
+  val sems = ArrayBuffer.empty[Semaphore[IO]]
+  def newSem(s: Semaphore[IO]): Int = synchronized { sems += s; sems.size - 1 }
+  val mutexes = ArrayBuffer.empty[Mutex[IO]]
+  def newMutex(m: Mutex[IO]): Int = synchronized { mutexes += m; mutexes.size - 1 }
   def newAsync(): Int = synchronized { asyncs += 1; asyncs - 1 }
 
 /** The error code of `java.util.concurrent.TimeoutException` (format v1). The value language has
@@ -137,6 +141,14 @@ final class Interp(h: Harness):
   private def memoOf(v: Val): IO[Val] = v match
     case VMemo(i) => h.memos(i)
     case _ => throw TypeError(s"not a memo handle: $v")
+
+  private def semOf(v: Val): Semaphore[IO] = v match
+    case VSem(i) => h.sems(i)
+    case _ => throw TypeError(s"not a semaphore handle: $v")
+
+  private def mutexOf(v: Val): Mutex[IO] = v match
+    case VMutex(i) => h.mutexes(i)
+    case _ => throw TypeError(s"not a mutex handle: $v")
 
   private def deferredOf(v: Val): (Int, Deferred[IO, Val]) = v match
     case VDeferred(i) => (i, h.deferreds(i))
@@ -297,6 +309,18 @@ final class Interp(h: Harness):
     case Prog.ParTraverseN(n, xs, x, f) =>
       IO.parTraverseN(n)(xs.map(atom(_, env)))(a => run(f, env + (x -> Bound.V(a))))
         .map(bs => bs.foldRight(VUnit: Val)((b, acc) => VPair(b, acc)))
+    // ---- format v2 (Phase 7, track S): `std.Semaphore` (Semaphore.scala:130-277), `std.Mutex`
+    // (Mutex.scala:68-93, LockQueue.scala:42-109)
+    case Prog.SemNew(n) => Semaphore[IO](n).map(s => VSem(h.newSem(s)))
+    case Prog.SemAcquireN(s, n) => semOf(atom(s, env)).acquireN(n).as(VUnit)
+    case Prog.SemReleaseN(s, n) => semOf(atom(s, env)).releaseN(n).as(VUnit)
+    case Prog.SemTryAcquireN(s, n) => semOf(atom(s, env)).tryAcquireN(n).map(VBool(_))
+    case Prog.SemAvailable(s) => semOf(atom(s, env)).available.map(VNat(_))
+    case Prog.SemCount(s) =>
+      semOf(atom(s, env)).count.map(c => if (c >= 0) VRight(VNat(c)) else VLeft(VNat(-c)))
+    case Prog.SemPermit(s, e) => semOf(atom(s, env)).permit.use(_ => run(e, env))
+    case Prog.MutexNew => Mutex[IO].map(m => VMutex(h.newMutex(m)))
+    case Prog.MutexLock(m, e) => mutexOf(atom(m, env)).lock.use(_ => run(e, env))
 
   /** `(a, oc) => ocVal(oc).flatMap(o => IO.delay(emit fin) *> run(rel, env + x + y).void)` (format v2). */
   private def caseRelease(op: String, x: String, y: String, rel: Prog, tag: Long, env: Env)

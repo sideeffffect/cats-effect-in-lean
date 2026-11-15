@@ -234,6 +234,20 @@ inductive Lam where
   | ptF
   /-- `parTraverseN`: `.map(bs => list)` (the model already holds the list encoding). -/
   | ptList
+  -- format v2 (Phase 7, track S): `Semaphore`, `Mutex` run on `Model/Semaphore.lean`,
+  -- `Model/Mutex.lean`
+  /-- `semNew`: `s => VSem(h.newSem(s))`. -/
+  | semHandle
+  /-- `semPermit`: `_ => I(e)` (the `use` function). `vals = env`. -/
+  | semUse
+  /-- `semTryAcquireN`/`semAvailable`: `VBool(_)`/`VNat(_)` (the model already holds the value). -/
+  | semVal
+  /-- `semCount`: `c => if (c >= 0) VRight(VNat(c)) else VLeft(VNat(-c))`. -/
+  | semCountMap
+  /-- `mutexNew`: `m => VMutex(h.newMutex(m))`. -/
+  | mutexHandle
+  /-- `mutexLock`: `_ => I(e)` (the `use` function). `vals = env`. -/
+  | mutexUse
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -251,7 +265,8 @@ def Lam.all : List Lam :=
    .brcRel, .brcFinK, .brcFinEmit, .brcFinThen, .bfAcq,
    .memoSrc, .memoHandle,
    .ruUse, .raK, .raRelAs, .ruRes, .rbA, .rbB, .rbPair,
-   .ptF, .ptList]
+   .ptF, .ptList,
+   .semHandle, .semUse, .semVal, .semCountMap, .mutexHandle, .mutexUse]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?

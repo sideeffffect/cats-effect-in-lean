@@ -1,0 +1,99 @@
+id: CE-0060
+title: "Semaphore#count counts canceled waiters: after all waiters are canceled, nobody waits, but count stays negative until the next release"
+status: draft  # found in Phase 7 track S (2026-11-15); not reviewed yet
+priority: low
+kind: doc-mismatch
+area: std
+files:
+  - std/shared/src/main/scala/cats/effect/std/Semaphore.scala:168-177  # reclaim: removes the request only if it is the head
+  - std/shared/src/main/scala/cats/effect/std/Semaphore.scala:188-191  # cleanup: won => reclaim(req)
+  - std/shared/src/main/scala/cats/effect/std/Semaphore.scala:229      # releaseN(0) = F.unit: no sweep
+  - std/shared/src/main/scala/cats/effect/std/Semaphore.scala:258-263  # count = -waiting.foldMap(_.remaining)
+functions:
+  - Semaphore#count
+  - Semaphore#acquireN (cancelation path)
+summary: >
+  Since PR #4648 (in v3.7.1) a canceled `acquireN` does not remove its request from the waiting
+  queue. It completes its gate and calls `reclaim(req)`, which removes the request only when it is
+  the head of the queue. A canceled request behind the head stays in the queue until a later
+  `releaseN` reaches it (the `wake`/`sweep` of `releaseN`). If the head is canceled too,
+  `reclaim(head)` removes it and calls `releaseN(head.sunk)`; when the head had no permits yet
+  (`sunk = 0`), that is `F.unit`, so nothing sweeps the canceled request behind it. `count` returns
+  `-waiting.foldMap(_.remaining)` and so counts the canceled request as a waiter. Example:
+  `Semaphore[IO](0)`, fibers `a` and `b` call `acquire` (in this order), then `b` and `a` are
+  canceled: both fibers have ended and nobody waits, `available = 0`, but `count = -1`. It stays
+  -1 until a `release` (the release then goes to the canceled request, which gives it back).
+  With `Semaphore(1)` and the permit held by another fiber, `count` is -1 instead of 0 until that
+  fiber releases. `available`, `acquire`, `release` and `tryAcquire` are not affected: no permit is
+  lost (the smoke tests of the no-lost-permit and no-deadlock statements found no violation).
+likelihood: >
+  Medium for the state, low for the harm. Any program that cancels two or more waiters of a
+  semaphore with no free permits gets the state (for example timeouts on `acquire` of a
+  `Semaphore(0)` used as a signal, or a pool where all permits are held). Only code that reads
+  `count` sees it: for example a metric "callers waiting", or code that waits until `count` reaches
+  0 or a value (such code can wait until the next release). The reproducer shows it in 100/100
+  TestControl seeds and 200/200 runs on the default runtime (the program is deterministic).
+maybe_intended: >
+  Likely intended as a trade-off. The description of PR #4648 (O(1) cancelation for Semaphore and
+  MiniSemaphore) lists: "2. count may transiently include them." The Scaladoc of `count` was not
+  changed and still says it "returns the number of permits callers are waiting for". The state is
+  not transient in general: it persists until the next release, and with `Semaphore(0)` there may
+  be no next release. Maintainers may accept it and update the Scaladoc instead.
+reproducer: reproducers/CE-0060/Repro.scala
+output:
+  # v3.7.1, scala-cli, 2026-11-15
+  v3.7.1: |
+    A TestControl: results (-1,0,-1); count != available in 100/100 seeds
+    A default runtime: results (-1,0,-1); count != available in 200/200 runs
+    B TestControl: (count while held, count after release) (-1,1) (expected (0,1))
+    REPRODUCED CE-0060
+  # series/3.x = 3.7.1-89-de84c01 (publishLocal snapshot of origin/series/3.x head
+  # de84c01f76b2f42fcee9d43aba66c82992add103; head checked unchanged with `gh api` on 2026-11-15;
+  # Semaphore.scala last changed on series/3.x by 643ba33566, PR #4648, which is in v3.7.1)
+  series/3.x: |
+    A TestControl: results (-1,0,-1); count != available in 100/100 seeds
+    A default runtime: results (-1,0,-1); count != available in 200/200 runs
+    B TestControl: (count while held, count after release) (-1,1) (expected (0,1))
+    REPRODUCED CE-0060
+  # series/3.7.x = 3.7.1-15-2f94201 (publishLocal, 2026-11-10): same output
+  series/3.7.x: |
+    (same lines as v3.7.1)
+    REPRODUCED CE-0060
+expected: |
+  After both waiters are canceled nobody waits, so `count` = `available` = 0 (program A), and
+  `count` = 0 while another fiber holds the only permit (program B). The reproducer then prints
+  0/100 and 0/200, and its last line is NOT REPRODUCED CE-0060.
+promised_by:
+  - "Scaladoc of Semaphore#count (Semaphore.scala:47-53): 'Obtains a snapshot of the current count. May be negative. Like [[available]] when permits are available but returns the number of permits callers are waiting for when there are no permits available.'"
+  - "Scaladoc of Semaphore#acquireN (Semaphore.scala:63-65): 'This method is interruptible, and in case of interruption it will take care of restoring any permits it has acquired.' (A canceled acquire is not a waiter.)"
+cause: >
+  PR #4648 (commit 643ba33566, merged 2026-08-22 into series/3.7.x, released in v3.7.1) replaced
+  the O(n) removal of a canceled request (`waiting.filterNot(_ sameAs req)`) by a race on the gate
+  and a lazy sweep. `reclaim` (Semaphore.scala:168-177) removes only the head; the sweep in
+  `releaseN` (:244-249) runs only when a release with n > 0 reaches a non-empty queue;
+  `reclaim(head)` with `sunk = 0` calls `releaseN(0)` = `F.unit` (:229), so it never triggers a
+  sweep. `count` (:258-263) does not know which requests are canceled.
+possible_fix: >
+  Remove the canceled request wherever it is (the v3.7.0 behaviour, O(n) per cancelation), or,
+  to keep O(1), let `reclaim` of the head also drop the canceled requests directly behind it (their
+  gates are completed; `tryGet` tells), or keep a count of canceled-but-queued permits in `State`
+  and subtract it in `count`. The Lean fixed twin (eager removal in `cleanup`,
+  Proofs/Phase7/SemaphoreCountFixedDefs.lean) meets the property on 4 inputs x 12 schedules
+  (kernel, Proofs/Phase7/SemaphoreCountFixed.lean) where v3.7.1 fails, and in the random smoke test
+  (`lake exe semsmoke`). Or change the Scaladoc of `count` to say that canceled waiters can be
+  counted until the next release.
+duplicates:
+  upstream: []
+  related:
+    - "typelevel/cats-effect#4648 (merged 2026-08-22) O(1) cancelation for Semaphore and MiniSemaphore: introduced the lazy sweep; its description names the trade-off 'count may transiently include them'"
+    - "typelevel/cats-effect#4434 (closed) parTraverseN performance problems in presence of errors or other cancellations: the reason for #4648"
+  queries:
+    - "gh search issues 'Semaphore count' -R typelevel/cats-effect (2026-11-15): no result"
+    - "gh search issues 'Semaphore cancel' / 'Semaphore canceled waiter' / 'Semaphore reclaim' -R typelevel/cats-effect (2026-11-15): no result"
+    - "gh search issues 'Semaphore' -R typelevel/cats-effect (2026-11-15): 40 results (#3899, #1863, #4262, #4434, #823, #1927, #380, #384, ...); none about count and canceled waiters"
+    - "gh search prs 'Semaphore' -R typelevel/cats-effect (2026-11-15): #4648, #2843, #2350, #2063, ...; only #4648 touches this code"
+lean:
+  property: CatsEffectInLean.Props.Phase7.Semaphore.semCountAtRest
+  theorem: CatsEffectInLean.Proofs.Phase7.semCountAtRest_refuted
+  fixed_twin: CatsEffectInLean/Proofs/Phase7/SemaphoreCountFixed.lean
+  ordinary_inputs: "The input is ordinary (two canceled acquires on a semaphore with no free permit). The related statements about permits (std.Semaphore.noLostPermit, std.Semaphore.noDeadlock) are open and hold in all smoke runs: the ghost request does not lose permits."

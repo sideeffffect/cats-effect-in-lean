@@ -8,6 +8,7 @@ import CatsEffectInLean.Model.ParTraverse
 import CatsEffectInLean.Model.Memoize
 import CatsEffectInLean.Model.ResourceUse
 import CatsEffectInLean.Std.Queue
+import CatsEffectInLean.Model.Mutex
 
 /-!
 # Translation: difftest program → `Model.IO` + user environment
@@ -100,6 +101,12 @@ inductive TraceEv where
   | deferredH (d : Nat)
   /-- Internal (not printed): `h.newMemo` gives the memo with state cell `r` its handle. -/
   | memoH (r : Nat)
+  /-- Internal (not printed; Phase 7, track S): `h.newSem` gives the semaphore with state cell `q`
+  its handle. -/
+  | semH (q : Nat)
+  /-- Internal (not printed; Phase 7, track S): `h.newMutex` gives the mutex with queue cell `q`
+  its handle. -/
+  | mutexH (q : Nat)
   deriving DecidableEq, Repr
 
 /-- A trace event as a model value, for `UserEffect.emit`. Tag first. -/
@@ -121,6 +128,8 @@ def TraceEv.toVal : TraceEv → Val
       (match oc with | some o => .some o | none => .none)))
   | .deferredH d => .pair (.nat 14) (.nat d)
   | .memoH r => .pair (.nat 15) (.nat r)
+  | .semH q => .pair (.nat 60) (.nat q)
+  | .mutexH q => .pair (.nat 61) (.nat q)
 
 /-- The inverse of `TraceEv.toVal`. -/
 def TraceEv.ofVal? : Val → Option TraceEv
@@ -141,6 +150,8 @@ def TraceEv.ofVal? : Val → Option TraceEv
   | .pair (.nat 13) (.pair (.nat op) (.pair (.nat tag) (.some o))) => some (.finV2 op tag (some o))
   | .pair (.nat 14) (.nat d) => some (.deferredH d)
   | .pair (.nat 15) (.nat r) => some (.memoH r)
+  | .pair (.nat 60) (.nat q) => some (.semH q)
+  | .pair (.nat 61) (.nat q) => some (.mutexH q)
   | _ => none
 
 /-! ## Construction-time snapshot
@@ -241,6 +252,19 @@ buffer (`Std.Queue`), a `Val.ref`. -/
 def queueId (env : List Val) (a : Atom) : Except TrErr Nat := do
   match ← atomVal env a with
   | .ref i => pure i
+  | _ => throw .typeError
+
+/-- `semOf` (`Interp.scala`, Phase 7 track S): the semaphore object id of an atom (a reference
+to `Semaphore.SL.obj q`). -/
+def semObj (env : List Val) (a : Atom) : Except TrErr Nat := do
+  match ← atomVal env a with
+  | .fn k => if (Semaphore.semRef? k).isSome then pure k else throw .typeError
+  | _ => throw .typeError
+
+/-- `mutexOf` (`Interp.scala`, Phase 7 track S): the mutex object id of an atom. -/
+def mutexObj (env : List Val) (a : Atom) : Except TrErr Nat := do
+  match ← atomVal env a with
+  | .fn k => if (Mutex.mutexRef? k).isSome then pure k else throw .typeError
   | _ => throw .typeError
 
 /-- `poll(io)` with the poll value `(m, f)`: `UnmaskRunLoop(io, m, f)` (`IOFiber.scala:564-567`),
@@ -504,6 +528,28 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     match Memoize.getOfVal? (← atomVal env m) with
     | some io => pure io
     | none => throw .typeError
+  -- format v2 (Phase 7, track S): the mirrors `Model/Semaphore.lean`, `Model/Mutex.lean`
+  | .semNew k, node, _, _ =>
+    -- `Semaphore[IO](n).map(s => VSem(h.newSem(s)))` (`Semaphore.scala:130-133`)
+    pure (.map (Semaphore.newIO k) (clo node .semHandle []))
+  | .semAcquireN s k, node, env, _ => do
+    pure (.map (Semaphore.acquireNIO (← semObj env s) k) (clo node .asUnit []))
+  | .semReleaseN s k, node, env, _ => do
+    pure (.map (Semaphore.releaseNIO (← semObj env s) k) (clo node .asUnit []))
+  | .semTryAcquireN s k, node, env, _ => do
+    pure (.map (Semaphore.tryAcquireNIO (← semObj env s) k) (clo node .semVal []))
+  | .semAvailable s, node, env, _ => do
+    pure (.map (Semaphore.availableIO (← semObj env s)) (clo node .semVal []))
+  | .semCount s, node, env, _ => do
+    pure (.map (Semaphore.countIO (← semObj env s)) (clo node .semCountMap []))
+  | .semPermit s _, node, env, _ => do
+    -- `semOf(⟦s⟧).permit.use(_ => I(e))`; `I(e)` is built when `use` calls the function
+    pure (Semaphore.permitUseIO (← semObj env s) (cloId node .semUse env))
+  | .mutexNew, node, _, _ =>
+    -- `Mutex[IO].map(m => VMutex(h.newMutex(m)))` (`Mutex.scala:68-74`)
+    pure (.map Mutex.newIO (clo node .mutexHandle []))
+  | .mutexLock m _, node, env, _ => do
+    pure (Mutex.lockUseIO (← mutexObj env m) (cloId node .mutexUse env))
 
 
 /-- `I_R(r)`: the `Resource` term of a resource node (`Interp.scala` `res`). The `IO` programs

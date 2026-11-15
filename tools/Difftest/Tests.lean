@@ -289,4 +289,20 @@ def vDone : View := { outcomes := [none, some (.succeeded (.nat 3))], deferreds 
 #guard [TraceEv.finV2 0 1 none, .finV2 3 2 (some .ocCanceled)].all fun e => TraceEv.ofVal? e.toVal == some e
 #guard (cloId 3 .brUse [.nat 1]) % 2 == 0 && cloOfId? (cloId 3 .brUse [.nat 1]) == some ⟨3, .brUse, [.nat 1]⟩
 
+/-! ## Format v2, Phase 7 track S (`Semaphore`, `Mutex`) -/
+
+#guard isErr (decCase r#"{"v":1,"id":"x","mode":"replay","prog":{"op":"semNew","n":1}}"#)
+#guard isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"pure","v":{"t":"sem","id":0}}}"#)
+#guard isErr (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"pure","v":{"t":"mutex","id":0}}}"#)
+#guard (decCase r#"{"v":2,"id":"x","mode":"replay","prog":{"op":"bind","x":"s","e":{"op":"semNew","n":2},"k":{"op":"semPermit","s":{"t":"var","x":"s"},"e":{"op":"cede"}}}}"#).map (·.prog) ==
+  .ok (.bind (.semNew 2) (.semPermit (.var 0) .cede))
+-- the ops run on the mirrors; a semaphore is a reference to its object closure
+#guard rootTerm (.semNew 3) == .ok (.map (CatsEffectInLean.Model.Semaphore.newIO 3) (clo 0 .semHandle []))
+#guard rootTerm .mutexNew == .ok (.map CatsEffectInLean.Model.Mutex.newIO (clo 0 .mutexHandle []))
+#guard rootTerm (.semAvailable (.lit (.nat 1))) == .error .typeError
+#guard (callFn (.semNew 0) (clo 0 .semHandle []) (CatsEffectInLean.Model.Semaphore.semV 4)).trace == [.semH 4]
+#guard (callFn .mutexNew (clo 0 .mutexHandle []) (CatsEffectInLean.Model.Mutex.mutexV 5)).trace == [.mutexH 5]
+#guard [TraceEv.semH 3, .mutexH 4].all fun e => TraceEv.ofVal? e.toVal == some e
+#guard unsupportedOps (.semPermit (.lit .unit) .cede) == []
+
 end Difftest.Tests

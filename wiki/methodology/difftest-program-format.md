@@ -164,6 +164,25 @@ New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decod
 - `Prog.eagerReads`: `rUse`/`rAllocated` build `res` at once; `rBoth` builds both sides.
 - Fixed cases `cases/resuse.jsonl` (`cases/gen_res.py`). Generator: `rUse`, `rAllocated`, `res_both`, `tpl_resBoth` (a `both` whose one release raises: CE-0020). See [Resource use, allocated, both](../cats-effect/resource-use-both-model.md).
 
+### Format v2 ops of Phase 7 track S (same version, same `checkNoV2` gate)
+
+| op | fields | term |
+|----|--------|------|
+| `semNew` | `n` (0..1000) | `Semaphore.apply(n)` with `F = IO`, then `.map(s => sem(handle s))` (`Semaphore.scala:130-133`) |
+| `semAcquireN` | `s`, `n` | `semOf(⟦s⟧).acquireN(n).as(unit)` |
+| `semReleaseN` | `s`, `n` | `semOf(⟦s⟧).releaseN(n).as(unit)` |
+| `semTryAcquireN` | `s`, `n` | `semOf(⟦s⟧).tryAcquireN(n).map(bool)` |
+| `semAvailable` | `s` | `semOf(⟦s⟧).available.map(nat)` |
+| `semCount` | `s` | `semOf(⟦s⟧).count.map(c => if (c >= 0) right(nat c) else left(nat -c))` |
+| `semPermit` | `s`, `e` | `semOf(⟦s⟧).permit.use(_ => I(e))` |
+| `mutexNew` | – | `Mutex[IO].map(m => mutex(handle m))` (`Mutex.scala:68-74`) |
+| `mutexLock` | `m`, `e` | `mutexOf(⟦m⟧).lock.use(_ => I(e))` |
+
+- Values `{"t":"sem","id":n}`, `{"t":"mutex","id":n}` (output only; a literal is a decode error).
+- Lean side: `Model/Semaphore.lean`, `Model/Mutex.lean`; a lock is a reference to its object closure (`SL.obj q`, `ML.obj q`), printed through the internal events `semH`/`mutexH` (emitted where Scala calls `h.newSem`/`h.newMutex`). Lambdas `semHandle`, `semUse`, `semVal`, `semCountMap`, `mutexHandle`, `mutexUse`; `Env.dispatchSem` runs the mirror closures (also from `Bracket`, for `permit.use`/`lock.use`).
+- `I(e)` of `semPermit`/`mutexLock` is built when `use` calls the function (lazy, not `eagerReads`).
+- Fixed cases `cases/semaphore.jsonl` (`cases/gen_semaphore.py`, 24 cases). Generator: `gen_case` appends a `tpl_sem` or `tpl_mutex` scenario with its own RNG (`p_sem`). See [Semaphore and Mutex model](../cats-effect/semaphore-mutex-model.md).
+
 ## User function table
 
 `call(fn, v)` first emits `{"ev":"call","fn":fn,"arg":v}`, then applies the function. Lean must implement the same table.
@@ -268,3 +287,4 @@ Code: `tools/Difftest/` (`lean_lib Difftest`, `lean_exe cediff`). It is test cod
 - [Project plan](project-plan.md)
 - [Semantics of CE3](../cats-effect/semantics.md)
 - [Agent workflow and review protocol](agent-workflow.md)
+- [Semaphore and Mutex model](../cats-effect/semaphore-mutex-model.md)

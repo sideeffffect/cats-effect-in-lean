@@ -78,3 +78,9 @@ import CatsEffectInLean.Props.Phase6.ParTraverse
 import CatsEffectInLean.Proofs.Phase6.ParTraverseWitness
 import CatsEffectInLean.Proofs.Phase6.ParTraversePrivacy
 import CatsEffectInLean.Proofs.Phase6.ResourceWrongFunction
+import CatsEffectInLean.Model.Semaphore
+import CatsEffectInLean.Model.Mutex
+import CatsEffectInLean.Props.Phase7.Semaphore
+import CatsEffectInLean.Proofs.Phase7.SemaphoreCount
+import CatsEffectInLean.Proofs.Phase7.SemaphoreCountFixedDefs
+import CatsEffectInLean.Proofs.Phase7.SemaphoreWitness

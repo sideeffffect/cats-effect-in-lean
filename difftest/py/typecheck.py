@@ -12,6 +12,9 @@ Inference is first-order unification (no let-polymorphism; a variable has one ty
 """
 
 MAX_NAT = 9 * 10**15
+# Phase 7, track S
+SEM_OPS = ('semNew', 'semAcquireN', 'semReleaseN', 'semTryAcquireN', 'semAvailable', 'semCount',
+           'semPermit', 'mutexNew', 'mutexLock')
 
 
 class TypeErr(Exception):
@@ -304,6 +307,29 @@ class Checker:
             for _ in p['xs']:
                 t = ('pair', b, t)
             return t
+        # ---- format v2 (Phase 7, track S): `Semaphore`, `Mutex`
+        if op in SEM_OPS:
+            if op in ('semNew', 'semAcquireN', 'semReleaseN', 'semTryAcquireN'):
+                k = p.get('n')
+                if not isinstance(k, int) or isinstance(k, bool) or not 0 <= k <= 1000:
+                    raise TypeErr(f"{op} n {k!r}")
+            if op == 'semNew':
+                return ('sem',)
+            if op == 'mutexNew':
+                return ('mutex',)
+            if op == 'mutexLock':
+                u(self.atom(p['m'], env), ('mutex',), op)
+                return self.prog(p['e'], env)
+            u(self.atom(p['s'], env), ('sem',), op)
+            if op in ('semAcquireN', 'semReleaseN'):
+                return ('unit',)
+            if op == 'semTryAcquireN':
+                return ('bool',)
+            if op == 'semAvailable':
+                return ('nat',)
+            if op == 'semCount':
+                return ('either', ('nat',), ('nat',))
+            return self.prog(p['e'], env)  # semPermit
         if op == 'syncStep':
             raise TypeErr("syncStep below the root")
         if op in RES_OPS:

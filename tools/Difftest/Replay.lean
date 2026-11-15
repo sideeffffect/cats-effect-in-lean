@@ -80,6 +80,10 @@ structure RS where
   dOf : Std.HashMap Nat Nat := {}
   /-- Model memo state cell id → Scala memo handle (format v2). -/
   mOf : Std.HashMap Nat Nat := {}
+  /-- Model semaphore state cell id → Scala semaphore handle (Phase 7, track S). -/
+  sOf : Std.HashMap Nat Nat := {}
+  /-- Model mutex queue cell id → Scala mutex handle (Phase 7, track S). -/
+  muOf : Std.HashMap Nat Nat := {}
   /-- `ContState` id → async id. -/
   asyncIds : Std.HashMap Nat Nat := {}
   /-- `ContState` id → indices of `later` callbacks not yet in the ready list. -/
@@ -135,6 +139,10 @@ def absorb (r : RS) : RS := Id.run do
       if !r.dOf.contains d then r := { r with dOf := r.dOf.insert d r.dOf.size }
     | some (.memoH m) =>
       if !r.mOf.contains m then r := { r with mOf := r.mOf.insert m r.mOf.size }
+    | some (.semH q) =>
+      if !r.sOf.contains q then r := { r with sOf := r.sOf.insert q r.sOf.size }
+    | some (.mutexH q) =>
+      if !r.muOf.contains q then r := { r with muOf := r.muOf.insert q r.muOf.size }
     | some e => r := { r with trace := r.trace.push e }
     | none => r := r.setErr s!"unknown emitted value {repr v}"
   r := { r with outLen := n }
@@ -247,6 +255,8 @@ structure Ren where
   qOf : Std.HashMap Nat Nat := {}
   dOf : Std.HashMap Nat Nat := {}
   mOf : Std.HashMap Nat Nat := {}
+  sOf : Std.HashMap Nat Nat := {}
+  muOf : Std.HashMap Nat Nat := {}
 
 instance : Coe (Std.HashMap Nat Nat) Ren := ⟨fun h => { hOf := h }⟩
 
@@ -271,6 +281,12 @@ def valJson (hOf : Ren) : Val → Json
     | some q => Json.mkObj [("t", "queue"), ("id", toJson q)]
     | none => Json.mkObj [("t", "ref"), ("id", toJson (hOf.refOf.getD i (1000000 + i)))]
   | .deferred i => Json.mkObj [("t", "deferred"), ("id", toJson (hOf.dOf.getD i (1000000 + i)))]
+  -- Phase 7, track S: a semaphore or mutex is a reference to its object closure
+  | .fn k =>
+    match CatsEffectInLean.Model.Semaphore.semRef? k, CatsEffectInLean.Model.Mutex.mutexRef? k with
+    | some q, _ => Json.mkObj [("t", "sem"), ("id", toJson (hOf.sOf.getD q (1000000 + q)))]
+    | _, some q => Json.mkObj [("t", "mutex"), ("id", toJson (hOf.muOf.getD q (1000000 + q)))]
+    | _, _ => Json.mkObj [("t", .str s!"model:fn {k}")]
   | v => Json.mkObj [("t", .str s!"model:{(repr v).pretty}")]
 
 /-- The `op` of a format v2 `fin` event. -/
@@ -338,7 +354,8 @@ def replayFieldsH (ho : List Val → List Val) (cfg : Config) (p : Prog) (choice
   let env := userEnvH ho p
   let r0 : RS := { s := s0, cs := choices }
   let r := RS.run cfg env maxSteps (replayFuel cfg maxSteps) r0.absorb
-  let hOf : Ren := { hOf := r.hOf, refOf := r.refOf, qOf := r.qOf, dOf := r.dOf, mOf := r.mOf }
+  let hOf : Ren :=
+    { hOf := r.hOf, refOf := r.refOf, qOf := r.qOf, dOf := r.dOf, mOf := r.mOf, sOf := r.sOf, muOf := r.muOf }
   let outcome := match r.glueErr with
     | some m => Json.mkObj [("t", .str s!"glue:{m}")]
     | none => summaryJson hOf r.s.summary

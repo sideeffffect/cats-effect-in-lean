@@ -54,7 +54,9 @@ lean_lib TwinChecks where
     -- CE-0030 fixed-twin check (track M, Phase 6)
     `CatsEffectInLean.Proofs.Phase6.MemoizeFixed,
     -- CE-0020 fixed-twin check (track Res, Phase 6; review batch 5)
-    `CatsEffectInLean.Proofs.Phase6.ResourceBothFixed]
+    `CatsEffectInLean.Proofs.Phase6.ResourceBothFixed,
+    -- CE-0060 fixed-twin check (Phase 7, track S)
+    `CatsEffectInLean.Proofs.Phase7.SemaphoreCountFixed]
 
 -- Leak smoke test of track R (Phase 6): exact bounded search (`exploreP`) of `race`, `both`,
 -- `raceOutcome`, `bothOutcome` and `timeout` over a small family of sides, with the leak
@@ -80,3 +82,9 @@ lean_exe audit_heavy where
 lean_exe ptsmoke where
   srcDir := "tools"
   root := `PtSmoke.Main
+
+-- Random-schedule smoke test of the `Semaphore`/`Mutex` statements (Phase 7, track S).
+-- `lake exe semsmoke [runs]`. Test code, not part of the library.
+lean_exe semsmoke where
+  srcDir := "tools"
+  root := `SemSmoke.Main

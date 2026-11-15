@@ -55,7 +55,7 @@ object Json:
       case "succeeded" => only("v"); Val.VSucceeded(decodeVal(field(o, "v", t)))
       case "errored" => only("code"); Val.VErrored(Err.User(nat(field(o, "code", t), "errored.code")))
       case "canceled" => only(); Val.VCanceled
-      case "fiber" | "ref" | "deferred" | "queue" | "memo" => fail(s"value '$t': handles cannot be literals")
+      case "fiber" | "ref" | "deferred" | "queue" | "memo" | "sem" | "mutex" => fail(s"value '$t': handles cannot be literals")
       case _ => fail(s"unknown value tag '$t'")
 
   def encodeErr(e: Err): ujson.Obj = e match
@@ -77,6 +77,8 @@ object Json:
     case Val.VDeferred(i) => ujson.Obj("t" -> "deferred", "id" -> i)
     case Val.VQueue(i) => ujson.Obj("t" -> "queue", "id" -> i)
     case Val.VMemo(i) => ujson.Obj("t" -> "memo", "id" -> i)
+    case Val.VSem(i) => ujson.Obj("t" -> "sem", "id" -> i)
+    case Val.VMutex(i) => ujson.Obj("t" -> "mutex", "id" -> i)
 
   // --------------------------------------------------------------- programs
 
@@ -104,7 +106,10 @@ object Json:
   /** Ops of format v2 (a decode error in a v0 or v1 case). */
   val V2Ops: Set[String] = Set("race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket", "bracketCase",
     "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth",
-    "parTraverseN")
+    "parTraverseN",
+    // Phase 7, track S
+    "semNew", "semAcquireN", "semReleaseN", "semTryAcquireN", "semAvailable", "semCount", "semPermit",
+    "mutexNew", "mutexLock")
 
   /** Reject a v2 op anywhere in `j` (a case of format v0 or v1). */
   private def checkNoV2(j: Value): Unit = j match
@@ -267,6 +272,16 @@ object Json:
           case ujson.Arr(vs) => vs.toList.map(atom(_, scope, s"$ctx.xs"))
           case v => fail(s"$ctx.xs: expected an array, got $v")
         Prog.ParTraverseN(k.toInt, xs, x, p("f", scope + (x -> Kind.V)))
+      // ---- format v2 (Phase 7, track S)
+      case "semNew" => only("n"); Prog.SemNew(n("n"))
+      case "semAcquireN" => only("s", "n"); Prog.SemAcquireN(a("s"), n("n"))
+      case "semReleaseN" => only("s", "n"); Prog.SemReleaseN(a("s"), n("n"))
+      case "semTryAcquireN" => only("s", "n"); Prog.SemTryAcquireN(a("s"), n("n"))
+      case "semAvailable" => only("s"); Prog.SemAvailable(a("s"))
+      case "semCount" => only("s"); Prog.SemCount(a("s"))
+      case "semPermit" => only("s", "e"); Prog.SemPermit(a("s"), p("e"))
+      case "mutexNew" => only(); Prog.MutexNew
+      case "mutexLock" => only("m", "e"); Prog.MutexLock(a("m"), p("e"))
       case "syncStep" => fail(s"$ctx: only at the root of a program")
       case r if ResOps.contains(r) => fail(s"$ctx: a resource op outside a resource position")
       case _ => fail(s"unknown op '$op'")

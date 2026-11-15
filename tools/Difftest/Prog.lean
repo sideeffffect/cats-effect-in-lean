@@ -178,6 +178,25 @@ inductive Prog where
   -- format v2 (batch 6.3)
   /-- `IO.parTraverseN(n)(xs)(x => I(f)).map(list)`; `f` binds `x`. -/
   | parTraverseN (n : Nat) (xs : List Atom) (f : Prog)
+  -- format v2 (Phase 7, track S): `std.Semaphore` and `std.Mutex`
+  /-- `Semaphore[IO](n).map(s => VSem(h.newSem(s)))`. -/
+  | semNew (n : Nat)
+  /-- `semOf(⟦s⟧).acquireN(n).as(VUnit)`. -/
+  | semAcquireN (s : Atom) (n : Nat)
+  /-- `semOf(⟦s⟧).releaseN(n).as(VUnit)`. -/
+  | semReleaseN (s : Atom) (n : Nat)
+  /-- `semOf(⟦s⟧).tryAcquireN(n).map(VBool(_))`. -/
+  | semTryAcquireN (s : Atom) (n : Nat)
+  /-- `semOf(⟦s⟧).available.map(VNat(_))`. -/
+  | semAvailable (s : Atom)
+  /-- `semOf(⟦s⟧).count.map(c => if (c >= 0) VRight(VNat(c)) else VLeft(VNat(-c)))`. -/
+  | semCount (s : Atom)
+  /-- `semOf(⟦s⟧).permit.use(_ => I(e))`. -/
+  | semPermit (s : Atom) (e : Prog)
+  /-- `Mutex[IO].map(m => VMutex(h.newMutex(m)))`. -/
+  | mutexNew
+  /-- `mutexOf(⟦m⟧).lock.use(_ => I(e))`. -/
+  | mutexLock (m : Atom) (e : Prog)
   deriving DecidableEq, Repr
 
 /-- Number of nodes. Nodes are numbered in pre-order from 0; the children of a node with
@@ -189,7 +208,7 @@ def Prog.size : Prog → Nat
   | .rUse e k | .rAllocated e k | .rBoth e k => 1 + e.size + k.size
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
-  | .parTraverseN _ _ e => 1 + e.size
+  | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e => 1 + e.size
   | .guarantee e k _ => 1 + e.size + k.size
   | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => 1 + a.size + u.size + r.size
   | _ => 1
@@ -206,7 +225,7 @@ def Prog.at? : Prog → Nat → Option Prog
       if i < e.size then e.at? i else k.at? (i - e.size)
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
-    | .parTraverseN _ _ e => e.at? i
+    | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e => e.at? i
     | .guarantee e k _ => if i < e.size then e.at? i else k.at? (i - e.size)
     | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
       if i < a.size then a.at? i
@@ -237,6 +256,10 @@ def Prog.opName : Prog → String
   | .memoize .. => "memoize" | .memoGet .. => "memoGet"
   | .rUse .. => "rUse" | .rAllocated .. => "rAllocated" | .rBoth .. => "rBoth"
   | .parTraverseN .. => "parTraverseN"
+  | .semNew .. => "semNew" | .semAcquireN .. => "semAcquireN" | .semReleaseN .. => "semReleaseN"
+  | .semTryAcquireN .. => "semTryAcquireN" | .semAvailable .. => "semAvailable"
+  | .semCount .. => "semCount" | .semPermit .. => "semPermit" | .mutexNew => "mutexNew"
+  | .mutexLock .. => "mutexLock"
 
 /-- The two sub-programs of a v2 combinator (`race`, `raceOutcome`, `both`, `bothOutcome`). -/
 def Prog.combArgs? : Prog → Option (Prog × Prog)
@@ -252,7 +275,7 @@ def Prog.ops (p : Prog) : List String :=
     | .rUse e k | .rAllocated e k | .rBoth e k => e.ops ++ k.ops
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
-    | .parTraverseN _ _ e => e.ops
+    | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e => e.ops
     | .guarantee e k _ => e.ops ++ k.ops
     | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => a.ops ++ u.ops ++ r.ops
     | _ => []
@@ -291,7 +314,7 @@ def Prog.resViewFree : Prog → Bool
   | .rUse e k | .rAllocated e k | .rBoth e k => e.resViewFree && k.resViewFree
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .memoize e
-  | .parTraverseN _ _ e => e.resViewFree
+  | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e => e.resViewFree
   | .guarantee e k _ => e.resViewFree && k.resViewFree
   | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
     a.resViewFree && u.resViewFree && r.resViewFree
@@ -336,7 +359,10 @@ def v1Ops : List String :=
 /-- Ops of format v2 (`Json.V2Ops`): a decode error in a v0 or v1 case. -/
 def v2Ops : List String := ["race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket",
   "bracketCase", "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth",
-  "parTraverseN"]
+  "parTraverseN",
+  -- Phase 7, track S
+  "semNew", "semAcquireN", "semReleaseN", "semTryAcquireN", "semAvailable", "semCount",
+  "semPermit", "mutexNew", "mutexLock"]
 /-- The resource ops. -/
 def resOps : List String := ["rPure", "rEval", "rMake", "rFlatMap", "rBoth"]
 /-- `Json.DefaultMaxSteps` in `Json.scala`. -/
@@ -403,7 +429,7 @@ partial def decodeVal (j : Json) : D Val := do
   | "succeeded" => only ["v"]; pure (.ocSucceeded (← decodeVal (← field o "v" t)))
   | "errored" => only ["code"]; pure (.ocErrored (userErr (← nat (← field o "code" t) "errored.code")))
   | "canceled" => only []; pure .ocCanceled
-  | "fiber" | "ref" | "deferred" | "queue" | "memo" => fail s!"value '{t}': handles cannot be literals"
+  | "fiber" | "ref" | "deferred" | "queue" | "memo" | "sem" | "mutex" => fail s!"value '{t}': handles cannot be literals"
   | _ => fail s!"unknown value tag '{t}'"
 
 /-- The kind of a bound name. -/
@@ -487,6 +513,16 @@ partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .i
       | .arr vs => vs.toList.mapM (fun j => atom j scope s!"{ctx}.xs")
       | v => fail s!"{ctx}.xs: expected an array, got {v.compress}"
     pure (.parTraverseN k xs (← p "f" ((x, .v) :: scope)))
+  -- format v2 (Phase 7, track S): also before the big `match` (same reason)
+  else if op == "semNew" then do only ["n"]; pure (.semNew (← n "n"))
+  else if op == "semAcquireN" then do only ["s", "n"]; pure (.semAcquireN (← a "s") (← n "n"))
+  else if op == "semReleaseN" then do only ["s", "n"]; pure (.semReleaseN (← a "s") (← n "n"))
+  else if op == "semTryAcquireN" then do only ["s", "n"]; pure (.semTryAcquireN (← a "s") (← n "n"))
+  else if op == "semAvailable" then do only ["s"]; pure (.semAvailable (← a "s"))
+  else if op == "semCount" then do only ["s"]; pure (.semCount (← a "s"))
+  else if op == "semPermit" then do only ["s", "e"]; pure (.semPermit (← a "s") (← p "e"))
+  else if op == "mutexNew" then do only []; pure .mutexNew
+  else if op == "mutexLock" then do only ["m", "e"]; pure (.mutexLock (← a "m") (← p "e"))
   else
     match op with
     | "pure" => only ["v"]; .pure <$> a "v"

@@ -25,6 +25,8 @@ enum Val:
   case VDeferred(id: Int)
   case VQueue(id: Int) // v1
   case VMemo(id: Int) // v2 (track M): the `get` of a `memoize`
+  case VSem(id: Int) // v2 (Phase 7, track S): a `Semaphore[IO]`
+  case VMutex(id: Int) // v2 (Phase 7, track S): a `Mutex[IO]`
 
 /** An argument position: a literal value or a bound variable. */
 enum Atom:
@@ -105,6 +107,25 @@ enum Prog:
   // ---- format v2 (Phase 6, batch 6.3)
   /** `IO.parTraverseN(n)(xs)(x => f).map(list)`; the list result is right-nested pairs ending in unit. */
   case ParTraverseN(n: Int, xs: List[Atom], x: String, f: Prog)
+  // ---- format v2 (Phase 7, track S): `std.Semaphore`, `std.Mutex`
+  /** `Semaphore[IO](n).map(s => VSem(h.newSem(s)))`. */
+  case SemNew(n: Long)
+  /** `semOf(s).acquireN(n).as(VUnit)`. */
+  case SemAcquireN(s: Atom, n: Long)
+  /** `semOf(s).releaseN(n).as(VUnit)`. */
+  case SemReleaseN(s: Atom, n: Long)
+  /** `semOf(s).tryAcquireN(n).map(VBool(_))`. */
+  case SemTryAcquireN(s: Atom, n: Long)
+  /** `semOf(s).available.map(VNat(_))`. */
+  case SemAvailable(s: Atom)
+  /** `semOf(s).count.map(c => if (c >= 0) VRight(VNat(c)) else VLeft(VNat(-c)))`. */
+  case SemCount(s: Atom)
+  /** `semOf(s).permit.use(_ => e)`. */
+  case SemPermit(s: Atom, e: Prog)
+  /** `Mutex[IO].map(m => VMutex(h.newMutex(m)))`. */
+  case MutexNew
+  /** `mutexOf(m).lock.use(_ => e)`. */
+  case MutexLock(m: Atom, e: Prog)
 
 /** A `Resource[IO, Val]` (format v1). It occurs only under `AllocatedCase`. */
 enum Res:
