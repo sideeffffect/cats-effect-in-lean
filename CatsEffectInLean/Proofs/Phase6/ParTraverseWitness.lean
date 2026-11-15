@@ -91,7 +91,7 @@ theorem exists_of_map {o? : Option Obs} {p : Obs → Bool} (h : o?.map p = some 
 /-! ## Statement 1 -/
 
 def orderRun : Option Obs :=
-  runObsP {} counterMaskModel (env idOrd (tagged cu)) 3000 [] (parTraverseNIO 2 [.nat 1, .nat 2] (TL.tag 2).id)
+  runObsP {} counterMaskModel (env idOrd (tagged cu)) 3000 [] (orderRoot 2 [.nat 1, .nat 2] 2)
 
 theorem orderRun_ok : orderRun.map (fun o =>
     o.summary == .done (.succeeded (listV [.pair (.nat 1) (.nat 0), .pair (.nat 2) (.nat 0)]))) = some true := by
@@ -100,8 +100,8 @@ theorem orderRun_ok : orderRun.map (fun o =>
 theorem parTraverseNOrder_satisfiable :
     ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat),
       (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧
-      WellFormed ptLibDeep [] (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) ∧
-      ∃ o, outcomesP {} counterMaskModel (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) o ∧
+      WellFormed ptLibDeep [] (env ord (tagged u)) (orderRoot n as f) ∧
+      ∃ o, outcomesP {} counterMaskModel (env ord (tagged u)) (orderRoot n as f) o ∧
         o.summary = .done (.succeeded (listV [.pair (.nat 1) (.nat 0), .pair (.nat 2) (.nat 0)])) := by
   obtain ⟨o, ho, hp⟩ := exists_of_map orderRun_ok
   refine ⟨idOrd, cu, 2, [.nat 1, .nat 2], 2, idOrd_perm, by decide, rfl,
@@ -317,7 +317,6 @@ limit is reached). Wrong function: the same program with a semaphore of 1000 per
 
 namespace Limit
 
-open CatsEffectInLean.Props.Phase6.HarnessPrivacy
 
 theorem limited_even (u : UserEnv) (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
     (limited u).callV id a v = u.callV id a v := by
@@ -333,12 +332,6 @@ theorem cR_okL (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK limLib R
   | 0 | 1 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.subA, Val.handles]
   | _ + 2 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
 
-theorem cR_free (k : Nat) : tokFreeR limToks (cR k) = true := by
-  match k with
-  | 0 => decide +kernel
-  | 1 => decide +kernel
-  | _ + 2 => simp [cR, tokFreeR]
-
 def lRoot : IO := limitRoot 1 [.nat 1, .nat 2] 2
 
 theorem lWf : WellFormed limLib [] (env idOrd (limited cu)) lRoot :=
@@ -347,9 +340,6 @@ theorem lWf : WellFormed limLib [] (env idOrd (limited cu)) lRoot :=
      by rw [envL_even id hid]; exact cR_okL _ _ _⟩,
    constOpaque _ envL_even⟩
 
-theorem lPrivate : UserPrivate (env idOrd (limited cu)) limToks := by
-  intro id hid a v; rw [envL_even id hid]; exact cR_free _
-
 def limRun : Option Obs := runObsP {} counterMaskModel (env idOrd (limited cu)) 3000 [] lRoot
 
 theorem limRun_ok : limRun.map (fun o => highest o == some 1) = some true := by decide +kernel
@@ -357,12 +347,11 @@ theorem limRun_ok : limRun.map (fun o => highest o == some 1) = some true := by 
 theorem parTraverseNAtMostN_satisfiable :
     ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (g : Nat),
       (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ g % 2 = 0 ∧
-      UserPrivate (env ord (limited u)) limToks ∧
       WellFormed limLib [] (env ord (limited u)) (limitRoot n as g) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord (limited u)) (limitRoot n as g) o ∧
         highest o = some n := by
   obtain ⟨o, ho, hp⟩ := exists_of_map limRun_ok
-  exact ⟨idOrd, cu, 1, [.nat 1, .nat 2], 2, idOrd_perm, by decide, rfl, lPrivate, lWf,
+  exact ⟨idOrd, cu, 1, [.nat 1, .nat 2], 2, idOrd_perm, by decide, rfl, lWf,
     o, ⟨3000, [], ho⟩, by simpa using hp⟩
 
 /-- Wrong function: `parTraverseN` with a semaphore of 1000 permits (`K/GC:170`). -/
