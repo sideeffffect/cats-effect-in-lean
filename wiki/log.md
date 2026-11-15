@@ -389,3 +389,7 @@
 - Updated: Agent workflow and review protocol (review log, rule on join outcomes and "not blocked"); Queue families model; Semaphore and Mutex model; parTraverseN model
 - Raw: raw/project-decisions/2026-11-15-review-batch-12-notes.md
 - Result: 24 of 26 Phase 7 entries FAITHFUL; HOLLOW: std.Queue.Concurrent.takerLiveness (H3), std.Semaphore.noDeadlock (H2); 8 parTraverseN statements stay FAITHFUL
+
+## [2026-11-15] ingest | Decision 63: wrong-function battery per structure
+- Updated: Agent workflow (wrong-function battery section)
+- Raw: raw/project-decisions/2026-11-15-decision-63-wrong-function-battery.md
