@@ -569,7 +569,7 @@ def dispatchSem (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
 
 /-- The difftest closures and the `ResourceUse` lambdas of program `p` (the functions that the
 `Bracket` mirror calls: `IO.bracketFull` of `Resource#fold`, track Res). -/
-def dispatchRes (ho : List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
+def dispatchRes (ho : List Val → List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
   match ResourceUse.ULam.ofId? id with
   | some l => ResourceUse.callU (uenvOf p) (dispatchDt p) l arg vw
   | none =>
@@ -581,7 +581,7 @@ def dispatchRes (ho : List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (
 
 /-- All closures of program `p`: difftest closures (with trace and failures) and library
 closures (module doc). `ho`: the `HashSet` iteration order of the `parTraverseN` mirror. -/
-def dispatch (ho : List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
+def dispatch (ho : List Val → List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
   match cloOfId? id with
   | some _ => dispatchDt p id arg vw
   | none =>
@@ -603,23 +603,23 @@ def dispatch (ho : List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (vw 
       | none => DResult.harness.toUser
 
 /-- The `Model.UserEnv` of program `p` with `HashSet` order `ho` (see module doc). -/
-def userEnvH (ho : List Val → List Val) (p : Prog) : UserEnv where
+def userEnvH (ho : List Val → List Val → List Val) (p : Prog) : UserEnv where
   call id arg refs := dispatch ho p id arg { refs }
   callV id arg vw := dispatch ho p id arg vw
 
 /-- The `Model.UserEnv` of program `p` (`HashSet` order: insertion order). -/
-def userEnv (p : Prog) : UserEnv := userEnvH _root_.id p
+def userEnv (p : Prog) : UserEnv := userEnvH (fun _ xs => xs) p
 
-/-- A `HashSet` order for the supervision set of `parTraverseN` (review 8): rank the elements
-`(fiber t, _)` by `perm[t % k]`. The `k` child fibers of one traversal get consecutive ids (the
-traverse starts them in a row), so `t % k` is a bijection on them and the rank is one total order
-on the children, the same for every subset (as a real `HashSet` order is). The `k!` permutations
-give every order of the children. -/
-def rankOrder (k : Nat) (perm : List Nat) (xs : List Val) : List Val :=
+/-- A `HashSet` order for the supervision set of `parTraverseN` (review 8; fixed after track S's
+case `g61-9094`): `all` is every element the `HashSet` held, in insertion order (ghost state of
+the mirror, `ParTraverse.SetSt`), one per child of the traversal. Rank element `x` by
+`perm[i]`, `i` its index in `all`. The `k!` permutations give every total order of the
+children, whatever fiber ids they got (the first version ranked by `t % k`, which assumed
+consecutive fiber ids; a child that starts fibers breaks that). -/
+def rankOrder (perm : List Nat) (all xs : List Val) : List Val :=
   let rank : Val → Nat := fun x =>
-    match x with
-    | .pair (.fiber t) _ => perm.getD (t % k) 0
-    | _ => 0
+    let i := all.idxOf x
+    perm.getD i i
   xs.mergeSort (fun a b => rank a ≤ rank b)
 
 /-- The largest literal list of a `parTraverseN` in a program (0 if none). -/
