@@ -35,3 +35,9 @@ The four self-test fixtures `fieldless_lib*` tested only that removed check.
 ## Removed
 
 `Model/LibProbe.lean`, `Proofs/Phase6/LibFields*.lean` (probe lemmas), audit check `lib-fields`, `Entry.libNote` (13 notes), fixtures `fieldless_lib*`. `Props/Phase6/HarnessPrivacy.lean` stays until track G drops `UserPrivate` from statement 8.
+
+## Difftest after the change (2026-11-15)
+
+- All ops, `opcount.py --seeds 51 52 53 --n 20000` (ops rUse rAllocated rBoth bracket bracketCase bracketFull guarantee race both memoize parTraverseN): 60,000 cases, all agree, 0 unsupported.
+- Resource ops boosted, `--seeds 61 62 63 --n 60000 --boost rUse=40 rAllocated=40 tpl_resBoth=40 res_both=10`: 180,000 cases, all agree; plus seed 64, 15,000 cases, all agree. Agreeing cases over seeds 61-64: rUse 117,382, rAllocated 87,564, rBoth 52,386.
+- Smoke `test/Phase6/ResourceSmoke.lean` (CE-0020 600 + 1,500 schedules, the open statements on 900 schedules, decision 41): passes (27 min).
