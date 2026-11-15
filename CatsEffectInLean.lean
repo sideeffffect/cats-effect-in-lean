@@ -95,13 +95,10 @@ import CatsEffectInLean.Std.CyclicBarrier
 import CatsEffectInLean.Props.Phase7.CountDownLatch
 import CatsEffectInLean.Props.Phase7.CyclicBarrier
 import CatsEffectInLean.Proofs.Phase7.LatchWitness
-<<<<<<< HEAD
 import CatsEffectInLean.Proofs.Phase7.QueueBatteryDefs
 import CatsEffectInLean.Proofs.Phase7.QueueBatteryConc
 import CatsEffectInLean.Proofs.Phase7.QueueBatteryAsync
 import CatsEffectInLean.Proofs.Phase7.QueueBatterySync
-=======
 import CatsEffectInLean.Proofs.Phase7.LatchBattery
 import CatsEffectInLean.Proofs.Phase7.SemaphoreBatteryDefs
 import CatsEffectInLean.Proofs.Phase7.SemaphoreBattery
->>>>>>> origin/main

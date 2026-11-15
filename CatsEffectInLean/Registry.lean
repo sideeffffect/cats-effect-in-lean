@@ -803,7 +803,6 @@ def registry : List Entry := [
       await does not count for a trip. The hypothesis restricts the test program (a cancel that \
       loses the race with a trip is covered by cancelNoHang). Satisfiable (cancelRemoved_sat). \
       Wrong function: variant 2 does not re-increment (cancelRemoved_wrong; smoke 3 of 1500 random, 20 of 800 removal shape). Smoke: 0. Open." },
-<<<<<<< HEAD
   { id := "std.Queue.Concurrent.seqSpec"
     rows := ["std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.AbstractQueue.size", "std.Queue.synchronous", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.tryOffer", "std.Queue.Synchronous.take", "std.Queue.Synchronous.tryTake", "std.Queue.Synchronous.size", "std.Queue.circularBuffer"]
     prop := ``Props.Phase7.Queue.concSeqSpec
@@ -824,8 +823,7 @@ def registry : List Entry := [
       unbounded, synchronous). All schedules. Checks every public operation, so an operation that raises, \
       hangs, drops or doubles its effect breaks it. All Async kinds, under sequential consistency. Satisfiable \
       (QueueWitness.seqSpec_satisfiable). Battery: QueueBatteryAsync (BoundedAsyncQueue, 18 rows). Smoke: \
-      qsmoke (every kind). Open." }
-=======
+      qsmoke (every kind). Open." },
   { id := "std.CountDownLatch.awaitCompletes"
     rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
     prop := ``Props.Phase7.CountDownLatch.cdlAwaitCompletes
@@ -845,7 +843,6 @@ def registry : List Entry := [
       Satisfiable (LatchBattery.CB.awaitCompletes_sat). Wrong function: await raises \
       (await_raises_breaks). Decision 63 battery (await x raises/hangs/drops/doubles): \
       Proofs/Phase7/LatchBattery.lean, every row breaks one of the five barrier statements. Open." }
->>>>>>> origin/main
 ]
 
 end CatsEffectInLean
