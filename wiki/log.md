@@ -270,6 +270,15 @@
 - Updated: Resource use/both (probe check, 2 defects fixed), Outcome sets (Lib fields check), index
 - Raw: raw/cats-effect/2026-11-14-lib-fields-probe-notes.md
 
+
+## [2026-11-15] update | parTraverseN: decision 58 closure references, HashSet difftest
+- Updated: parTraverseN model (Val.fn fields, TL.start root, statement 8 without UserPrivate, F2/F3 closed, ParTraversePrivacy), Difftest program format (alternatives for the HashSet branch), index
+- Raw: raw/cats-effect/2026-11-15-partraverse-decision58.md
+
+## [2026-11-15] ingest | Track Res: decision 58 core (Val.fn closure references)
+- Updated: Outcome sets (decision 58 rule), Resource use/both (harness, Private = S2), Bracket model (F1), Registry and audit (check 9 removed), Agent workflow
+- Raw: raw/cats-effect/2026-11-15-decision-58-core-notes.md
+
 ## [2026-11-15] review | Review batch 8: harness privacy, parTraverseN, heavy CI matrix
 - Updated: Agent workflow (review log, harness privacy finding), index
 - Raw: raw/project-decisions/2026-11-15-review-batch-8-notes.md
@@ -278,10 +287,28 @@
 ## [2026-11-15] ingest | Decision 58: separate closure references (user answer)
 - Updated: Agent workflow (closure references section)
 - Raw: raw/project-decisions/2026-11-15-decision-58-closure-refs.md
+- Difftest after decision 58 (generator with 5-input option): `opcount.py --seeds 51 52 --n 30000 --ops parTraverseN --boost tpl_parTraverse=8 tpl_parTraverseCancel=8`: 60,000 cases, all agree; 34,924 use `parTraverseN` (17,465 / 17,459 per seed). Fixed `hashcases/partraverse_hash.jsonl`: 32 agree (3 runs).
+
+## [2026-11-15] review | Review batch 9: decision 58 core, Bracket, Resource, parTraverseN
+- Updated: Agent workflow (review log, closure references), Resource use/both (batch 9 finding R1), index
+- Raw: raw/project-decisions/2026-11-15-review-batch-9-notes.md
+- Review: review/2026-11-15-review-batch-9.md
 
 ## [2026-11-15] ingest | Track Res: decision 58 core (Val.fn closure references)
 - Updated: Outcome sets (decision 58 rule), Resource use/both (harness, Private = S2), Bracket model (F1), Registry and audit (check 9 removed), Agent workflow
 - Raw: raw/cats-effect/2026-11-15-decision-58-core-notes.md
+
+## [2026-11-15] ingest | Heavy CI fixes after run 43651882144 and review batch 8
+- Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md (section "Fixes after CI run 43651882144")
+- Updated: Registry and audit (heavy CI fixes)
+
+## [2026-11-15] ingest | Twin checks as a parallel matrix (twin-checks)
+- Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md (section "Twin checks as a matrix")
+- Updated: Registry and audit (twin layout)
+
+## [2026-11-15] update | Twin matrix: combining-module rule, real-runner timings
+- Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md (twin section: combining modules, CI run 43682566345, lean job without cache, paranoid all green)
+- Updated: Registry and audit (twin layout, critical path)
 
 ## [2026-11-15] ingest | Track Res: review batch 9 R1 (REnv table references), wrong-function tests, W1
 - Updated: Resource use/both, Outcome sets

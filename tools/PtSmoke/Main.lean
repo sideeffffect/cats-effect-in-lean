@@ -27,11 +27,12 @@ Statement 8 (at most `n` actions at once): the limit harness of the statement (`
 `limited`) with the user functions below as `g`; the start program must pass `progOK limLib`.
 Wrong function: a semaphore with 1000 permits (`K/GC:170`) must exceed `n`.
 
-Defect D of review batch 7 (the forgery): a user `f` whose closure value is `Deferred d` (so it
-captured the result cell of an input) completes it with a forged value. The smoke test checks
-that the start program passes the shallow check (`ptIsLib`) and fails the deep one (`ptLibDeep`),
-and that the forgery breaks statement 1 when it runs (so the deep check is what excludes it).
-The statements use `ptLibDeep` (decision 56).
+Defect D of review batch 7 and F2 of review batch 8 (the forgeries): a user `f` whose closure
+value is `Deferred d` (so it captured the result cell of an input) completes it with a forged
+value; D names it in the root, F2 hides it under `.some` in a `Timeout.fold` fallback source that
+the traversed function returns. The smoke test checks that `WellFormed` (decision 58,
+`WF.avail`) rejects both (the root, or the program that user code returns), and that both break
+statement 1 when they run (so `WellFormed` is what excludes them).
 
 An exact search (`exploreP`) is not used: with up to five fibers and a preemption at every run-loop
 iteration the state sets are too large (track R measured > 10^4 states for three fibers).
@@ -135,8 +136,28 @@ def reachable (bh : Val → Nat × Base) (as : List Val) (n : Nat) (p : Base →
 /-- A user closure whose value is `Deferred d`: it completes cell `d` with a forged outcome. -/
 def forging (d : Nat) : Nat := 2 * valToNat (.deferred d)
 
+/-- F2: user function 30 returns `IO.pure(Canceled).flatMap(fold(Some(srcAction (forging d) a), 3))`. -/
+def foldF2 (d : Nat) (a : Val) : IO :=
+  .flatMap (.pure .ocCanceled) (Timeout.TLam.fold (.some (srcAction (forging d) a)) 3).fn
+
 def forgeU (d : Nat) : UserEnv where
-  call id a refs := if id == forging d then { out := .prog (.flatMap (completeIO d (.ocSucceeded (.nat 99))) (.user 2)) }
+  call id a refs :=
+    if id == forging d then { out := .prog (.flatMap (completeIO d (.ocSucceeded (.nat 99))) (.user 2)) }
+    else if id == 30 then { out := .prog (foldF2 d a) }
+    else u.call id a refs
+
+/-- F3 (review batch 8): user function 32 returns the `fold` program with a function that captured
+the semaphore state `Ref q` and writes `(Queue(), 1000)` into it, then cedes. -/
+def semForge (q : Nat) : Nat := 2 * valToNat (.ref q)
+
+def foldF3 (q : Nat) (a : Val) : IO :=
+  .flatMap (.pure .ocCanceled) (Timeout.TLam.fold (.some (srcAction (semForge q) a)) 3).fn
+
+def forgeSem (q : Nat) : UserEnv where
+  call id a refs :=
+    if id == semForge q then
+      { effects := [.writeRef q (.pair (listV []) (.nat 1000))], out := .prog (.flatMap .cede (.user 10)) }
+    else if id == 32 then { out := .prog (foldF3 q a) }
     else u.call id a refs
 
 /-- Wrong function: the semaphore of `parTraverseN` gets 1000 permits. -/
@@ -172,7 +193,7 @@ def main (args : List String) : IO UInt32 := do
     for f in [2, 4, 6, 8, 14] do
       for n in [1, 2, 3] do
         for as in lists do
-          let io := parTraverseNIO n as (TL.tag f).id
+          let io := orderRoot n as f
           if !startOK io then IO.println s!"HYPOTHESIS order f={f} n={n}"; bad := bad + 1
           let (d, b) := randCheck (env ord (tagged u)) io runs seed (orderClaim as)
           seed := seed + 1; stoppedTot := stoppedTot + d; bad := bad + b
@@ -251,7 +272,7 @@ def main (args : List String) : IO UInt32 := do
   let rev : UserEnv := { call := (env ord (tagged u)).call
                          callV := fun id a v => if id == 1000001 then { out := .ret (listV ((unlistV a).getD []).reverse) } else (env ord (tagged u)).callV id a v }
   let as2 := [Val.nat 1, .nat 2]
-  let (_, w1) := randCheck rev (.map (parTraverseNIO 2 as2 (TL.tag 2).id) (.user 1000001)) runs 7 (orderClaim as2)
+  let (_, w1) := randCheck rev (.map (orderRoot 2 as2 2) (.user 1000001)) runs 7 (orderClaim as2)
   let drop : UserEnv := { call := (env ord u).call
                           callV := fun id a v => if id == 1000001 then { out := .ret (listV ((unlistV a).getD []).dropLast) } else (env ord u).callV id a v }
   let (_, w2) := randCheck drop (.map (parTraverseNIO 2 as2 2) (.user 1000001)) runs 8
@@ -273,17 +294,25 @@ def main (args : List String) : IO UInt32 := do
   let as4 := [Val.nat 1, .nat 2, .nat 3, .nat 4]
   let (_, w7) := randCheck (wide (env ord (limited u))) (limitRoot 1 as4 4) runs 13 (limClaim 1)
   let (_, w8) := randCheck (wide (env ord (limited u))) (limitRoot 2 as4 6) runs 14 (limClaim 2)
-  -- defect D: the forgery passes the shallow check, fails the deep one, breaks statement 1
-  let mut forgeShallow := true
-  let mut forgeDeep := false
+  -- defect D and F2: rejected by WellFormed, and they break statement 1 when they run
+  let mut forgeAccepted := false
   let mut wD := 0
+  let mut wF2 := 0
   for d in [1, 2, 3, 4, 5] do
-    let io := parTraverseNIO 1 [.nat 0] (TL.tag (forging d)).id
-    forgeShallow := forgeShallow && WF.progOK (ptIsLib : Lib) (fun _ => false) io
-    forgeDeep := forgeDeep || startOK io
+    let io := orderRoot 1 [.nat 0] (forging d)
+    forgeAccepted := forgeAccepted || startOK io
     let (_, b) := randCheck (env ord (tagged (forgeU d))) io runs (20 + d) (orderClaim [.nat 0])
     wD := wD + b
-  IO.println s!"defect D forgery: passes shallow check {forgeShallow}, passes deep check {forgeDeep}, runs that break statement 1 {wD}"
-  if !forgeShallow || forgeDeep || wD == 0 then bad := bad + 1
+    forgeAccepted := forgeAccepted || WF.progOK ptLibDeep (fun _ => false) (foldF2 d (.nat 0))
+    let (_, b2) := randCheck (env ord (tagged (forgeU d))) (orderRoot 1 [.nat 0] 30) runs (30 + d) (orderClaim [.nat 0])
+    wF2 := wF2 + b2
+  -- F3: the semaphore state Ref (2: after the counter cell 0 and the supervision Ref 1)
+  let mut wF3 := 0
+  for q in [1, 2, 3] do
+    forgeAccepted := forgeAccepted || WF.progOK limLib (fun _ => false) (foldF3 q (.nat 0))
+    let (_, b3) := randCheck (env ord (limited (forgeSem q))) (limitRoot 1 [.nat 1, .nat 2, .nat 3] 32) (3 * runs) (40 + q) (limClaim 1)
+    wF3 := wF3 + b3
+  IO.println s!"forgeries: accepted by WellFormed {forgeAccepted}; runs that break the claim: defect D {wD}, F2 {wF2}, F3 {wF3}"
+  if forgeAccepted || wD == 0 || wF2 == 0 || wF3 == 0 then bad := bad + 1
   IO.println s!"wrong functions (runs that break the claim, expected > 0): reverse {w1}, drop {w2}, no cancelAll on error {w3}, on cancel {w4}, gen error {w5}, gen cancel {w6}, 1000 permits n=1 {w7}, n=2 {w8}"
   return if bad == 0 && w1 > 0 && w2 > 0 && w3 > 0 && w4 > 0 && w5 > 0 && w6 > 0 && w7 > 0 && w8 > 0 then 0 else 1

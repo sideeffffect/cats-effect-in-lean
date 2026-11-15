@@ -381,13 +381,16 @@ def registry : List Entry := [
     note := "If parTraverseN(n)(as)(f) succeeds, the result holds one entry per input in input order \
       (f tagged by the harness as a => f(a).map(b => (a, b)); no lost, duplicated or \
       reordered entry). All user code. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
-      HashSet from 5 elements; any permutation, review 7). Satisfiable: \
+      HashSet from 5 elements; any permutation, review 7; difftest by refinement over every \
+      child order, review 8). Satisfiable: \
       Proofs.Phase6.ParTraverseWitness.parTraverseNOrder_satisfiable. Smoke: lake exe ptsmoke \
-      (a reversed result breaks it). Review 7 defect D (f captures the per-input result \
-      Deferred via a number field of its closure id) is closed: the statement now uses \
-      ptLibDeep (decision 56 deep captured; function fields of PT, srcAction codes, Bracket, \
-      TL.tag). PrivacyExamples: the forgery (also hidden in a Bracket or Race source) passes \
-      ptIsLib and fails ptLibDeep; ptsmoke: it breaks the claim when run. Plausible. Open." },
+      (a reversed result breaks it). Root: orderRoot (the public harness \
+      closure TL.start builds the traversal; TL.tag is not public). Review 7 defect D and \
+      review 8 F2 (f that captured the per-input result Deferred, named in a PT field or \
+      under .some in a Timeout.fold source) are closed by decision 58: function fields are \
+      Val.fn references and WellFormed follows them (WF.avail). Kernel examples: \
+      Proofs.Phase6.ParTraversePrivacy; ptsmoke: both forgeries are rejected and break the \
+      claim when run. Plausible. Open." },
   { id := "core.IO.parTraverseN.pureSucceeds"
     rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
     prop := ``Props.Phase6.ParTraverse.parTraverseNPureSucceeds
@@ -447,11 +450,13 @@ def registry : List Entry := [
     rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
     prop := ``Props.Phase6.ParTraverse.parTraverseNAtMostN
     status := .«open»
-    note := "At most n actions run at once (Scaladoc K/GC:132-133): the harness (HarnessPrivacy, \
-      decision 56; token = counter Ref 0) counts the running g(a) inside \
-      uncancelable(poll => enter *> poll(g(a)).attempt.onCancel(exit) ...); in every run \
-      that stops the highest count is <= n. All user code (UserPrivate, WellFormed limLib), \
-      n >= 1, all inputs, schedules and HashSet orders. Satisfiable \
+    note := "At most n actions run at once (Scaladoc K/GC:132-133): the harness (counter Ref 0) counts \
+      the running g(a) inside uncancelable(poll => enter *> poll(g(a)).attempt.onCancel(exit) \
+      ...); in every run that stops the highest count is <= n. All user code (WellFormed \
+      limLib only; decision 58 dropped UserPrivate, review 8 S1), n >= 1, all inputs, \
+      schedules and HashSet orders. Review 8 F3 (user code writes the semaphore state Ref \
+      through a Timeout.fold source) is closed by decision 58 (ParTraversePrivacy; ptsmoke: \
+      rejected, and it breaks the claim when run). Satisfiable \
       (Limit.parTraverseNAtMostN_satisfiable: n = 1 reached). Wrong function: 1000 permits \
       reaches 2 > 1 (Limit.wideRun_breaks, kernel-checked; ptsmoke). Open." }
 ]

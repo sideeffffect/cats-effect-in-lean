@@ -4,9 +4,9 @@ name: Paranoid kernel check (heavy proofs)
 # the weekly `paranoid.yml` (`lake check --paranoid`) does not see them.
 # 1. paranoid-heavy-export builds them in the bwrap sandbox (scripts/check_heavy_proofs.sh,
 #    SKIP_REPLAY=1) and exports every heavy module with one sandboxed `leanexport` call.
-#    Export scope (checked 2026-11-14, review batch 7 gap 4): `leanexport M` writes M and all
-#    its imports; `leanexport A B` writes the union (law: 362 MB, 61,734 declarations with Init
-#    and Lean).
+#    `scripts/check_export_scope.py` then checks that the export declares every constant of
+#    every heavy module (list from tools/HeavyDecls.lean), so the scope is checked on each run,
+#    not assumed (review batch 8, gap 4).
 # 2. paranoid-heavy-kernel runs one kernel per job (scripts/run_kernel.sh, the same commands as
 #    `lake check --paranoid`), so each job has its own 360 min budget. The default kernel took
 #    33 min on the export locally (2026-11-14).
@@ -42,8 +42,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/export"
           scripts/sandbox.sh "$(command -v lake)" env leanexport "${mods[@]}" > "$RUNNER_TEMP/export/heavy.ndjson"
           ls -l "$RUNNER_TEMP/export/heavy.ndjson"
-          echo "declarations (def/thm/inductive/opaque/axiom):"
-          grep -c -E '^\{"(def|thm|inductive|opaque|axiom)"' "$RUNNER_TEMP/export/heavy.ndjson" || true
+          # evidence for the export scope (review batch 8): every constant of every heavy module
+          # (tools/HeavyDecls.lean, in the sandbox) is declared in the export
+          scripts/sandbox.sh "$(command -v lake)" env lean --run tools/HeavyDecls.lean "${mods[@]}" > "$RUNNER_TEMP/heavy-decls.txt"
+          python3 scripts/check_export_scope.py "$RUNNER_TEMP/export/heavy.ndjson" "$RUNNER_TEMP/heavy-decls.txt"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: heavy-export

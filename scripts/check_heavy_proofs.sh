@@ -55,25 +55,22 @@ mapfile -t mods < "$safe/mods.txt"
 [[ ${#mods[@]} -gt 0 ]] || { echo "FAIL: no heavy modules"; exit 1; }
 printf '%s\n' "${mods[@]}"
 if [[ -n "${HEAVY_MODULES_OUT:-}" ]]; then cp "$safe/mods.txt" "$HEAVY_MODULES_OUT"; fi
-is_root() { local r; for r in "${roots[@]}"; do [[ $r == "$1" ]] && return 0; done; return 1; }
-
 replay=("${mods[@]}")
 if [[ -n "$artifacts_in" ]]; then
   echo "== 2b. install the artifacts of the matrix jobs from $artifacts_in"
-  replay=("${roots[@]}")
-  for m in "${mods[@]}"; do
-    is_root "$m" && continue
-    [[ -f "$artifacts_in/$m.sha256" ]] || { echo "FAIL: no artifacts for $m (matrix job missing)"; exit 1; }
-    (cd "$artifacts_in" && sha256sum --quiet -c "$m.sha256") || { echo "FAIL: artifacts of $m corrupted"; exit 1; }
-  done
-  mkdir -p .lake/build
-  cp -a "$artifacts_in/build/." .lake/build/
-  cat "$artifacts_in"/*.sha256 | sort -k2 > "$safe/installed.sha"
+  # the aggregating roots are built and replayed here; every other module comes from a matrix job
+  python3 scripts/heavy_closure.py --aggregates "${roots[@]}" > "$safe/aggr.txt"
+  mapfile -t aggr < "$safe/aggr.txt"
+  is_aggr() { local r; for r in "${aggr[@]}"; do [[ $r == "$1" ]] && return 0; done; return 1; }
+  replay=("${aggr[@]}")
+  from_matrix=()
+  for m in "${mods[@]}"; do is_aggr "$m" || from_matrix+=("$m"); done
+  scripts/install_artifacts.sh "$artifacts_in" "$safe/installed.sha" "${from_matrix[@]}"
 fi
 
 echo "== 3. heavy modules, sandboxed, one at a time"
 scripts/heavy_build.sh "${mods[@]}"
-if [[ -n "$artifacts_in" ]]; then
+if [[ -n "$artifacts_in" && -s "$safe/installed.sha" ]]; then
   (cd .lake && sha256sum --quiet -c "$safe/installed.sha") \
     || { echo "FAIL: installed matrix artifacts were rebuilt or changed"; exit 1; }
 fi
@@ -89,10 +86,15 @@ rm -rf "$axdir"; mkdir -p "$axdir"
   for m in "${roots[@]}"; do echo "import $m"; done
   for t in "${thm_list[@]}"; do echo "#print axioms $t"; done
 } > "$axdir/HeavyAxioms.lean"
-out=$(scripts/sandbox.sh "$lake_bin" env lean "$axdir/HeavyAxioms.lean" 2>&1)
+rc=0
+out=$(scripts/sandbox.sh "$lake_bin" env lean "$axdir/HeavyAxioms.lean" 2>&1) || rc=$?
 echo "$out"
 flat=$(echo "$out" | tr '\n' ' ')
-if echo "$flat" | grep -qi 'error'; then echo "FAIL: error while checking axioms"; exit 1; fi
+# Lean reports errors as `<file>:<line>:<col>: error`; a theorem name may contain "error" (for
+# example `errorAborts`, review batch 8), so only that prefix and the exit code count
+if [[ $rc -ne 0 ]] || grep -qE ':[0-9]+:[0-9]+: error' <<< "$out"; then
+  echo "FAIL: error while checking axioms (exit $rc)"; exit 1
+fi
 n_reports=$(echo "$flat" | grep -o 'depends on axioms\|does not depend on any axioms' | wc -l)
 if [[ $n_reports -ne ${#thm_list[@]} ]]; then
   echo "FAIL: expected ${#thm_list[@]} axiom reports, got $n_reports"; exit 1

@@ -13,7 +13,7 @@ How this project works: synthesis, agent loop, difftest design. Start here.
 | [Differential testing](methodology/differential-testing.md) | Lean-vs-CE difftest harness, generator, driver, results; v1 ops ≥ 65,960 agreeing cases each; preempt coverage via small runtime thresholds; triage bins | 2026-11-10 |
 | [Difftest program format v0](methodology/difftest-program-format.md) | JSON AST v0 (values, ops → exact IO terms, user-fn table, trace events); Scala runner modes replay/testcontrol; commands, limits | 2026-11-10 |
 | [Inventory](methodology/inventory.md) | inventory/inventory.csv: columns, scope, exclusion rules, how to regenerate, counts (3,255 rows) | 2026-11-10 |
-| [Registry and audit](methodology/registry-and-audit.md) | Registry Entry fields; audit checks exact theorem type, axioms, module prefixes, bug record, inventory cross-check; self-test fixtures; CI | 2026-11-14 |
+| [Registry and audit](methodology/registry-and-audit.md) | Registry Entry fields; audit checks exact theorem type, axioms, module prefixes, bug record, inventory cross-check; self-test fixtures; CI | 2026-11-15 |
 
 ## cats-effect
 
@@ -33,10 +33,10 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [SyncIO and syncStep model](cats-effect/syncio-and-syncstep-model.md) | SyncIO run loop and SyncStep.interpret (G = SyncIO) mirror; syncStepIdentitySyncIO refuted (CE-0001, reproducer case 4) | 2026-11-10 |
 | [Resource model and CE-0002](cats-effect/resource-model.md) | Resource ADT + allocatedCase mirror (F = IO), closure-id codec; resourceEvalPreservesUncancelable refuted (CE-0002, reproducer case C); use/both in ResourceUse | 2026-11-10 |
 | [guarantee and bracket model, CE-0005](cats-effect/bracket-model.md) | IO#guarantee/guaranteeCase/bracket*/IO.bracketFull + kernel twins mirror; UserEffect.report; difftest v2; bracketFull twin refuted (CE-0005), 4 open | 2026-11-14 |
-| [parTraverseN model](cats-effect/partraverse-model.md) | Kernel default parTraverseN with IO ops (no twin), HashSet order as input, difftest op, 8 open properties (deep Lib, harness counter) with witnesses and smoke; Scala infix-precedence gotcha | 2026-11-14 |
+| [parTraverseN model](cats-effect/partraverse-model.md) | Kernel default parTraverseN with IO ops (no twin), HashSet order as input, difftest op, 8 open properties (closure references, harness counter) with witnesses and smoke; HashSet difftest by refinement; Scala infix-precedence gotcha | 2026-11-15 |
 | [Queue and timeout model](cats-effect/queue-model.md) | UnboundedAsyncQueue + IO#timeout/timeoutTo/never mirror; takeTimeoutNoLostElement refuted by the FIFO schedule (CE-0003) | 2026-11-10 |
 | [memoize model and CE-0030](cats-effect/memoize-model.md) | IO#memoize = kernel GenConcurrent#memoize mirror (no twin); difftest ops memoize/memoGet; CE-0030 refuted (masked `canceled *> never` hangs a racing get), 2 open | 2026-11-10 |
-| [Resource use, allocated, both, and CE-0020](cats-effect/resource-use-both-model.md) | fold/use/allocated/rel2/both mirror (`ResourceUse`), difftest v2 rUse/rAllocated/rBoth (≥51k each), CE-0020 refuted (both skips a release), 3 open; harness privacy by construction (`HarnessPrivacy`, decision 56), satisfiability witnesses; Lib.fields probe check (2 defects fixed); decision 58 harness (Val.fn, S1 gone, S2 clauses) | 2026-11-15 |
+| [Resource use, allocated, both, and CE-0020](cats-effect/resource-use-both-model.md) | fold/use/allocated/rel2/both mirror (`ResourceUse`), difftest v2 rUse/rAllocated/rBoth (≥51k each), CE-0020 refuted (both skips a release), 3 open; harness privacy by construction (`HarnessPrivacy`, decision 56), satisfiability witnesses; Lib.fields probe check (2 defects fixed); decision 58 harness (Val.fn, S1 gone, S2 clauses); review 9: R1 `REnv` index forgery (HOLLOW) | 2026-11-15 |
 | [race, both and fiber leaks](cats-effect/race-both-model.md) | Kernel-default mirror of race/raceOutcome/both/bothOutcome (no IO twin), leak observation liveRaceChildren, difftest v2 (≥50k per op), 5 open entries, smoke 0 violations | 2026-11-10 |
 
 ## semantics

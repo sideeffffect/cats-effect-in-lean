@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+export PATH="$HOME/.elan/bin:$PATH"
 cd "$(dirname "$0")/../.."
 SP=${CERTGEN_OLEAN:-/tmp/certgen-olean}
 L=${LAKE:-lake}

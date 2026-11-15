@@ -24,14 +24,26 @@ trap 'rm -rf "$tmp"' EXIT
 own_re() { # regex for the artifacts of module $1
   printf '/%s\\.' "$(echo "$1" | sed 's/\./\//g')"
 }
-manifest() { # every file under .lake (build outputs, lake config) except the artifacts of module $1
-  find .lake -type f -not -name lake.lock -print0 | sort -z | xargs -0 -r sha256sum \
-    | grep -v -E "$(own_re "$1")" || true
+manifest() { # every entry under .lake (build outputs, lake config) except the artifacts of module $1:
+  # regular files by content hash; symlinks and other non-directory entries by type and target
+  # (review batch 8: a symlink must not slip past the check)
+  {
+    find .lake -type f -not -name lake.lock -print0 | sort -z | xargs -0 -r sha256sum
+    find .lake -not -type f -not -type d -printf '%y %p -> %l\n' | sort
+  } | grep -v -E "$(own_re "$1")" || true
 }
 tree_state() {
   git status --porcelain=v1 --untracked-files=all
   git diff HEAD
 }
+
+# Let lake elaborate its configuration now, outside the sandbox (as every other lake call of
+# the job does), so that a stale `.lake/config` from the CI cache is refreshed before the first
+# snapshot. CI run 43651882144: the two jobs whose module has no default-target dependency ran
+# no lake command before the first sandboxed build, so lake re-elaborated the changed lakefile
+# inside it and `.lake/config/0/lakefile.olean{,.trace}` changed. The config stays in the hash
+# check: after this step any change to it fails.
+"$lake_bin" env true
 
 for m in "$@"; do
   echo "== sandboxed build $m"

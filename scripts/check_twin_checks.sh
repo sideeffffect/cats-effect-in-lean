@@ -1,63 +1,90 @@
 #!/usr/bin/env bash
-# Build the CE-0002, CE-0005 and CE-0030 fixed-twin checks and the track G smoke tests (lean_lib TwinChecks) one module at a time, so that only
-# one heavy Lean process runs at once (each module peaks under 8 GB, measured 2026-11-15), then check their axioms.
-# Usage: scripts/check_twin_checks.sh
+# Fixed-twin checks and the track G smoke tests (lean_lib TwinChecks; decisions 39, 45, 57).
+#
+# Two modes:
+# - Full (local, default): build every module of TwinChecks here.
+# - Aggregate (CI job `twin-aggregate`, TWIN_ARTIFACTS_IN=<dir>): the matrix jobs `twin-module`
+#   (scripts/check_heavy_module.sh --lib TwinChecks) built the other modules and uploaded their
+#   artifacts; this job checks and installs them (scripts/install_artifacts.sh) and builds only
+#   the aggregating roots (roots that import other TwinChecks modules).
+#
+# Steps:
+# 1. Build the default target (outside the sandbox, as the main job does).
+# 2. Module list: scripts/heavy_closure.py --lib TwinChecks (import closure of the lakefile roots
+#    minus the default target, imports first).
+# 3. Build the modules one at a time in the bwrap sandbox, each build checked to change only its
+#    own artifacts (scripts/heavy_build.sh). In aggregate mode the installed artifacts must stay
+#    byte-identical.
+# 4. Axioms of the result theorems below: only propext, Classical.choice, Quot.sound.
+#
+# Usage: scripts/check_twin_checks.sh   (from any directory; needs bwrap)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.elan/bin:$PATH"
-lake build --wfail CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedChecks
-for f in CatsEffectInLean/Proofs/Calibration/ResourceEvalFixedParts/*/*.lean \
-    CatsEffectInLean/Proofs/Calibration/ResourceEvalFixedParts/*.lean; do
-  m=${f%.lean}; m=${m//\//.}
-  echo "== $m"
-  lake build --wfail "$m"
-done
-lake build --wfail CatsEffectInLean.Proofs.Phase6.BracketFullFixed
-lake build --wfail CatsEffectInLean.Proofs.Phase6.BracketSmokeDefs
-for f in CatsEffectInLean/Proofs/Phase6/BracketSmokeParts/*/*.lean \
-    CatsEffectInLean/Proofs/Phase6/BracketSmokeParts/*.lean; do
-  m=${f%.lean}; m=${m//\//.}
-  echo "== $m"
-  lake build --wfail "$m"
-done
-lake build --wfail CatsEffectInLean.Proofs.Phase6.BracketSmoke
-lake build --wfail CatsEffectInLean.Proofs.Phase6.MemoizeFixedDefs
-for f in CatsEffectInLean/Proofs/Phase6/MemoizeFixedParts/*/*.lean \
-    CatsEffectInLean/Proofs/Phase6/MemoizeFixedParts/*.lean; do
-  m=${f%.lean}; m=${m//\//.}
-  echo "== $m"
-  lake build --wfail "$m"
-done
-lake build --wfail CatsEffectInLean.Proofs.Phase6.MemoizeFixed
-lake build --wfail CatsEffectInLean.Proofs.Phase6.ResourceBothFixedDefs
-for f in CatsEffectInLean/Proofs/Phase6/ResourceBothFixedParts/*.lean; do
-  m=${f%.lean}; m=${m//\//.}
-  echo "== $m"
-  lake build --wfail "$m"
-done
-lake build --wfail CatsEffectInLean.Proofs.Phase6.ResourceBothFixed
-lake build --wfail TwinChecks
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
-cat > "$tmp/TwinAxioms.lean" <<'LEAN'
-import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed
-import CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedOld
-import CatsEffectInLean.Proofs.Phase6.BracketFullFixed
-import CatsEffectInLean.Proofs.Phase6.BracketSmoke
-import CatsEffectInLean.Proofs.Phase6.MemoizeFixed
-import CatsEffectInLean.Proofs.Phase6.ResourceBothFixed
-#print axioms CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed.fixedTwin_holds
-#print axioms CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed.v371_fails
-#print axioms CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed.v371_fails_more
-#print axioms CatsEffectInLean.Proofs.Phase6.BracketFullFixed.all_checks
-#print axioms CatsEffectInLean.Proofs.Phase6.BracketSmoke.all_checks
-#print axioms CatsEffectInLean.Proofs.Phase6.MemoizeStuckWitness.all_checks
-#print axioms CatsEffectInLean.Proofs.Phase6.ResourceBothFixed.all_checks
-LEAN
-out=$(lake env lean "$tmp/TwinAxioms.lean" 2>&1)
+lake_bin=$(command -v lake)
+artifacts_in=${TWIN_ARTIFACTS_IN:-}
+
+# The result theorems of the twin checks (one or more per root).
+theorems=(
+  CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed.fixedTwin_holds
+  CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed.v371_fails
+  CatsEffectInLean.Proofs.Calibration.ResourceEvalFixed.v371_fails_more
+  CatsEffectInLean.Proofs.Phase6.BracketFullFixed.all_checks
+  CatsEffectInLean.Proofs.Phase6.BracketSmoke.all_checks
+  CatsEffectInLean.Proofs.Phase6.MemoizeStuckWitness.all_checks
+  CatsEffectInLean.Proofs.Phase6.ResourceBothFixed.all_checks
+)
+
+safe=$(mktemp -d)
+trap 'rm -rf "$safe"' EXIT
+
+echo "== 1. default target (outside the sandbox, as in the main job)"
+lake build --wfail CatsEffectInLean
+
+echo "== 2. TwinChecks modules"
+python3 scripts/heavy_closure.py --from-lakefile --lib TwinChecks > "$safe/mods.txt"
+python3 scripts/heavy_closure.py --from-lakefile --lib TwinChecks --roots > "$safe/roots.txt"
+python3 scripts/heavy_closure.py --from-lakefile --lib TwinChecks --aggregates > "$safe/aggr.txt"
+mapfile -t mods < "$safe/mods.txt"
+mapfile -t roots < "$safe/roots.txt"
+mapfile -t aggr < "$safe/aggr.txt"
+[[ ${#mods[@]} -gt 0 ]] || { echo "FAIL: no TwinChecks modules"; exit 1; }
+printf '%s\n' "${mods[@]}"
+
+if [[ -n "$artifacts_in" ]]; then
+  echo "== 2b. install the artifacts of the matrix jobs from $artifacts_in"
+  is_aggr() { local r; for r in "${aggr[@]}"; do [[ $r == "$1" ]] && return 0; done; return 1; }
+  from_matrix=()
+  for m in "${mods[@]}"; do is_aggr "$m" || from_matrix+=("$m"); done
+  scripts/install_artifacts.sh "$artifacts_in" "$safe/installed.sha" "${from_matrix[@]}"
+fi
+
+echo "== 3. TwinChecks modules, sandboxed, one at a time"
+scripts/heavy_build.sh "${mods[@]}"
+if [[ -n "$artifacts_in" && -s "$safe/installed.sha" ]]; then
+  (cd .lake && sha256sum --quiet -c "$safe/installed.sha") \
+    || { echo "FAIL: installed matrix artifacts were rebuilt or changed"; exit 1; }
+fi
+
+echo "== 4. axioms"
+axdir=.lake/twin-axioms
+rm -rf "$axdir"; mkdir -p "$axdir"
+{
+  for r in "${roots[@]}"; do echo "import $r"; done
+  for t in "${theorems[@]}"; do echo "#print axioms $t"; done
+} > "$axdir/TwinAxioms.lean"
+rc=0
+out=$(scripts/sandbox.sh "$lake_bin" env lean "$axdir/TwinAxioms.lean" 2>&1) || rc=$?
 echo "$out"
-bad=$(echo "$out" | grep -o '\[[^]]*\]' | tr -d '[]' | tr ',' '\n' | sed 's/^ *//' | grep -v -E '^(propext|Classical\.choice|Quot\.sound)$' | grep -v '^$' || true)
-if echo "$out" | grep -qi 'error'; then echo "FAIL: error while checking axioms"; exit 1; fi
-if [[ $(echo "$out" | grep -c 'depends on axioms\|does not depend on any axioms') -ne 7 ]]; then echo "FAIL: expected 7 axiom reports"; exit 1; fi
+flat=$(echo "$out" | tr '\n' ' ')
+if [[ $rc -ne 0 ]] || grep -qE ':[0-9]+:[0-9]+: error' <<< "$out"; then
+  echo "FAIL: error while checking axioms (exit $rc)"; exit 1
+fi
+n_reports=$(echo "$flat" | grep -o 'depends on axioms\|does not depend on any axioms' | wc -l)
+if [[ $n_reports -ne ${#theorems[@]} ]]; then
+  echo "FAIL: expected ${#theorems[@]} axiom reports, got $n_reports"; exit 1
+fi
+bad=$(echo "$flat" | grep -o '\[[^]]*\]' | tr -d '[]' | tr ',' '\n' | sed 's/^ *//; s/ *$//' \
+  | grep -v -E '^(propext|Classical\.choice|Quot\.sound)$' | grep -v '^$' || true)
 if [[ -n $bad ]]; then echo "FAIL: forbidden axioms: $bad"; exit 1; fi
-echo "OK: twin checks built; axioms only propext, Classical.choice, Quot.sound"
+echo "OK: twin checks built in the sandbox; axioms only propext, Classical.choice, Quot.sound"
