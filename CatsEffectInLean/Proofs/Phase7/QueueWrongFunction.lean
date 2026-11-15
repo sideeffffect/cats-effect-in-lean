@@ -22,6 +22,7 @@ schedules.
 | `wHangAsync`: `UnboundedAsyncQueue#take` waits in `get` without `poll` (cannot be canceled) | `asyncNoDeadlock` | `unbounded`, same |
 | `wNoWake`: `AbstractQueue#offer` enqueues but does not complete the taker | `concTakerLiveness` | `boundedForConcurrent(2)`, `[[take], [offer 1]]`, join `[0]` |
 | `wNoNotify`: `UnboundedAsyncQueue#offer` puts but does not notify | `asyncTakerLiveness` | `unbounded`, same |
+| `wLifo` on the `Async` side only | `twinSeq` | `(boundedForConcurrent(3), bounded(3))`, one fiber `[offer 1, offer 2, tryTake]` |
 -/
 
 namespace CatsEffectInLean.Proofs.Phase7.QueueWrongFunction
@@ -238,6 +239,12 @@ theorem wNoWake_breaks : (runWith wNoWake (.boundedConc 2) lossIn [] (.join [0])
 
 theorem wNoNotify_breaks : (runWith wNoNotify .unbounded lossIn [] (.join [0])).map (fun o =>
     o.summary != .done (.succeeded .unit)) = some true := by
+  decide +kernel
+
+/-! ## `twinSeq`: a broken `Async` side gives a trace that the `Concurrent` side never gives -/
+
+theorem wLifo_twin_breaks : (runWith henv (.boundedConc 3) fifoIn [] (.join [0])).map (fun o => events o.out) ≠
+    (runWith wLifo (.bounded 3) fifoIn [] (.join [0])).map (fun o => events o.out) := by
   decide +kernel
 
 end CatsEffectInLean.Proofs.Phase7.QueueWrongFunction

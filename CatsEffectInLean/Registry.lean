@@ -613,7 +613,19 @@ def registry : List Entry := [
       (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
       plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
       iterations). No user code, so no WellFormed hypothesis. Satisfiable \
-      (QueueWitness.async_live_satisfiable). Wrong function: wNoNotify_breaks. Smoke: qsmoke. Open." }
+      (QueueWitness.async_live_satisfiable). Wrong function: wNoNotify_breaks. Smoke: qsmoke. Open." },
+  { id := "std.Queue.twinSeq"
+    rows := ["std.Queue.bounded", "std.Queue.dropping", "std.Queue.unbounded", "std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.AbstractQueue.size", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BaseBoundedAsyncQueue.size", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnboundedAsyncQueue.size", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.Queue.UnsafeBounded.size", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take", "std.UnsafeUnbounded.size"]
+    prop := ``Props.Phase7.Queue.twinSeq
+    status := .«open»
+    note := "Twin (decision 59): the Concurrent and the Async implementation of one factory agree on \
+      sequential use: for 2 <= cap < 65534 and the pairs (boundedForConcurrent(cap), bounded(cap)), \
+      (droppingForConcurrent(cap), dropping(cap)), (unboundedForConcurrent, unbounded), every script \
+      of offer/tryOffer/take/tryTake/size/cede run by one fiber that the root joins gives the same \
+      set of (summary, trace) results on both sides (all schedules). Async family under sequential \
+      consistency. Satisfiable (QueueWitness.twinSeq_satisfiable: full queue, tryOffer false, FIFO, \
+      size). Wrong function: wLifo on the Async side gives another trace (wLifo_twin_breaks). Smoke: \
+      qsmoke (twin loop). Open." }
 ]
 
 end CatsEffectInLean

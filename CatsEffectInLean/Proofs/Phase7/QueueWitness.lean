@@ -133,4 +133,37 @@ theorem async_live_satisfiable : LivenessWitness AsyncKeep := by
   exact ⟨_, liveScripts, [], asyncKeep_unbounded, liveScripts_shape, by simp, by decide,
     o, ⟨3000, [], ho⟩, hp.1, hp.2⟩
 
+/-! ## Statement 6 (`twinSeq`): both sides give the same nontrivial trace -/
+
+/-- One fiber: `offer 1, offer 2, tryOffer 3, tryTake, size, take, tryOffer 4, tryTake` (capacity 2:
+the queue is full at `tryOffer 3`). -/
+def twinScript : List Op :=
+  [.offer (.nat 1), .offer (.nat 2), .tryOffer (.nat 3), .tryTake, .size, .take, .tryOffer (.nat 4), .tryTake]
+
+def twinEvents : List (Nat × Val) :=
+  [(0, .nat 1), (0, .nat 2), (3, .pair (.nat 3) (.bool false)), (2, .some (.nat 1)), (5, .nat 1), (1, .nat 2),
+   (3, .pair (.nat 4) (.bool true)), (2, .some (.nat 4))]
+
+def twinRun (k : QKind) : Option Obs := runObsP {} counterMaskModel henv 3000 [] (rootIO k [twinScript] [] (.join [0]))
+
+theorem twinRun_conc_ok : (twinRun (.boundedConc 2)).map (fun o =>
+    o.summary == .done (.succeeded .unit) && events o.out == twinEvents) = some true := by
+  decide +kernel
+
+theorem twinRun_async_ok : (twinRun (.bounded 2)).map (fun o =>
+    o.summary == .done (.succeeded .unit) && events o.out == twinEvents) = some true := by
+  decide +kernel
+
+/-- The hypotheses of `twinSeq` hold for capacity 2 and the bounded pair, and both sides reach the
+same nontrivial trace (full queue, `tryOffer` false, FIFO, `size`). -/
+theorem twinSeq_satisfiable :
+    ∃ cap, 2 ≤ cap ∧ cap < asyncLimit ∧ ∃ p ∈ twinPairs cap, ∃ o o', runs p.1 [twinScript] [] (.join [0]) o ∧
+      runs p.2 [twinScript] [] (.join [0]) o' ∧ o.summary = o'.summary ∧ events o.out = twinEvents ∧
+      events o'.out = twinEvents := by
+  obtain ⟨o, ho, hp⟩ := exists_of_map twinRun_conc_ok
+  obtain ⟨o', ho', hp'⟩ := exists_of_map twinRun_async_ok
+  simp only [Bool.and_eq_true, beq_iff_eq] at hp hp'
+  exact ⟨2, by decide, by decide, _, List.mem_cons_self .., o, o', ⟨3000, [], ho⟩, ⟨3000, [], ho'⟩,
+    hp.1.trans hp'.1.symm, hp.2, hp'.2⟩
+
 end CatsEffectInLean.Proofs.Phase7.QueueWitness

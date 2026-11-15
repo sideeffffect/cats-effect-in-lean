@@ -59,6 +59,16 @@ Per family (twins: the `Concurrent` and the `Async` implementations of the same 
    all consumers together take at most as many elements as the producers offer. Then every run
    that stops ends `Succeeded`: a waiting taker is woken when an element is there. Kinds that
    never drop. A run that stops `blocked` is a deadlock (a lost wakeup).
+
+Twin statement (one statement for both families):
+
+6. `twinSeq`: the two implementations of one factory agree on sequential use. For every capacity
+   `2 <= cap < 65534` and the pairs `(boundedForConcurrent(cap), bounded(cap))`,
+   `(droppingForConcurrent(cap), dropping(cap))`, `(unboundedForConcurrent, unbounded)`, and every
+   script run by one fiber that the root joins: the two sides have the same set of
+   (summary, trace) results. `Queue.bounded` picks the family by the class of the instance and by
+   the capacity (`Q:74-91`); the Scaladoc of `bounded`, `dropping`, `unbounded` (`Q:63-73`,
+   `Q:152-159`, `Q:184-195`) does not depend on the family.
 -/
 
 namespace CatsEffectInLean.Props.Phase7.Queue
@@ -433,5 +443,19 @@ def concNoDeadlock : Prop := NoDeadlock ConcAny
 def asyncNoDeadlock : Prop := NoDeadlock AsyncAny
 def concTakerLiveness : Prop := TakerLiveness ConcKeep
 def asyncTakerLiveness : Prop := TakerLiveness AsyncKeep
+
+/-- The twin pairs of statement 6: (`Concurrent`, `Async`) with the same factory arguments. -/
+def twinPairs (cap : Nat) : List (QKind × QKind) :=
+  [(.boundedConc cap, .bounded cap), (.droppingConc cap, .dropping cap), (.unboundedConc, .unbounded)]
+
+/-- One side's results are results of the other side (same summary, same trace). -/
+def SameResults (a b : QKind) (s : List Op) : Prop :=
+  ∀ o, runs a [s] [] (.join [0]) o → ∃ o', runs b [s] [] (.join [0]) o' ∧ o'.summary = o.summary ∧ o'.out = o.out
+
+/-- Statement 6: the `Concurrent` and the `Async` implementation of one factory agree on sequential
+use (one fiber, all scripts, all schedules). -/
+def twinSeq : Prop :=
+  ∀ cap, 2 ≤ cap → cap < asyncLimit → ∀ p ∈ twinPairs cap, ∀ s,
+    SameResults p.1 p.2 s ∧ SameResults p.2 p.1 s
 
 end CatsEffectInLean.Props.Phase7.Queue

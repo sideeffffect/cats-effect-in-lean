@@ -165,7 +165,9 @@ def main (args : List String) : IO UInt32 := do
       ("wHangConc (concNoDeadlock)", wHangConc, rootIO (.boundedConc 1) hangIn [(1, 0)] .cancelAll, doneC),
       ("wHangAsync (asyncNoDeadlock)", wHangAsync, rootIO .unbounded hangIn [(1, 0)] .cancelAll, doneC),
       ("wNoWake (concTakerLiveness)", wNoWake, rootIO (.boundedConc 2) lossIn [] (.join [0]), doneC),
-      ("wNoNotify (asyncTakerLiveness)", wNoNotify, rootIO .unbounded lossIn [] (.join [0]), doneC)]
+      ("wNoNotify (asyncTakerLiveness)", wNoNotify, rootIO .unbounded lossIn [] (.join [0]), doneC),
+      ("wLifo (twinSeq: Async side)", wLifo, rootIO (.bounded 3) fifoIn [] (.join [0]), fun o =>
+        some (events o.out) == (runWith henv (.boundedConc 3) fifoIn [] (.join [0])).map (fun o => events o.out))]
     let mut failed := 0
     for (name, e, io, claim) in tests do
       let (d, f) := randCheck e io 200 7 claim
@@ -216,5 +218,27 @@ def main (args : List String) : IO UInt32 := do
         bad := bad + 1
         IO.println s!"VIOLATION liveness case {i}: {repr c2} plan={repr plan2} summary={repr o.summary} events={evStr o.out} choices={repr (cs.take 120)}"
       | none => pure ()
+    -- statement 6 (twinSeq): one fiber, both sides, every stopped run gives the same result
+    let (len, g4) := randNat g 1 7
+    let (ci, g5) := randNat g4 2 4
+    let (s1, _, g6) := randScript g5 1 len false false
+    g := g6
+    let resultsOf (k : QKind) : List (Summary × List Val) := Id.run do
+      let mut gg := mkStdGen (seed + 7)
+      let mut acc : List (Summary × List Val) := []
+      for r in [0:runs] do
+        let (cs, g7) := randChoices gg 200 ([0, 5, 20, 50][r % 4]!)
+        gg := g7
+        match runObsP {} counterMaskModel henv 20000 cs (rootIO k [s1] [] (.join [0])) with
+        | some o => if !(acc.contains (o.summary, o.out)) then acc := (o.summary, o.out) :: acc
+        | none => pure ()
+      return acc
+    for (a, b) in twinPairs ci do
+      let ra := resultsOf a
+      let rb := resultsOf b
+      stopped := stopped + ra.length + rb.length
+      if ra.length != 1 || rb.length != 1 || ra != rb then
+        bad := bad + 1
+        IO.println s!"VIOLATION twin case {i}: {repr a} vs {repr b} script={repr s1} {ra.length} vs {rb.length} results; {repr (ra.map fun r => (r.1, events r.2))} / {repr (rb.map fun r => (r.1, events r.2))}"
   IO.println s!"qsmoke: {cases} cases x 2, {stopped} stopped runs, {bad} violations"
   return (if bad == 0 then 0 else 1)
