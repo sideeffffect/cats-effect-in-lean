@@ -249,3 +249,7 @@
 ## [2026-11-14] ingest | Decision 57 implementation: heavy CI matrix, aggregate heavy-proofs, paranoid by kernel
 - Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md
 - Updated: Registry and audit (heavy CI jobs, paranoid matrix)
+
+## [2026-11-15] ingest | Heavy CI fixes after run 43651882144 and review batch 8
+- Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md (section "Fixes after CI run 43651882144")
+- Updated: Registry and audit (heavy CI fixes)
