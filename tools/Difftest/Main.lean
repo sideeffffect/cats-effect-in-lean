@@ -69,8 +69,15 @@ def processLine (line : String) : Json × Bool × Bool :=
               (Json.mkObj (base ++ [kv "outcome" (Json.mkObj [kv "t" (.str s!"model:syncStep:{(repr sm).pretty}")]),
                 kv "compare" (Json.arr #[.str "outcome"])]), true, true)
           | _ =>
-            (Json.mkObj (base ++ replayFields cfg tc.prog choices tc.maxSteps
-              (CatsEffectInLean.Model.Sched.init CatsEffectInLean.Model.counterMaskModel io)), true, true)
+            let s0 := CatsEffectInLean.Model.Sched.init CatsEffectInLean.Model.counterMaskModel io
+            let k := ptMaxLen tc.prog
+            if k ≥ 5 then
+              -- review 8: the supervision set is a `HashSet`; every order of the children
+              let alts := replayAlternatives k cfg tc.prog choices tc.maxSteps s0
+              (Json.mkObj (base ++ replayFields cfg tc.prog choices tc.maxSteps s0 ++
+                [kv "alternatives" (Json.arr alts.toArray)]), true, true)
+            else
+              (Json.mkObj (base ++ replayFields cfg tc.prog choices tc.maxSteps s0), true, true)
         | .testcontrol _, [] =>
           (Json.mkObj (base ++ [kv "outcome" (.str "unsupported"), kv "size" (ioSize io),
             kv "unsupported" (Json.arr #[.str "mode:testcontrol"])]), true, false)

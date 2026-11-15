@@ -185,7 +185,7 @@ def dAcqWait (q w m pp : Nat) : Val := cloVal ns 94 [.ref q, .deferred w, .poll 
 def dGrant (q h : Nat) : Val := cloVal ns 95 [.ref q, .deferred h]
 
 /-- Source codes (`ioOf`). -/
-def srcAction (f : Nat) (a : Val) : Val := cloVal ns 80 [.nat f, a]
+def srcAction (f : Nat) (a : Val) : Val := cloVal ns 80 [.fn f, a]
 def srcResGet (r : Nat) (snap : Val) : Val := cloVal ns 81 [.deferred r, snap]
 /-- A node of the `parTraverse_` tree of `cancelAll`: the states `xs` and the cause. -/
 def srcPar (xs c : Val) : Val := cloVal ns 82 [xs, c]
@@ -193,19 +193,19 @@ def srcPar (xs c : Val) : Val := cloVal ns 82 [xs, c]
 def PT.toVal : PT → Val
   | .newDeferred => cloVal ns 0 []
   | .newRef x => cloVal ns 1 [x]
-  | .k1 n as f => cloVal ns 2 [.nat n, as, .nat f]
-  | .k2 n as f p => cloVal ns 3 [.nat n, as, .nat f, .deferred p]
+  | .k1 n as f => cloVal ns 2 [.nat n, as, .fn f]
+  | .k2 n as f p => cloVal ns 3 [.nat n, as, .fn f, .deferred p]
   | .semK => cloVal ns 4 []
-  | .k3 as f p s => cloVal ns 5 [as, .nat f, .deferred p, .ref s]
-  | .travM2 f p s q a => cloVal ns 6 [.nat f, .deferred p, .ref s, .ref q, a]
+  | .k3 as f p s => cloVal ns 5 [as, .fn f, .deferred p, .ref s]
+  | .travM2 f p s q a => cloVal ns 6 [.fn f, .deferred p, .ref s, .ref q, a]
   | .snoc acc => cloVal ns 7 [acc]
   | .toList => cloVal ns 8 []
   | .tryGet d => cloVal ns 9 [.deferred d]
-  | .elemSel f p s q a => cloVal ns 10 [.nat f, .deferred p, .ref s, .ref q, a]
-  | .uncK f p s q a => cloVal ns 11 [.nat f, .deferred p, .ref s, .ref q, a]
-  | .resK f p s q a m pp => cloVal ns 12 [.nat f, .deferred p, .ref s, .ref q, a, .poll m pp]
-  | .thenStart f p s q a r => cloVal ns 13 [.nat f, .deferred p, .ref s, .ref q, a, .deferred r]
-  | .callF f a => cloVal ns 14 [.nat f, a]
+  | .elemSel f p s q a => cloVal ns 10 [.fn f, .deferred p, .ref s, .ref q, a]
+  | .uncK f p s q a => cloVal ns 11 [.fn f, .deferred p, .ref s, .ref q, a]
+  | .resK f p s q a m pp => cloVal ns 12 [.fn f, .deferred p, .ref s, .ref q, a, .poll m pp]
+  | .thenStart f p s q a r => cloVal ns 13 [.fn f, .deferred p, .ref s, .ref q, a, .deferred r]
+  | .callF f a => cloVal ns 14 [.fn f, a]
   | .finK p s q r => cloVal ns 15 [.deferred p, .ref s, .ref q, .deferred r]
   | .compSucc r oc => cloVal ns 16 [.deferred r, oc]
   | .ifErr s r e => cloVal ns 17 [.ref s, .deferred r, .err e]
@@ -244,19 +244,19 @@ def PT.toVal : PT → Val
 def PT.ofFields : Nat → List Val → Option PT
   | 0, [] => some .newDeferred
   | 1, [x] => some (.newRef x)
-  | 2, [.nat n, as, .nat f] => some (.k1 n as f)
-  | 3, [.nat n, as, .nat f, .deferred p] => some (.k2 n as f p)
+  | 2, [.nat n, as, .fn f] => some (.k1 n as f)
+  | 3, [.nat n, as, .fn f, .deferred p] => some (.k2 n as f p)
   | 4, [] => some .semK
-  | 5, [as, .nat f, .deferred p, .ref s] => some (.k3 as f p s)
-  | 6, [.nat f, .deferred p, .ref s, .ref q, a] => some (.travM2 f p s q a)
+  | 5, [as, .fn f, .deferred p, .ref s] => some (.k3 as f p s)
+  | 6, [.fn f, .deferred p, .ref s, .ref q, a] => some (.travM2 f p s q a)
   | 7, [acc] => some (.snoc acc)
   | 8, [] => some .toList
   | 9, [.deferred d] => some (.tryGet d)
-  | 10, [.nat f, .deferred p, .ref s, .ref q, a] => some (.elemSel f p s q a)
-  | 11, [.nat f, .deferred p, .ref s, .ref q, a] => some (.uncK f p s q a)
-  | 12, [.nat f, .deferred p, .ref s, .ref q, a, .poll m pp] => some (.resK f p s q a m pp)
-  | 13, [.nat f, .deferred p, .ref s, .ref q, a, .deferred r] => some (.thenStart f p s q a r)
-  | 14, [.nat f, a] => some (.callF f a)
+  | 10, [.fn f, .deferred p, .ref s, .ref q, a] => some (.elemSel f p s q a)
+  | 11, [.fn f, .deferred p, .ref s, .ref q, a] => some (.uncK f p s q a)
+  | 12, [.fn f, .deferred p, .ref s, .ref q, a, .poll m pp] => some (.resK f p s q a m pp)
+  | 13, [.fn f, .deferred p, .ref s, .ref q, a, .deferred r] => some (.thenStart f p s q a r)
+  | 14, [.fn f, a] => some (.callF f a)
   | 15, [.deferred p, .ref s, .ref q, .deferred r] => some (.finK p s q r)
   | 16, [.deferred r, oc] => some (.compSucc r oc)
   | 17, [.ref s, .deferred r, .err e] => some (.ifErr s r e)
@@ -388,7 +388,7 @@ def ioOf : Val → IO
   | c =>
     match ofCloVal c with
     -- `F.unit >> f(a)` (`K/GC:182`)
-    | some (41, 80, [.nat f, a]) => .flatMap (.pure .unit) (PT.callF f a).fn
+    | some (41, 80, [.fn f, a]) => .flatMap (.pure .unit) (PT.callF f a).fn
     -- `result.get.flatMap(_.embed(F.canceled *> F.never))` (`K/GC:231-233`)
     | some (41, 81, [.deferred r, snap]) =>
       .flatMap (IO.deferredGetOf r (match snap with | .some x => some x | _ => none)) PT.embedK.fn
@@ -398,37 +398,12 @@ def ioOf : Val → IO
       | none => .error { code := illCode, kind := .fatal }
     | _ => .error { code := illCode, kind := .fatal }
 
-/-! ## Function fields (decision 56, `Lib.fields`)
+/-! ## Closure references (decision 58)
 
-The number fields of these closures that hold a closure id: `f` (the user function) of `k1`, `k2`,
-`k3`, `travM2`, `elemSel`, `uncK`, `resK`, `thenStart`, `callF`; and `f` of the source code
-`srcAction f a`, which other mirrors keep as a closure field (`Bracket` `Src.ext`, `Race` and
-`Timeout` sources). The other number fields are data: `n` of `k1`, `k2` is the limit (a count);
-`ns` and the tag of each code are the encoding. Handles (`p s q r t w`, polls) are `Val` handles,
-which `captured` sees without `fields`. -/
-
-/-- The user function fields of a closure. -/
-def PT.fnIds : PT → List Nat
-  | .k1 _ _ f | .k2 _ _ f _ | .k3 _ f _ _ | .travM2 f _ _ _ _ | .elemSel f _ _ _ _ | .uncK f _ _ _ _
-  | .resK f _ _ _ _ _ _ | .thenStart f _ _ _ _ _ | .callF f _ => [f]
-  | _ => []
-
-/-- The function id in a source code `srcAction f a` (also under `Bracket`'s `Src.ext`, `.left`). -/
-def srcFnIds (x : Val) : List Nat :=
-  let y := match x with
-    | .left s => s
-    | s => s
-  match ofCloVal y with
-  | some (41, 80, [.nat f, _]) => [f]
-  | _ => []
-
-/-- `Lib.fields` of this mirror and the mirrors it uses: the `PT` function fields, the function
-ids of `srcAction` codes in any closure field, and `Bracket.fnFields`. -/
-def fnFields (c : Val) : List Nat :=
-  (match ofCloVal c with
-   | some (k, tag, fs) =>
-     (if k == ns then ((PT.ofFields tag fs).map PT.fnIds).getD [] else []) ++ fs.flatMap srcFnIds
-   | none => []) ++ Bracket.fnFields c
+The user function `f` of `k1`, `k2`, `k3`, `travM2`, `elemSel`, `uncK`, `resK`, `thenStart`,
+`callF` and of the source code `srcAction f a` is a closure reference (`Val.fn f`), so
+`WellFormed` follows it structurally. The other number fields are data: the limit `n` of `k1`,
+`k2`, and the namespace and tag of each code. -/
 
 /-! ## The closures -/
 

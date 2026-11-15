@@ -333,9 +333,9 @@ def syncStepInit (p : Prog) (io : IO) (limit : Nat) : Except Summary (Sched RMas
 /-- Run case `tc` from the scheduler state `s0` (the root term on `Sched.init`, or
 `syncStepInit`) in replay mode with runtime thresholds `cfg` (case field `runtime`); the output
 fields (without `v`, `id`, `mode`). -/
-def replayFields (cfg : Config) (p : Prog) (choices : List Choice) (maxSteps : Nat) (s0 : Sched RMask) :
-    List (String × Json) :=
-  let env := userEnv p
+def replayFieldsH (ho : List Val → List Val) (cfg : Config) (p : Prog) (choices : List Choice)
+    (maxSteps : Nat) (s0 : Sched RMask) : List (String × Json) :=
+  let env := userEnvH ho p
   let r0 : RS := { s := s0, cs := choices }
   let r := RS.run cfg env maxSteps (replayFuel cfg maxSteps) r0.absorb
   let hOf : Ren := { hOf := r.hOf, refOf := r.refOf, qOf := r.qOf, dOf := r.dOf, mOf := r.mOf }
@@ -351,5 +351,24 @@ def replayFields (cfg : Config) (p : Prog) (choices : List Choice) (maxSteps : N
    ("fibers", fibers), ("pending", toJson (r.s.liveHeap.ready.length + r.s.liveHeap.timers.length)),
    ("failures", Json.arr (r.failures.map Json.str)),
    ("compare", Json.arr (comparedFields.map Json.str).toArray)]
+
+/-- `replayFieldsH` with the insertion order as `HashSet` order. -/
+def replayFields (cfg : Config) (p : Prog) (choices : List Choice) (maxSteps : Nat) (s0 : Sched RMask) :
+    List (String × Json) :=
+  replayFieldsH _root_.id cfg p choices maxSteps s0
+
+/-- All permutations of a list. -/
+def perms : List Nat → List (List Nat)
+  | [] => [[]]
+  | x :: xs => (perms xs).flatMap fun p => (List.range (p.length + 1)).map fun i => p.take i ++ x :: p.drop i
+
+/-- Replay with every `HashSet` order of a `parTraverseN` with `k ≥ 5` inputs (`rankOrder`): the
+distinct results. The driver accepts the case if the Scala run equals one of them (refinement:
+the real order is one of them, review 8). -/
+def replayAlternatives (k : Nat) (cfg : Config) (p : Prog) (choices : List Choice) (maxSteps : Nat)
+    (s0 : Sched RMask) : List Json :=
+  (perms (List.range k)).foldl (fun acc perm =>
+    let j := Json.mkObj (replayFieldsH (rankOrder k perm) cfg p choices maxSteps s0)
+    if acc.contains j then acc else acc ++ [j]) []
 
 end Difftest

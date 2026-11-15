@@ -270,6 +270,15 @@
 - Updated: Resource use/both (probe check, 2 defects fixed), Outcome sets (Lib fields check), index
 - Raw: raw/cats-effect/2026-11-14-lib-fields-probe-notes.md
 
+
+## [2026-11-15] update | parTraverseN: decision 58 closure references, HashSet difftest
+- Updated: parTraverseN model (Val.fn fields, TL.start root, statement 8 without UserPrivate, F2/F3 closed, ParTraversePrivacy), Difftest program format (alternatives for the HashSet branch), index
+- Raw: raw/cats-effect/2026-11-15-partraverse-decision58.md
+
+## [2026-11-15] ingest | Track Res: decision 58 core (Val.fn closure references)
+- Updated: Outcome sets (decision 58 rule), Resource use/both (harness, Private = S2), Bracket model (F1), Registry and audit (check 9 removed), Agent workflow
+- Raw: raw/cats-effect/2026-11-15-decision-58-core-notes.md
+
 ## [2026-11-15] review | Review batch 8: harness privacy, parTraverseN, heavy CI matrix
 - Updated: Agent workflow (review log, harness privacy finding), index
 - Raw: raw/project-decisions/2026-11-15-review-batch-8-notes.md
@@ -278,7 +287,4 @@
 ## [2026-11-15] ingest | Decision 58: separate closure references (user answer)
 - Updated: Agent workflow (closure references section)
 - Raw: raw/project-decisions/2026-11-15-decision-58-closure-refs.md
-
-## [2026-11-15] ingest | Track Res: decision 58 core (Val.fn closure references)
-- Updated: Outcome sets (decision 58 rule), Resource use/both (harness, Private = S2), Bracket model (F1), Registry and audit (check 9 removed), Agent workflow
-- Raw: raw/cats-effect/2026-11-15-decision-58-core-notes.md
+- Difftest after decision 58 (generator with 5-input option): `opcount.py --seeds 51 52 --n 30000 --ops parTraverseN --boost tpl_parTraverse=8 tpl_parTraverseCancel=8`: 60,000 cases, all agree; 34,924 use `parTraverseN` (17,465 / 17,459 per seed). Fixed `hashcases/partraverse_hash.jsonl`: 32 agree (3 runs).

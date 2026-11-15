@@ -104,8 +104,8 @@ WEIGHTS = {
     'tpl_memo': 0.4, 'memoGet': 4,
     # format v2 (track Res)
     'rUse': 0.5, 'rAllocated': 0.4, 'res_both': 2.0, 'tpl_resBoth': 0.5,
-    # format v2 (batch 6.3): `parTraverseN` (lists of at most 4 elements: from 5 Scala uses a
-    # `HashSet` with identity-hash order; the Lean side runs the mirror with order `id`). Not a production of
+    # format v2 (batch 6.3): `parTraverseN` (lists of at most 5 elements: from 5 Scala uses a
+    # `HashSet` with identity-hash order; the Lean side lists every order, review 8). Not a production of
     # `composite_opts` (a new option shifts the shared RNG and pushed `race` below its selftest
     # minimum); `gen_case` appends it with its own RNG (`p_par_traverse`). Weights here only
     # scale how often the two shapes are chosen there (`--boost` in opcount.py).
@@ -787,10 +787,12 @@ class Gen:
         return {'op': 'rMake', 'acq': self.prog(t, self.res_env(env), sa, ctx), 'x': x, 'rel': rel}
 
     def g_par_traverse(self, env, size, ctx):
-        """`parTraverseN(n)(xs)(x => f)`: 0..4 elements of a literal type (or variables of it),
-        limit 1..5, `f` an arbitrary program of a small type (it can suspend, raise or cancel)."""
+        """`parTraverseN(n)(xs)(x => f)`: 0..5 elements of a literal type (or variables of it),
+        limit 1..5, `f` an arbitrary program of a small type (it can suspend, raise or cancel).
+        Five elements make the supervision set a `HashSet` (review 8); `cediff` then lists the
+        result of every order (`alternatives`) and the driver compares by refinement."""
         a = self.pick([(3, NAT), (1, UNIT), (1, BOOL)])
-        k = self.pick([(1, 0), (2, 1), (3, 2), (3, 3), (3, 4)])
+        k = self.pick([(1, 0), (2, 1), (3, 2), (3, 3), (3, 4), (2, 5)])
         xs = [self.atom(a, env) for _ in range(k)]
         x = self.fresh('x', env)
         n = self.pick([(4, 1), (4, 2), (2, 3), (1, 5)])

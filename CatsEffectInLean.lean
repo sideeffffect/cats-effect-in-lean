@@ -77,3 +77,4 @@ import CatsEffectInLean.RegistryHeavy
 import CatsEffectInLean.Model.ParTraverse
 import CatsEffectInLean.Props.Phase6.ParTraverse
 import CatsEffectInLean.Proofs.Phase6.ParTraverseWitness
+import CatsEffectInLean.Proofs.Phase6.ParTraversePrivacy

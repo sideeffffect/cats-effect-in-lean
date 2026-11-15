@@ -1,7 +1,6 @@
 import CatsEffectInLean.Model.ParTraverse
 import CatsEffectInLean.Model.WellFormed
 import CatsEffectInLean.Model.Outcomes
-import CatsEffectInLean.Props.Phase6.HarnessPrivacy
 
 /-!
 # `parTraverseN`: result order, success, error and cancel propagation (Phase 6, batch 6.3)
@@ -20,14 +19,14 @@ All statements quantify over all input lists (any length), all limits `n ≥ 1` 
 at any run-loop iteration) and all `HashSet` iteration orders `ord` (the supervision `Set` is a
 `HashSet` from 5 elements; its order comes from identity hashes, so the model takes any
 permutation, `(ord xs).Perm xs`). Statements 1-7 state outcomes and result values only, so they
-need no test marker; statement 8 uses the shared harness module (`HarnessPrivacy`, decision 56).
+need no test marker; statement 8 counts in a harness cell that user code cannot reach.
 Hypotheses:
 
 * `WellFormed` of the program (decision 27, statements 1-4 and 8): user code is code Scala can
   write; library closures (`ptIsLib`: the `Bracket`, `Race`, `Timeout` and `ParTraverse` mirrors)
-  may occur in user programs. The `Lib` is `ptLibDeep` (`limLib` for statement 8): it declares
-  the function fields (`ParTraverse.fnFields`, `TL.tag f`), so `WF.captured` follows a user
-  function that a library closure names by number (decision 56; review batch 7, defect D).
+  may occur in user programs. The `Lib` is `ptLibDeep` (`limLib` for statement 8). Decision 58:
+  every closure field that names a function is a closure reference (`Val.fn`), so `WellFormed`
+  follows it structurally (`WF.avail`); a data number never names a closure.
 * Statements 2-7 fix the behaviour of `f` (an ordinary input for each claim).
 
 ## Statements
@@ -35,9 +34,10 @@ Hypotheses:
 1. `parTraverseNOrder`: if the traversal succeeds, its result holds one entry per input, in input
    order: `f` is wrapped by the harness as `a => f(a).map(b => (a, b))`, and the first
    components of the result are exactly the inputs (no lost, no duplicated, no reordered entry).
-   Review 7, defect D: with the shallow `Lib` (`ptIsLib`) a user `f` could capture the per-input
-   result `Deferred` through a number field of its closure id and forge the result. With
-   `ptLibDeep` that `f` is not well formed (`Proofs/Phase6/PrivacyExamples.lean`).
+   Review 7 defect D and review 8 F2: a user `f` that captured the per-input result `Deferred`
+   (named by number in a library field, or hidden in a `Timeout.fold` fallback source) could
+   forge the result. With closure references (decision 58) the reference to that `f` is not
+   available to user code that does not hold the `Deferred` (`Proofs/Phase6/PrivacyExamples.lean`).
 2. `parTraverseNPureSucceeds`: if `f(a) = IO.pure(g(a))`, every run that stops ends `Succeeded`
    with `as.map(g)`: no deadlock, no error, the right order.
 3. `parTraverseNErrorAborts`: if `f(a0)` raises `e` and every other `f(a)` never completes, and
@@ -81,36 +81,41 @@ def ptIsLib (id : Nat) : Bool :=
 
 def tns : Nat := 42
 
-/-- `a => f(a).map(b => (a, b))` and its `map` function. -/
+/-- `a => f(a).map(b => (a, b))`, its `map` function, and the root `_ => parTraverseN(n)(as)(tag f)`.
+`tag f` is not public: only the harness root names it (decision 58: a reference to a library
+closure is available only if held). -/
 inductive TL where
   | tag (f : Nat)
   | pairWith (a : Val)
+  | start (n : Nat) (as : Val) (f : Nat)
   deriving DecidableEq, Repr
 
 def TL.toVal : TL → Val
-  | .tag f => cloVal tns 0 [.nat f]
+  | .tag f => cloVal tns 0 [.fn f]
   | .pairWith a => cloVal tns 1 [a]
+  | .start n as f => cloVal tns 2 [.nat n, as, .fn f]
 
 def TL.id (l : TL) : Nat := 2 * valToNat l.toVal + 1
 
 def TL.ofId? (id : Nat) : Option TL :=
   if isLibId id then
     match (cloOfId id).bind ofCloVal with
-    | some (42, 0, [.nat f]) => some (.tag f)
+    | some (42, 0, [.fn f]) => some (.tag f)
     | some (42, 1, [a]) => some (.pairWith a)
+    | some (42, 2, [.nat n, as, .fn f]) => some (.start n as f)
     | _ => none
   else none
 
-/-- `Lib.fields` of the statements: the mirror's function fields (`ParTraverse.fnFields`) and the
-user function `f` of the harness closure `TL.tag f`. `TL.pairWith a` holds an input value (data). -/
-def ptFields (c : Val) : List Nat :=
-  ParTraverse.fnFields c ++
-  (match ofCloVal c with
-   | some (42, 0, [.nat f]) => [f]
-   | _ => [])
+/-- Is `id` the public root closure `TL.start`? -/
+def TL.isStart (id : Nat) : Bool :=
+  match TL.ofId? id with
+  | some (.start _ _ _) => true
+  | _ => false
 
-/-- The `Lib` of the statements with function fields (decision 56; review batch 7, defect D). -/
-def ptLibDeep : Lib := { ok := ptIsLib, fields := ptFields }
+/-- The `Lib` of statements 1-4 (decision 58: closure references are `Val.fn`, so there are no
+field lists). The name is kept from decision 56. The public library closures are `ptIsLib` and
+the root `TL.start` of statement 1. -/
+def ptLibDeep : Lib := { ok := fun id => ptIsLib id || TL.isStart id }
 
 /-- User code `u` with the tagging closures. -/
 def tagged (u : UserEnv) : UserEnv where
@@ -124,7 +129,12 @@ def tagged (u : UserEnv) : UserEnv where
       | .throw e => { effects := r.effects, out := .throw e }
       | .ret _ => { out := .throw { code := illCode, kind := .fatal } }
     | some (.pairWith a0) => { out := .ret (.pair a0 a) }
+    | some (.start n as f) => { out := .prog (parTraverseNIO n (listOf as) (TL.tag f).id) }
     | none => u.callV id a v
+
+/-- The root of statement 1: `IO.unit.flatMap(_ => parTraverseN(n)(as)(a => f(a).map(b => (a, b))))`. -/
+def orderRoot (n : Nat) (as : List Val) (f : Nat) : IO :=
+  .flatMap (.pure .unit) (.user (TL.start n (listV as) f).id)
 
 /-- The first component of a pair. -/
 def fstOf : Val → Val
@@ -135,8 +145,8 @@ def fstOf : Val → Val
 def parTraverseNOrder : Prop :=
   ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat),
     1 ≤ n → f % 2 = 0 →
-    WellFormed ptLibDeep [] (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) →
-    ∀ o, outcomesP {} counterMaskModel (env ord (tagged u)) (parTraverseNIO n as (TL.tag f).id) o →
+    WellFormed ptLibDeep [] (env ord (tagged u)) (orderRoot n as f) →
+    ∀ o, outcomesP {} counterMaskModel (env ord (tagged u)) (orderRoot n as f) o →
       ∀ v, o.summary = .done (.succeeded v) → (unlistV v).map (·.map fstOf) = some as
 
 /-- Statement 2: a pure `f` gives `Succeeded(as.map(g))` in every run that stops. -/
@@ -257,18 +267,20 @@ def parTraverseNCancelAbortsGen : Prop :=
     ∀ o, outcomesP {} counterMaskModel (env ord (behaved bh)) (parTraverseNIO n as BL.body.id) o →
       o.summary = .done .canceled
 
-/-! ## Statement 8: at most `n` actions at once (harness namespace 44, decision 56)
+/-! ## Statement 8: at most `n` actions at once (harness namespace 44)
 
 Scaladoc `GenConcurrent.scala:132-133`: "The first n actions will be started first, with
 subsequent actions starting in order as each one completes", so at most `n` actions run at once.
 
-The harness (`HarnessPrivacy`): the root first allocates the counter cell `Ref` 0 (the token; the
-heap is empty at the start), then runs `parTraverseN(n)(as)(f')` with
+The harness: the root first allocates the counter cell `Ref` 0 (the heap is empty at the start),
+then runs `parTraverseN(n)(as)(f')` with
 `f'(a) = IO.uncancelable(poll => enter *> poll(IO.pure(a).flatMap(g)).attempt.onCancel(exit)
   .flatMap(x => exit *> x.liftTo[IO]))`: `enter` and `exit` count the running actions of user
 function `g` in the cell `(running, highest)`. Every closure that holds the cell is outside the
-`Lib`, so user code cannot name it, and user code cannot write the cell (`UserPrivate`,
-`WellFormed`). The claim: in every run that stops, the highest count is at most `n`. -/
+`Lib`. User code never receives the cell, so `WellFormed` (decision 58, `WF.avail`) keeps it from
+naming those closures and from writing the cell; the same rule protects the semaphore state
+`Ref` (review 8 F3). No other restriction on user code (scope S1 of review 8 is gone). The
+claim: in every run that stops, the highest count is at most `n`. -/
 
 def lns : Nat := 44
 
@@ -296,22 +308,22 @@ inductive CL where
 
 def CL.toVal : CL → Val
   | .newCell => cloVal lns 0 []
-  | .afterCell n as g => cloVal lns 1 [.nat n, as, .nat g]
-  | .body c g => cloVal lns 2 [.ref c, .nat g]
-  | .unc c a g => cloVal lns 3 [.ref c, a, .nat g]
+  | .afterCell n as g => cloVal lns 1 [.nat n, as, .fn g]
+  | .body c g => cloVal lns 2 [.ref c, .fn g]
+  | .unc c a g => cloVal lns 3 [.ref c, a, .fn g]
   | .enter c => cloVal lns 4 [.ref c]
-  | .run c a g m s => cloVal lns 5 [.ref c, a, .nat g, .poll m s]
+  | .run c a g m s => cloVal lns 5 [.ref c, a, .fn g, .poll m s]
   | .exit c => cloVal lns 6 [.ref c]
   | .fin c => cloVal lns 7 [.ref c]
   | .rethrow c x => cloVal lns 8 [.ref c, x]
 
 def CL.ofFields : Nat → List Val → Option CL
   | 0, [] => some .newCell
-  | 1, [.nat n, as, .nat g] => some (.afterCell n as g)
-  | 2, [.ref c, .nat g] => some (.body c g)
-  | 3, [.ref c, a, .nat g] => some (.unc c a g)
+  | 1, [.nat n, as, .fn g] => some (.afterCell n as g)
+  | 2, [.ref c, .fn g] => some (.body c g)
+  | 3, [.ref c, a, .fn g] => some (.unc c a g)
   | 4, [.ref c] => some (.enter c)
-  | 5, [.ref c, a, .nat g, .poll m s] => some (.run c a g m s)
+  | 5, [.ref c, a, .fn g, .poll m s] => some (.run c a g m s)
   | 6, [.ref c] => some (.exit c)
   | 7, [.ref c] => some (.fin c)
   | 8, [.ref c, x] => some (.rethrow c x)
@@ -326,11 +338,6 @@ def CL.ofId? (id : Nat) : Option CL :=
     | some (k, tag, fs) => if k == lns then CL.ofFields tag fs else none
     | none => none
   else none
-
-/-- The function field `g` (the user function). `n` is a count, `a`, `as`, `x` are values. -/
-def CL.fnIds : CL → List Nat
-  | .afterCell _ _ g | .body _ g | .unc _ _ g | .run _ _ g _ _ => [g]
-  | _ => []
 
 /-- The counter cell `(running, highest)`. -/
 def cntOf (v : View) (c : Nat) : Nat × Nat :=
@@ -375,14 +382,10 @@ def CL.public : CL → Bool
   | .newCell | .afterCell _ _ _ => true
   | _ => false
 
-/-- The `Lib` of statement 8: `ptLibDeep` and the public harness closures; function fields of
-both. -/
+/-- The `Lib` of statement 8: `ptIsLib` and the public harness closures (`newCell`, `afterCell`;
+they hold no handle of the harness). -/
 def limLib : Lib :=
-  { ok := fun id => ptIsLib id || ((CL.ofId? id).map CL.public).getD false,
-    fields := fun c => ptFields c ++
-      (match ofCloVal c with
-       | some (k, tag, fs) => if k == lns then ((CL.ofFields tag fs).map CL.fnIds).getD [] else []
-       | none => []) }
+  { ok := fun id => ptIsLib id || ((CL.ofId? id).map CL.public).getD false }
 
 /-- The token: the counter cell `Ref` 0. -/
 def limToks : List Handle := [.ref 0]
@@ -402,7 +405,6 @@ def parTraverseNAtMostN : Prop :=
   ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) →
   ∀ (u : UserEnv) (n : Nat) (as : List Val) (g : Nat),
     1 ≤ n → g % 2 = 0 →
-    HarnessPrivacy.UserPrivate (env ord (limited u)) limToks →
     WellFormed limLib [] (env ord (limited u)) (limitRoot n as g) →
     ∀ o, outcomesP {} counterMaskModel (env ord (limited u)) (limitRoot n as g) o →
       ∃ h, highest o = some h ∧ h ≤ n
