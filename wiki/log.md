@@ -305,3 +305,7 @@
 ## [2026-11-15] ingest | Twin checks as a parallel matrix (twin-checks)
 - Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md (section "Twin checks as a matrix")
 - Updated: Registry and audit (twin layout)
+
+## [2026-11-15] update | Twin matrix: combining-module rule, real-runner timings
+- Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md (twin section: combining modules, CI run 43682566345, lean job without cache, paranoid all green)
+- Updated: Registry and audit (twin layout, critical path)
