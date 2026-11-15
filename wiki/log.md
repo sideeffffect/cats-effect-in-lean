@@ -258,6 +258,14 @@
 - Updated: parTraverseN model (ptLibDeep with ParTraverse.fnFields incl. srcAction codes; defect D closed; statement 8 atMostN with HarnessPrivacy; witness and kernel-checked wrong function), index
 - Raw: raw/cats-effect/2026-11-14-partraverse-deep-lib.md
 
+## [2026-11-14] ingest | Review batch 7 fixes for decision 55 (sandbox, derived lists, export scope)
+- Raw: raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md (section "Review batch 7 fixes")
+- Updated: Registry and audit (heavy job steps, export scope, leanexport gotcha)
+
+## [2026-11-14] ingest | Decision 57 implementation: heavy CI matrix, aggregate heavy-proofs, paranoid by kernel
+- Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md
+- Updated: Registry and audit (heavy CI jobs, paranoid matrix)
+
 ## [2026-11-14] ingest | Track Res: Lib.fields probe check
 - Updated: Resource use/both (probe check, 2 defects fixed), Outcome sets (Lib fields check), index
 - Raw: raw/cats-effect/2026-11-14-lib-fields-probe-notes.md
@@ -270,3 +278,12 @@
 ## [2026-11-15] ingest | Track Res: decision 58 core (Val.fn closure references)
 - Updated: Outcome sets (decision 58 rule), Resource use/both (harness, Private = S2), Bracket model (F1), Registry and audit (check 9 removed), Agent workflow
 - Raw: raw/cats-effect/2026-11-15-decision-58-core-notes.md
+
+## [2026-11-15] review | Review batch 8: harness privacy, parTraverseN, heavy CI matrix
+- Updated: Agent workflow (review log, harness privacy finding), index
+- Raw: raw/project-decisions/2026-11-15-review-batch-8-notes.md
+- Review: review/2026-11-15-review-batch-8.md
+
+## [2026-11-15] ingest | Decision 58: separate closure references (user answer)
+- Updated: Agent workflow (closure references section)
+- Raw: raw/project-decisions/2026-11-15-decision-58-closure-refs.md
