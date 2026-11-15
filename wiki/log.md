@@ -359,3 +359,9 @@
 - Created: CountDownLatch and CyclicBarrier model (cats-effect/latch-barrier-model.md)
 - Updated: Differential testing (format v2 ops of track L, mutation check)
 - Raw: raw/cats-effect/2026-11-15-track-l-latch-barrier-notes.md
+
+## [2026-11-15] lint | Review batch 11b: Phase 7 tracks S and L
+- 15 entries. HOLLOW: `std.Semaphore.noDeadlock`, `std.Mutex.lock.noDeadlock` (a fatal `Base.err` stops the run with `Summary.fatal`: false for every implementation). FAITHFUL: CE-0060 `std.Semaphore.count.atRest`; as statements the other 5 track S and all 7 track L entries.
+- Updated: Agent workflow (review log), Semaphore and Mutex model (review result), CountDownLatch and CyclicBarrier model (review result), index
+- Raw: raw/project-decisions/2026-11-15-review-batch-11b-notes.md
+- Review: review/2026-11-15-review-batch-11b.md
