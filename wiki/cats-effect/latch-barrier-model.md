@@ -1,11 +1,11 @@
 # CountDownLatch and CyclicBarrier model
 
 > Sources: Cats Effect v3.7.1 (`std/.../CountDownLatch.scala`, `std/.../CyclicBarrier.scala`, `kernel/.../Ref.scala:123-141`, `kernel/jvm-native/.../SyncRef.scala`, `core/.../IODeferred.scala:55-79`, `core/.../IO.scala:1822-1824`, `:2008-2163`); read-only `gh` history and issue search; own Lean, scala-cli and difftest runs, 2026-11-15
-> Raw: [Track L notes](../../raw/cats-effect/2026-11-15-track-l-latch-barrier-notes.md)
+> Raw: [Track L notes](../../raw/cats-effect/2026-11-15-track-l-latch-barrier-notes.md); [Decision 63 battery](../../raw/cats-effect/2026-11-15-track-l-decision63-battery.md)
 
 ## Overview
 
-Phase 7, batch 7.1, track L. Mirrors of `std.CountDownLatch` and `std.CyclicBarrier` with `F = IO`, difftest ops (format v2), seven registered properties, all `open`, each with a kernel-checked satisfiability witness, a wrong-function test and a smoke test. No bug found. Codec namespaces 70–75.
+Phase 7, batch 7.1, track L. Mirrors of `std.CountDownLatch` and `std.CyclicBarrier` with `F = IO`, difftest ops (format v2), nine registered properties (seven reviewed FAITHFUL in batch 11b, two decision-63 companions), all `open`, each with a kernel-checked satisfiability witness, a wrong-function test and a smoke test. No bug found. Codec namespaces 70–75.
 
 ## Mirrors
 
@@ -41,6 +41,21 @@ Harness: awaiters `user.attempt *> uncancelable(poll => mark 1 *> poll(await).on
 | `std.CyclicBarrier.cancelRemoved` | `as.length < cap`: `passed ≤ cap * ((entered - canceledIn) / cap)` (every state) |
 
 `cancelRemoved` needs `as.length < cap` (a test-program shape, not a Cats Effect precondition): with a full group A, race 1 gives a canceled waiter that counted, so the bound is false for every correct barrier. `cancelNoHang` covers both races.
+
+## Decision 63 battery
+
+`Proofs/Phase7/LatchBattery.lean` (kernel, 42 s): each public operation × {raises, hangs, drops, doubles} breaks one registered statement.
+
+| Operation | raises | hangs | drops | doubles |
+|---|---|---|---|---|
+| `CountDownLatch.release` | `releaseTotal` | `releaseTotal` | `noLostWakeup` | `awaitNotEarly` |
+| `CountDownLatch.await` | `awaitCompletes` | `noLostWakeup` | `awaitNotEarly` | meaningless (no effect on the state) |
+| `CyclicBarrier.await` | `awaitCompletes` | `exactGenerations` | `noEarlyTrip` | `noEarlyTrip` |
+
+- Gap found: an `await` that raises broke none of the first seven statements (the root still joins the errored awaiter and completes). Fix: the companion claims `std.CountDownLatch.awaitCompletes`, `std.CyclicBarrier.awaitCompletes` (a done root leaves no awaiter at status 1), with witnesses.
+- Smoke of the companions: v3.7.1 0 violations (936 and 874 done runs); `await` raises: 838 and 1,384 violating runs.
+- No public `count`; `mapK` only wraps the methods.
+- Harness privacy: `mark`/`incr` write cells by number; kernel-checked that no library id decodes to them and that a program naming them is not well-formed.
 
 ## Results
 

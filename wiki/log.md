@@ -393,3 +393,7 @@
 ## [2026-11-15] ingest | Decision 63: wrong-function battery per structure
 - Updated: Agent workflow (wrong-function battery section)
 - Raw: raw/project-decisions/2026-11-15-decision-63-wrong-function-battery.md
+
+## [2026-11-15] update | Track L: decision 63 battery
+- Updated: CountDownLatch and CyclicBarrier model (battery table, companion claims, harness guard)
+- Raw: raw/cats-effect/2026-11-15-track-l-decision63-battery.md
