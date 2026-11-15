@@ -183,7 +183,9 @@ def registry : List Entry := [
       combinator only after both children are done; exact search does not scale (>10^4 states). Track P (2026-11-10): not settled. Proven so far: F1/F1b/F2 frame lemmas for all runs \
       (Proofs/Lemmas/Frame.lean: owner_stable, result_stable). Gap: runtime grammar S, slot-0 \
       discipline F3, outcome stability F4 with the takeover/join protocols P1/P2, handle secrecy H, \
-      and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md)." },
+      and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md). Decision 58 (review 9 R1 survey, track G): the side codes are odd references src0/src1, not \
+      data numbers; user code cannot re-run fa/fb by name (RaceWitness.forged_race_sources). A \
+      re-run broke no claim before (more user code; the claims are about the root's racePair)." },
   { id := "core.IO.race.combCanceledNoLeak"
     rows := ["core.IO.race", "core.IO.race#2", "core.IO.raceOutcome", "core.IO.both", "core.IO.both#2",
       "core.IO.bothOutcome", "core.IO.bothOutcome#2", "kernel.GenSpawn.race",
@@ -195,7 +197,9 @@ def registry : List Entry := [
       same reason. Track P (2026-11-10): not settled. Proven so far: F1/F1b/F2 frame lemmas for all runs \
       (Proofs/Lemmas/Frame.lean: owner_stable, result_stable). Gap: runtime grammar S, slot-0 \
       discipline F3, outcome stability F4 with the takeover/join protocols P1/P2, handle secrecy H, \
-      and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md)." },
+      and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md). Decision 58 (review 9 R1 survey, track G): the side codes are odd references src0/src1, not \
+      data numbers; user code cannot re-run fa/fb by name (RaceWitness.forged_race_sources). A \
+      re-run broke no claim before (more user code; the claims are about the root's racePair)." },
   { id := "core.IO.timeout.noLeak"
     rows := ["core.IO.timeout"]
     prop := ``Props.Phase6.Race.timeoutNoLeak
@@ -204,7 +208,9 @@ def registry : List Entry := [
       timeout's racePair (source and sleep) has no live child. Smoke as combNoLeak; open. Track P (2026-11-10): not settled. Proven so far: F1/F1b/F2 frame lemmas for all runs \
       (Proofs/Lemmas/Frame.lean: owner_stable, result_stable). Gap: runtime grammar S, slot-0 \
       discipline F3, outcome stability F4 with the takeover/join protocols P1/P2, handle secrecy H, \
-      and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md)." },
+      and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md). Decision 58 (review 9 R1 survey, track G): the side codes are odd references src0/src1, not \
+      data numbers; user code cannot re-run fa/fb by name (RaceWitness.forged_race_sources). A \
+      re-run broke no claim before (more user code; the claims are about the root's racePair)." },
   { id := "core.IO.raceOutcome.isWinnerOutcome"
     rows := ["core.IO.raceOutcome", "kernel.GenSpawn.raceOutcome"]
     prop := ``Props.Phase6.Race.raceOutcomeIsWinnerOutcome
@@ -214,7 +220,9 @@ def registry : List Entry := [
       F4 and the first-write rule of the race ContState). Track P (2026-11-10): not settled. Proven so far: F1/F1b/F2 frame lemmas for all runs \
       (Proofs/Lemmas/Frame.lean: owner_stable, result_stable). Gap: runtime grammar S, slot-0 \
       discipline F3, outcome stability F4 with the takeover/join protocols P1/P2, handle secrecy H, \
-      and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md)." },
+      and the control invariant C(r) of the racing fiber (raw/cats-effect/2026-11-10-race-invariant-track-p-notes.md). Decision 58 (review 9 R1 survey, track G): the side codes are odd references src0/src1, not \
+      data numbers; user code cannot re-run fa/fb by name (RaceWitness.forged_race_sources). A \
+      re-run broke no claim before (more user code; the claims are about the root's racePair)." },
   -- Phase 6, track G (guarantee, bracket*)
   { id := "core.IO.bracketFull.kernelDefaultTwin"
     rows := ["core.IO.bracketFull", "core.IO.IOAsync.bracketFull", "kernel.MonadCancel.bracketFull"]
@@ -298,7 +306,10 @@ def registry : List Entry := [
       emit >> canceled, start(emit) >> canceled, cede >> canceled with a 2-preemption grid, \
       uncancelable(_ => canceled)); v3.7.1 is stuck exactly for the self-canceling fa \
       (Proofs/Phase6/MemoizeFixed.lean). Hypothesis satisfiable: MemoizeStuck.fa_wf; observed \
-      memo cell not forgeable (Proofs/Phase6/MemoizeSat.lean, decision 54)." },
+      memo cell not forgeable (Proofs/Phase6/MemoizeSat.lean, decision 54). Decision 58 (review 9 R1 survey, track G): fa's code is the odd reference faSrc, not the \
+      number 0, and the test closures (constFa) are not public: user code cannot run fa outside \
+      the tested memoize (MemoizeSat.forged_source, forged_constFa). The counter changes only \
+      through the tested memoize's source .ref c (handle never given to user code)." },
   { id := "core.IO.memoize.getsAgree"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeGetsAgree
@@ -308,7 +319,10 @@ def registry : List Entry := [
       memoize without cache breaks it (test/Phase6/MemoizeSmoke.lean). Satisfiability witness \
       (decision 53): MemoizeSat.getsAgree_sat (fa = IO.cede: a get subscribes during the \
       evaluation, root completes with a pair). Open: a proof for all fa \
-      needs a state invariant over SchedP (memo cell, deferred cell, go fiber outcome)." },
+      needs a state invariant over SchedP (memo cell, deferred cell, go fiber outcome). Decision 58 (review 9 R1 survey, track G): fa's code is the odd reference faSrc, not the \
+      number 0, and the test closures (constFa) are not public: user code cannot run fa outside \
+      the tested memoize (MemoizeSat.forged_source, forged_constFa). The counter changes only \
+      through the tested memoize's source .ref c (handle never given to user code)." },
   { id := "core.IO.memoize.atMostOnce"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeAtMostOnce
@@ -318,7 +332,10 @@ def registry : List Entry := [
       without cache gives 2 (test/Phase6/MemoizeSmoke.lean). Satisfiability witness: \
       MemoizeSat.atMostOnce_sat (counter 1, a get during the evaluation). Counter and memo cell \
       not forgeable (MemoizeSat.forged_*). Open: same missing invariant as \
-      core.IO.memoize.getsAgree (at most one Evaluating transition while no get is canceled)." },
+      core.IO.memoize.getsAgree (at most one Evaluating transition while no get is canceled). Decision 58 (review 9 R1 survey, track G): fa's code is the odd reference faSrc, not the \
+      number 0, and the test closures (constFa) are not public: user code cannot run fa outside \
+      the tested memoize (MemoizeSat.forged_source, forged_constFa). The counter changes only \
+      through the tested memoize's source .ref c (handle never given to user code)." },
   -- Phase 6, track Res (Resource use/allocated/both)
   { id := "kernel.Resource.both.releaseOnce"
     rows := ["kernel.Resource.both", "kernel.Resource.use", "kernel.Resource.fold"]
@@ -453,7 +470,8 @@ def registry : List Entry := [
     note := "At most n actions run at once (Scaladoc K/GC:132-133): the harness (counter Ref 0) counts \
       the running g(a) inside uncancelable(poll => enter *> poll(g(a)).attempt.onCancel(exit) \
       ...); in every run that stops the highest count is <= n. All user code (WellFormed \
-      limLib only; decision 58 dropped UserPrivate, review 8 S1), n >= 1, all inputs, \
+      limLib only; no harness-privacy hypothesis: the HarnessPrivacy module is removed, review 8 \
+      S1, decision 58), n >= 1, all inputs, \
       schedules and HashSet orders. Review 8 F3 (user code writes the semaphore state Ref \
       through a Timeout.fold source) is closed by decision 58 (ParTraversePrivacy; ptsmoke: \
       rejected, and it breaks the claim when run). Satisfiable \

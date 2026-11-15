@@ -1,0 +1,8 @@
+# Race and Memoize source codes as references (track G, 2026-11-15)
+
+Task from the coordinator after review 9 R1 (track Res survey, raw/cats-effect/2026-11-15-review9-r1-notes.md).
+
+- Race (`Props/Phase6/Race.lean`): the sides were the data codes `.nat 0`/`.nat 1`. User code in `fa` could build a public `Race`/`Timeout` closure with source `0` and run `fa` again. Analysis: no claim breaks (a re-run is more user code: nested races start their own racePairs inside child fibers; `liveRaceChildren r` and `raceOutcomeIsWinnerOutcome` are about the root's racePair, whose fibers 1 and 2 start before user code runs) and none becomes vacuous for an input that does not re-run. Fix: `src0 = .fn 1`, `src1 = .fn 3` (odd harness ids, small to keep states small); `srcIO` matches them. Regression: `RaceWitness.forged_race_sources`, `forged_timeout_source` (rejected), `old_codes_not_sides`.
+- The law `uncancelableRaceNotInherited` has no user code; it keeps the data codes through `lawSrcIO`/`lawDispatch`/`lawEnvOf`, so its kernel certificates (heavy matrix) are unchanged in meaning.
+- Memoize (`Props/Phase6/Memoize.lean`): `fa` had the code `.nat 0`; `TLam.constFa` (`_ => fa`) was public. Both let user code run `fa` outside the tested memoize. `atMostOnce` counts only through `incr c` (source `.ref c`, needs the counter handle), so it was not broken. Fix: `faSrc = .fn 1`; `isLib` = mirror only (no `TLam`). Regression: `MemoizeSat.forged_source`, `forged_constFa`, `old_code_not_fa`, `honest_fa`.
+- Witnesses re-proved by kernel (RaceWitness, MemoizeSat, MemoizeStuck); smoke: leaksmoke 140,400 runs 0 violations, wrong function 200/200; MemoizeSmoke unchanged results.

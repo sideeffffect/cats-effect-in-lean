@@ -320,4 +320,22 @@ theorem noCancel_leaks :
     s.rootDone = true ∧ liveRaceChildren s 0 = [2] := by
   decide +kernel
 
+/-! ## Decision 58 (review 9, R1 survey): the sides are named by references -/
+
+/-- A user program that builds a public `race` closure over the side codes (to run `fa` again)
+is not well-formed: `src0`, `src1` are odd references that user code does not hold. -/
+theorem forged_race_sources :
+    WF.progOK raceLib (([] : List Handle).contains ·) (Race.raceIO src0 src1) = false := by
+  decide +kernel
+
+theorem forged_timeout_source :
+    WF.progOK raceLib (([] : List Handle).contains ·) (Timeout.timeoutIO src0 1) = false := by
+  decide +kernel
+
+/-- The old data codes `0`, `1` name nothing any more. -/
+theorem old_codes_not_sides (fa fb : IO) :
+    srcIO fa fb (.nat 0) = .error { code := 999999, kind := .fatal } ∧
+    srcIO fa fb (.nat 1) = .error { code := 999999, kind := .fatal } := by
+  constructor <;> rfl
+
 end CatsEffectInLean.Proofs.Phase6.RaceWitness

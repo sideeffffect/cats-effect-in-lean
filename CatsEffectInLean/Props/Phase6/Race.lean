@@ -39,7 +39,13 @@ combinator in a fiber, cancels it and joins it.
   values and all `PChoice` lists of the preemptive scheduler (`EqvP` schedules, decisions 29
   and 36). The only hypotheses: `fa` and `fb` are `WellFormed` with the library closures of the
   mirrors (decision 27: Scala can write them; no forged handle).
-* The sides are given to the mirror closures by their codes `.nat 0` and `.nat 1` (`srcIO`).
+* The sides are given to the mirror closures by their codes `src0` and `src1` (`srcIO`). Decision
+  58 (review 9, R1 survey): the codes are closure references `Val.fn` with odd (harness) ids, so
+  user code can name a side only if it holds the reference (`WF.avail`); it never receives one.
+  Before, the codes were the data numbers `0` and `1`, and user code inside `fa` could build a
+  public `Race`/`Timeout` closure with source `0` and run `fa` again. That broke no claim (a
+  re-run is more user code; the claims are about the root's own `racePair`), but it was a name
+  made from a number.
 * Claim: if the root completes (`Sched.rootDone`), the racing fiber has no live race child
   (`liveRaceChildren s r = []`, `r = 0` for the direct form, `r = 1` for the parent form).
 * No claim for runs that end otherwise (out of fuel, blocked, model abort).
@@ -59,12 +65,24 @@ open CatsEffectInLean.Model.Codec
 /-- The namespace of the closures of the test programs below (user code, even ids). -/
 def ns : Nat := 11
 
-/-- Code of side `fa` / `fb`. -/
-def src0 : Val := .nat 0
-def src1 : Val := .nat 1
+/-- The harness ids of side `fa` / `fb`. Odd, so a reference to them is available to user code
+only if held (`WF.avail`); no mirror decodes them as a closure (they are source codes only, read
+by `srcIO`). Small numbers keep the states small. -/
+def srcId0 : Nat := 1
+def srcId1 : Nat := 3
 
-/-- The source builder: code `0` is `fa`, code `1` is `fb`. -/
-def srcIO (fa fb : IO) : Val → IO
+/-- Code of side `fa` / `fb`: a closure reference (decision 58). -/
+def src0 : Val := .fn srcId0
+def src1 : Val := .fn srcId1
+
+/-- The source builder: code `src0` is `fa`, code `src1` is `fb`. -/
+def srcIO (fa fb : IO) (c : Val) : IO :=
+  if c == src0 then fa else if c == src1 then fb else .error { code := 999999, kind := .fatal }
+
+/-- The law's source builder (below): code `0` is `F.never`, code `1` is `F.canceled`. The law
+has no user code (`lawEnv` is fixed), so nobody can forge these data codes; they stay as they
+were, so the law's kernel certificates are unchanged. -/
+def lawSrcIO (fa fb : IO) : Val → IO
   | .nat 0 => fa
   | .nat 1 => fb
   | _ => .error { code := 999999, kind := .fatal }
@@ -139,6 +157,23 @@ def env (fa fb : IO) (u : UserEnv) : UserEnv where
   call id arg refs := dispatch fa fb u id arg { refs }
   callV := dispatch fa fb u
 
+/-- `dispatch` with the law's source builder. -/
+def lawDispatch (fa fb : IO) (u : UserEnv) (id : Nat) (arg : Val) (v : View) : UserResult :=
+  match Race.ofId? id with
+  | some l => Race.call (lawSrcIO fa fb) l arg v
+  | none =>
+    match timeoutOf? id with
+    | some t => Timeout.call (lawSrcIO fa fb) t arg v
+    | none =>
+      match parentOf? id with
+      | some p => p.call arg v
+      | none => u.callV id arg v
+
+/-- `env` with the law's source builder. -/
+def lawEnvOf (fa fb : IO) (u : UserEnv) : UserEnv where
+  call id arg refs := lawDispatch fa fb u id arg { refs }
+  callV := lawDispatch fa fb u
+
 /-- The final state of a run of `io`: `fuel` micro-steps of the preemptive scheduler with
 choices `cs`, default `Config`, `IOFiber` mask model. -/
 def run (fa fb : IO) (u : UserEnv) (fuel : Nat) (cs : List PChoice) (io : IO) : Sched CounterMask :=
@@ -210,9 +245,9 @@ def lawEnv : UserEnv :=
   let u : UserEnv :=
     { call := fun _ _ _ => { out := .throw { code := 999999, kind := .fatal } }
       callV := fun id _ _ =>
-        if raceBodyFn = .user id then { out := .prog (Race.raceIO src0 src1) }
+        if raceBodyFn = .user id then { out := .prog (Race.raceIO (.nat 0) (.nat 1)) }
         else { out := .throw { code := 999999, kind := .fatal } } }
-  env Timeout.neverIO .canceled u
+  lawEnvOf Timeout.neverIO .canceled u
 
 /-- Left side of `uncancelableRaceNotInherited`. -/
 def raceNotInheritedLhs : IO := IOI.void (.uncancelable raceBodyFn)

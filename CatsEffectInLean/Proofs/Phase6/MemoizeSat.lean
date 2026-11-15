@@ -98,9 +98,26 @@ theorem forged_tryComplete :
 theorem forged_unsubscribe : okFa (CatsEffectInLean.Model.Memoize.unsubIO 0 0) = false := by
   decide +kernel
 theorem forged_modify :
-    okFa (.delay (CatsEffectInLean.Model.Memoize.MLam.modifyThunk 0 (.nat 0) 0 1 0 0).fn) = false := by
+    okFa (.delay (CatsEffectInLean.Model.Memoize.MLam.modifyThunk 0 faSrc 0 1 0 0).fn) = false := by
   decide +kernel
-theorem forged_get : okFa (CatsEffectInLean.Model.Memoize.getIO 0 (.nat 0) 0) = false := by
+theorem forged_get : okFa (CatsEffectInLean.Model.Memoize.getIO 0 faSrc 0) = false := by
   decide +kernel
+
+/-! ### Decision 58 (review 9, R1 survey): `fa` is named by a reference, not by a number -/
+
+/-- A user `fa` that memoizes the tested action by its source code (to run it outside the tested
+`memoize`) is not well-formed: `faSrc` is an odd reference that user code does not hold. -/
+theorem forged_source : okFa (CatsEffectInLean.Model.Memoize.memoizeIO faSrc 0) = false := by
+  decide +kernel
+
+/-- The old data code `0` names nothing any more (`srcIO` gives a fatal error), so a `memoize`
+with source `0` cannot run `fa`. -/
+theorem old_code_not_fa (fa : IO) : srcIO fa (.nat 0) = .error { code := 999999, kind := .fatal } := rfl
+
+/-- The test-program closure `_ => fa` is not public. -/
+theorem forged_constFa : okFa (.flatMap (.pure .unit) TLam.constFa.fn) = false := by decide +kernel
+
+/-- An honest `fa` (here `IO.cede`) is accepted. -/
+theorem honest_fa : okFa .cede = true := by decide +kernel
 
 end CatsEffectInLean.Proofs.Phase6.MemoizeSat

@@ -313,3 +313,7 @@
 ## [2026-11-15] ingest | Track Res: review batch 9 R1 (REnv table references), wrong-function tests, W1
 - Updated: Resource use/both, Outcome sets
 - Raw: raw/cats-effect/2026-11-15-review9-r1-notes.md
+
+## [2026-11-15] update | Race and Memoize source codes as references
+- Updated: race-both model, memoize model (decision 58 source references; regressions), registry notes
+- Raw: raw/cats-effect/2026-11-15-race-memoize-source-refs.md

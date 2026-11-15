@@ -1,7 +1,7 @@
 # memoize model and CE-0030
 
 > Sources: Cats Effect v3.7.1 (`IO.scala:944-945`, `:1822-1824`, `:1996-2180`; `kernel/.../GenConcurrent.scala:33-112`; `Ref.scala:140-141`, `:314`; `jvm-native/.../SyncRef.scala`; `Outcome.scala:73-74`; `Resource.scala:792-803`, `:1479-1480`; `tests/.../MemoizeSuite.scala`); git history of `GenConcurrent.scala`; own Lean and scala-cli runs, 2026-11-10
-> Raw: [Track M notes](../../raw/cats-effect/2026-11-10-memoize-track-m-notes.md); [Track M follow-up notes](../../raw/cats-effect/2026-11-10-memoize-track-m-followup-notes.md)
+> Raw: [Track M notes](../../raw/cats-effect/2026-11-10-memoize-track-m-notes.md); [Track M follow-up notes](../../raw/cats-effect/2026-11-10-memoize-track-m-followup-notes.md); [Source refs (decision 58)](../../raw/cats-effect/2026-11-15-race-memoize-source-refs.md)
 
 ## Overview
 
@@ -28,6 +28,7 @@ Phase 6, batch 6.2, track M. Mirror of `IO#memoize`, difftest ops `memoize`/`mem
 
 - The memo state is a `Ref` cell: `Unevaluated` = `none`, `Evaluating(d, n)` = `pair (deferred d) (nat n)`, `Finished(Left e)` = `left (err e)`, `Finished(Right(IO.pure a))` = `right (some a)`, `Finished(Right(canceled *> never))` = `right none`.
 - `SyncRef.get`/`update`/`modify` are one `Delay` thunk each; the `modify` function runs inside the thunk, so `fiber.get` (a `Deferred` read) and the `IO` values that it builds use the view of that step.
+- The source code of `fa` is the odd reference `faSrc = .fn 1` (decision 58; before: the number 0, which user code could use to run `fa` outside the tested `memoize`). The test closures (`TLam`) are not public. The counter changes only through the source `.ref c`.
 - A `Val` cannot hold an `IO`. The `F[B]` result of `modify` and the `IO` inside `Right` are effect codes (`Eff`); `flattenK` (the `fa => fa` of `flatten`) builds the `IO` (`effIO`). Same iteration count as Scala.
 - `go` uses `IO#guaranteeCase`; its three closures are mirrored again (`gcBody`, `gcOnError`, `gcTap`), because the finalizer is a library closure. The leaves (`reportError`, `raiseK`, `asK`) are the `Bracket` closures; `never` is `Timeout.neverIO`.
 - The `get` is a value: `Eff.get r src variant` (`getVal`).

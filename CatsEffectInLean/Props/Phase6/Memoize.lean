@@ -22,6 +22,17 @@ canceled; a `get` never waits for an evaluation that is already finished. The te
 the same (`tests/shared/src/test/scala/cats/effect/MemoizeSuite.scala:106-117`: `memoize` then
 `flatten` is `fa`, also for a self-canceling `fa`).
 
+## Source codes (decision 58; review 9, R1 survey)
+
+The memoized action is given to the mirror by a source code. `fa` itself is `faSrc`, a closure
+reference with the odd harness id `1`: user code can name it only if it holds it (`WF.avail`),
+and it never receives it. (Before, the code was the data number `0`, so user code inside `fa`
+could build a public `memoize` closure with source `0` and run `fa` outside the tested
+`memoize`.) The counted action of `countedTwoGets` has the code `.ref c`: it needs the counter
+handle, which user code never holds. The test-program closures (`TLam`) are not public either:
+`constFa` would run `fa` by name. So the counter of `memoizeAtMostOnce` changes only through the
+tested `memoize` (its source `.ref c`).
+
 ## Test program (decision 50: only program fibers)
 
 `twoGets v` = `fa.memoize.flatMap(get => get.start.flatMap(a => get.start.flatMap(b =>
@@ -115,9 +126,13 @@ def TLam.ofId? (id : Nat) : Option TLam :=
     | none => none
   else none
 
-/-- The source builder: code `0` is `fa`; code `ref c` is `c.update(_ + 1) *> fa`. -/
+/-- The source code of `fa`: a reference with the odd harness id `1` (decision 58). No mirror
+decodes it as a closure; only `srcIO` reads it. -/
+def faSrc : Val := .fn 1
+
+/-- The source builder: code `faSrc` is `fa`; code `ref c` is `c.update(_ + 1) *> fa`. -/
 def srcIO (fa : IO) : Val → IO
-  | .nat 0 => fa
+  | .fn 1 => fa
   | .ref c => .flatMap (.delay (TLam.incr c).fn) TLam.constFa.fn
   | _ => .error { code := 999999, kind := .fatal }
 
@@ -161,8 +176,9 @@ def timeoutOf? (id : Nat) : Option Timeout.TLam :=
     | none => none
   else none
 
-/-- Library closures (`WellFormed`): the mirror, its leaf closures and the test programs. -/
-def isLib (id : Nat) : Bool := CatsEffectInLean.Model.Memoize.isLib id || (TLam.ofId? id).isSome
+/-- Library closures (`WellFormed`): the mirror and its leaf closures. The test-program closures
+are not public (`constFa` would run `fa` by name; decision 58). -/
+def isLib (id : Nat) : Bool := CatsEffectInLean.Model.Memoize.isLib id
 
 /-- The `WellFormed` library of these statements (decision 56): `Memoize` closures, the
 `Bracket` leaves `reportK`/`reportEc`/`reportThunk`/`raiseK`/`asK`, and `Timeout` closures. They
@@ -195,7 +211,7 @@ def env (fa : IO) (u : UserEnv) : UserEnv where
   callV := dispatch fa u
 
 /-- `twoGets v`: `fa.memoize` (variant `v`; 0 = Cats Effect v3.7.1), then two `get` fibers. -/
-def twoGets (variant : Nat := 0) : IO := .flatMap (memoizeIO (.nat 0) variant) TLam.afterMemo.fn
+def twoGets (variant : Nat := 0) : IO := .flatMap (memoizeIO faSrc variant) TLam.afterMemo.fn
 
 /-- `Ref(0).flatMap(c => (c.update(_ + 1) *> fa).memoize.flatMap(…))`. -/
 def countedTwoGets (variant : Nat := 0) : IO :=
