@@ -8,6 +8,7 @@ import CatsEffectInLean.Model.ParTraverse
 import CatsEffectInLean.Model.Memoize
 import CatsEffectInLean.Model.ResourceUse
 import CatsEffectInLean.Std.Queue
+import CatsEffectInLean.Std.QueueFactory
 
 /-!
 # Translation: difftest program → `Model.IO` + user environment
@@ -243,6 +244,19 @@ def queueId (env : List Val) (a : Atom) : Except TrErr Nat := do
   | .ref i => pure i
   | _ => throw .typeError
 
+/-- `queueOf` for the format-v2 queue ops (track Q): the queue object reference `Val.fn o` of
+`Std/QueueFactory.lean`. -/
+def queueObj (env : List Val) (a : Atom) : Except TrErr Nat := do
+  match ← atomVal env a with
+  | .fn o => if (CatsEffectInLean.Std.QueueFactory.famOf o).isSome then pure o else throw .typeError
+  | _ => throw .typeError
+
+/-- The factory of `qNew` kind index `i` (`Prog.qKinds`). -/
+def qKindOf (i cap : Nat) : CatsEffectInLean.Std.QueueFactory.QKind :=
+  match i with
+  | 0 => .bounded cap | 1 => .dropping cap | 2 => .circular cap | 3 => .synchronous
+  | 4 => .unbounded | 5 => .boundedConc cap | 6 => .unboundedConc | _ => .droppingConc cap
+
 /-- `poll(io)` with the poll value `(m, f)`: `UnmaskRunLoop(io, m, f)` (`IOFiber.scala:564-567`),
 or `io` for the `IdPoll` of `syncStep` (mask id 0, `IO.scala:2391-2393`). -/
 def pollTerm (io : IO) (m f : Nat) : IO := if m == 0 then io else .unmaskRunLoop io m f
@@ -437,6 +451,20 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
   | .parTraverseN k xs _, node, env, _ => do
     let vs ← xs.mapM (atomVal env)
     pure (.map (ParTraverse.parTraverseNIO k vs (cloId node .ptF env)) (clo node .ptList []))
+  -- format v2 (Phase 7, track Q): the queue factories and ops (`Std/QueueFactory.lean`)
+  | .qNew i cap, node, _, _ =>
+    pure (.map (CatsEffectInLean.Std.QueueFactory.newIO (qKindOf i cap)) (clo node .qHandle []))
+  | .qOffer q v, node, env, _ => do
+    let o ← queueObj env q
+    pure (.map (CatsEffectInLean.Std.QueueFactory.offerIO o (← atomVal env v)) (clo node .asUnit []))
+  | .qTryOffer q v, node, env, _ => do
+    let o ← queueObj env q
+    pure (.map (CatsEffectInLean.Std.QueueFactory.tryOfferIO o (← atomVal env v)) (clo node .qBool []))
+  | .qTake q, _, env, _ => do pure (CatsEffectInLean.Std.QueueFactory.takeIO (← queueObj env q))
+  | .qTryTake q, node, env, _ => do
+    pure (.map (CatsEffectInLean.Std.QueueFactory.tryTakeIO (← queueObj env q)) (clo node .optEither []))
+  | .qSize q, node, env, _ => do
+    pure (.map (CatsEffectInLean.Std.QueueFactory.sizeIO (← queueObj env q)) (clo node .qNat []))
   -- `I_R(r).allocated.flatMap { case (x, rel) => I(k).flatMap(b => rel.as(b)) }`
   -- (`Resource.scala:550-552`); `I_R(r)` is the code `ruRes` (`UEnv.resOf`)
   | .rAllocated r _, node, env, _ => do

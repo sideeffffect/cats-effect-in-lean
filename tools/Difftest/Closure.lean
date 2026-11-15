@@ -234,6 +234,13 @@ inductive Lam where
   | ptF
   /-- `parTraverseN`: `.map(bs => list)` (the model already holds the list encoding). -/
   | ptList
+  -- format v2 (Phase 7, track Q)
+  /-- `qNew`: `q => VQueue(h.newQueue(q))`; the queue is the object reference `Val.fn o`. -/
+  | qHandle
+  /-- `qTryOffer`: `b => VBool(b)` (the model already holds `Val.bool b`). -/
+  | qBool
+  /-- `qSize`: `n => VNat(n)` (the model already holds `Val.nat n`). -/
+  | qNat
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -251,7 +258,8 @@ def Lam.all : List Lam :=
    .brcRel, .brcFinK, .brcFinEmit, .brcFinThen, .bfAcq,
    .memoSrc, .memoHandle,
    .ruUse, .raK, .raRelAs, .ruRes, .rbA, .rbB, .rbPair,
-   .ptF, .ptList]
+   .ptF, .ptList,
+   .qHandle, .qBool, .qNat]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?

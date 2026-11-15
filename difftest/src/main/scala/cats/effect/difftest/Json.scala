@@ -104,7 +104,11 @@ object Json:
   /** Ops of format v2 (a decode error in a v0 or v1 case). */
   val V2Ops: Set[String] = Set("race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket", "bracketCase",
     "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth",
-    "parTraverseN")
+    "parTraverseN", "qNew", "qOffer", "qTryOffer", "qTake", "qTryTake", "qSize")
+
+  /** The queue kinds of `qNew` (format v2, track Q); `Prog.qKinds` in `tools/Difftest/Prog.lean`. */
+  val QKinds: List[String] = List("bounded", "dropping", "circularBuffer", "synchronous", "unbounded",
+    "boundedConc", "unboundedConc", "droppingConc")
 
   /** Reject a v2 op anywhere in `j` (a case of format v0 or v1). */
   private def checkNoV2(j: Value): Unit = j match
@@ -267,6 +271,19 @@ object Json:
           case ujson.Arr(vs) => vs.toList.map(atom(_, scope, s"$ctx.xs"))
           case v => fail(s"$ctx.xs: expected an array, got $v")
         Prog.ParTraverseN(k.toInt, xs, x, p("f", scope + (x -> Kind.V)))
+      // ---- format v2 (Phase 7, track Q)
+      case "qNew" =>
+        only("kind", "cap"); val k = s("kind"); val cap = n("cap")
+        if !QKinds.contains(k) then fail(s"$ctx.kind: unknown queue kind '$k'")
+        if cap > Int.MaxValue then fail(s"$ctx.cap: at most ${Int.MaxValue}")
+        if Set("dropping", "circularBuffer", "boundedConc", "droppingConc").contains(k) && cap == 0 then
+          fail(s"$ctx.cap: $k needs cap >= 1")
+        Prog.QNew(k, cap.toInt)
+      case "qOffer" => only("q", "v"); Prog.QOffer(a("q"), a("v"))
+      case "qTryOffer" => only("q", "v"); Prog.QTryOffer(a("q"), a("v"))
+      case "qTake" => only("q"); Prog.QTake(a("q"))
+      case "qTryTake" => only("q"); Prog.QTryTake(a("q"))
+      case "qSize" => only("q"); Prog.QSize(a("q"))
       case "syncStep" => fail(s"$ctx: only at the root of a program")
       case r if ResOps.contains(r) => fail(s"$ctx: a resource op outside a resource position")
       case _ => fail(s"unknown op '$op'")

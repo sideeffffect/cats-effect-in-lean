@@ -271,6 +271,11 @@ def valJson (hOf : Ren) : Val → Json
     | some q => Json.mkObj [("t", "queue"), ("id", toJson q)]
     | none => Json.mkObj [("t", "ref"), ("id", toJson (hOf.refOf.getD i (1000000 + i)))]
   | .deferred i => Json.mkObj [("t", "deferred"), ("id", toJson (hOf.dOf.getD i (1000000 + i)))]
+  -- format v2 (track Q): a queue is the object reference `Val.fn o` (`Std/QueueFactory.lean`)
+  | .fn i =>
+    match hOf.qOf.get? i with
+    | some q => Json.mkObj [("t", "queue"), ("id", toJson q)]
+    | none => Json.mkObj [("t", .str s!"model:{(repr (Val.fn i)).pretty}")]
   | v => Json.mkObj [("t", .str s!"model:{(repr v).pretty}")]
 
 /-- The `op` of a format v2 `fin` event. -/

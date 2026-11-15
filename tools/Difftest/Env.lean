@@ -294,6 +294,20 @@ def runClo (U : ResourceUse.UEnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) :
     match arg with
     | .ref b => ret arg [.queueH b]
     | _ => DResult.harness
+  -- format v2 (track Q): `q => VQueue(h.newQueue(q))`; the queue is the object reference
+  -- `Val.fn o` (`Std/QueueFactory.lean`); the handle event names the object id
+  | .qHandle, _ =>
+    match arg with
+    | .fn o => ret arg [.queueH o]
+    | _ => DResult.harness
+  | .qBool, _ =>
+    match arg with
+    | .bool _ => ret arg
+    | _ => DResult.harness
+  | .qNat, _ =>
+    match arg with
+    | .nat _ => ret arg
+    | _ => DResult.harness
   -- `{ case Some(v) => VRight(v); case None => VLeft(VUnit) }`
   | .optEither, _ =>
     match arg with
@@ -529,7 +543,11 @@ def dispatch (ho : List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (vw 
     | some (.ures l) => ResourceUse.callU (uenvOf p) (dispatchDt p) l arg vw
     | some (.memoize l) => Memoize.call (srcIO p) l arg vw
     | some (.ptrav l) => ParTraverse.call ho (dispatchDt p) l arg vw
-    | none => DResult.harness.toUser
+    | none =>
+      -- format v2 (track Q): the queue mirrors (namespaces 50, 52)
+      match CatsEffectInLean.Std.QueueFactory.call? id arg vw with
+      | some r => r
+      | none => DResult.harness.toUser
 
 /-- The `Model.UserEnv` of program `p` with `HashSet` order `ho` (see module doc). -/
 def userEnvH (ho : List Val → List Val) (p : Prog) : UserEnv where

@@ -2950,7 +2950,7 @@ std.PQueueSource.catsFunctorForPQueueSource,std,method,std/shared/src/main/scala
 std.PQueueSink.tryOfferN,std,method,std/shared/src/main/scala/cats/effect/std/PQueue.scala,267,todo,,
 std.PQueueSink.catsContravariantForPQueueSink,std,method,std/shared/src/main/scala/cats/effect/std/PQueue.scala,274,todo,,
 std.Queue.mapK,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,51,todo,,
-std.Queue.bounded,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,74,todo,,
+std.Queue.bounded,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,74,todo,,std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness
 std.Queue.boundedForConcurrent,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,93,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.boundedForAsync,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,97,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.unboundedForConcurrent,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,101,excluded,internal: private helper; modelled as part of its public caller,
@@ -2958,25 +2958,25 @@ std.Queue.unboundedForAsync,std,method,std/shared/src/main/scala/cats/effect/std
 std.Queue.droppingForConcurrent,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,108,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.droppingForAsync,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,112,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.unsafeBounded,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,130,todo,,
-std.Queue.synchronous,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,149,todo,,
-std.Queue.unbounded,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,160,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
+std.Queue.synchronous,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,149,todo,,std.Queue.Concurrent.noLoss;std.Queue.Concurrent.noDup;std.Queue.Concurrent.fifo;std.Queue.Concurrent.noDeadlock;std.Queue.Concurrent.takerLiveness
+std.Queue.unbounded,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,160,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement;std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness
 std.Queue.unsafeUnbounded,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,181,todo,,
-std.Queue.dropping,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,196,todo,,
-std.Queue.circularBuffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,224,todo,,
+std.Queue.dropping,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,196,todo,,std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock
+std.Queue.circularBuffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,224,todo,,std.Queue.Concurrent.noDup;std.Queue.Concurrent.fifo;std.Queue.Concurrent.noDeadlock
 std.Queue.assertNonNegative,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,230,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.assertPositive,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,236,excluded,internal: private helper; modelled as part of its public caller,
-std.Queue.Synchronous.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,246,todo,,
-std.Queue.Synchronous.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,274,todo,,
-std.Queue.Synchronous.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,292,todo,,
-std.Queue.Synchronous.tryTake,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,347,todo,,
+std.Queue.Synchronous.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,246,todo,,std.Queue.Concurrent.noLoss;std.Queue.Concurrent.noDup;std.Queue.Concurrent.fifo;std.Queue.Concurrent.noDeadlock;std.Queue.Concurrent.takerLiveness
+std.Queue.Synchronous.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,274,todo,,std.Queue.Concurrent.noLoss;std.Queue.Concurrent.noDup;std.Queue.Concurrent.fifo;std.Queue.Concurrent.noDeadlock
+std.Queue.Synchronous.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,292,todo,,std.Queue.Concurrent.noLoss;std.Queue.Concurrent.noDup;std.Queue.Concurrent.fifo;std.Queue.Concurrent.noDeadlock;std.Queue.Concurrent.takerLiveness
+std.Queue.Synchronous.tryTake,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,347,todo,,std.Queue.Concurrent.noLoss;std.Queue.Concurrent.noDup;std.Queue.Concurrent.fifo;std.Queue.Concurrent.noDeadlock
 std.Queue.Synchronous.size,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,359,todo,,
 std.Queue.SyncState.empty,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,379,todo,,
 std.Queue.AbstractQueue.onOfferNoCapacity,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,388,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.AbstractQueue.onTryOfferNoCapacity,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,395,excluded,internal: private helper; modelled as part of its public caller,
-std.Queue.AbstractQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,397,todo,,
-std.Queue.AbstractQueue.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,416,todo,,
-std.Queue.AbstractQueue.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,429,todo,,
-std.Queue.AbstractQueue.tryTake,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,484,todo,,
+std.Queue.AbstractQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,397,todo,,std.Queue.Concurrent.noLoss;std.Queue.Concurrent.noDup;std.Queue.Concurrent.fifo;std.Queue.Concurrent.noDeadlock;std.Queue.Concurrent.takerLiveness
+std.Queue.AbstractQueue.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,416,todo,,std.Queue.Concurrent.noLoss;std.Queue.Concurrent.noDup;std.Queue.Concurrent.fifo;std.Queue.Concurrent.noDeadlock
+std.Queue.AbstractQueue.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,429,todo,,std.Queue.Concurrent.noLoss;std.Queue.Concurrent.noDup;std.Queue.Concurrent.fifo;std.Queue.Concurrent.noDeadlock;std.Queue.Concurrent.takerLiveness
+std.Queue.AbstractQueue.tryTake,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,484,todo,,std.Queue.Concurrent.noLoss;std.Queue.Concurrent.noDup;std.Queue.Concurrent.fifo;std.Queue.Concurrent.noDeadlock
 std.Queue.AbstractQueue.size,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,499,todo,,
 std.Queue.AbstractQueue.notifyNextTaker,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,501,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.BoundedQueue.onOfferNoCapacity,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,517,excluded,internal: private helper; modelled as part of its public caller,
@@ -2992,26 +2992,26 @@ std.Queue.BaseBoundedAsyncQueue.takers,std,method,std/shared/src/main/scala/cats
 std.Queue.BaseBoundedAsyncQueue.offerers,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,606,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.BaseBoundedAsyncQueue.FailureSignal,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,608,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.BaseBoundedAsyncQueue.size,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,613,todo,,
-std.Queue.BaseBoundedAsyncQueue.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,615,todo,,
-std.Queue.BaseBoundedAsyncQueue.tryTake,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,689,todo,,
+std.Queue.BaseBoundedAsyncQueue.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,615,todo,,std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness
+std.Queue.BaseBoundedAsyncQueue.tryTake,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,689,todo,,std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock
 std.Queue.BaseBoundedAsyncQueue.tryTakeN,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,700,todo,,
 std.Queue.BaseBoundedAsyncQueue.debug,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,738,todo,,
 std.Queue.BaseBoundedAsyncQueue.notifyOne,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,746,excluded,internal: private helper; modelled as part of its public caller,
-std.Queue.BoundedAsyncQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,786,todo,,
-std.Queue.BoundedAsyncQueue.unsafeTryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,856,todo,,
-std.Queue.BoundedAsyncQueue.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,867,todo,,
+std.Queue.BoundedAsyncQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,786,todo,,std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness
+std.Queue.BoundedAsyncQueue.unsafeTryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,856,todo,,std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock
+std.Queue.BoundedAsyncQueue.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,867,todo,,std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock
 std.Queue.UnboundedAsyncQueue.buffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,875,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.UnboundedAsyncQueue.takers,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,876,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.UnboundedAsyncQueue.FailureSignal,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,877,excluded,internal: private helper; modelled as part of its public caller,
-std.Queue.UnboundedAsyncQueue.unsafeOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,879,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
-std.Queue.UnboundedAsyncQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,884,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
-std.Queue.UnboundedAsyncQueue.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,886,todo,,
+std.Queue.UnboundedAsyncQueue.unsafeOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,879,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement;std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness
+std.Queue.UnboundedAsyncQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,884,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement;std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness
+std.Queue.UnboundedAsyncQueue.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,886,todo,,std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock
 std.Queue.UnboundedAsyncQueue.size,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,892,todo,,
-std.Queue.UnboundedAsyncQueue.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,894,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
-std.Queue.UnboundedAsyncQueue.tryTake,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,949,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
+std.Queue.UnboundedAsyncQueue.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,894,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement;std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness
+std.Queue.UnboundedAsyncQueue.tryTake,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,949,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement;std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock
 std.Queue.UnboundedAsyncQueue.notifyOne,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,959,excluded,internal: private helper; modelled as part of its public caller,
-std.Queue.DroppingAsyncQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,993,todo,,
-std.Queue.DroppingAsyncQueue.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,999,todo,,
+std.Queue.DroppingAsyncQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,993,todo,,std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock
+std.Queue.DroppingAsyncQueue.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,999,todo,,std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock
 std.Queue.DroppingAsyncQueue.tryOfferUnsafe,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1002,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.UnsafeBounded.buffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1017,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.UnsafeBounded.sequenceBuffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1019,excluded,internal: private helper; modelled as part of its public caller,
@@ -3021,8 +3021,8 @@ std.Queue.UnsafeBounded.LookAheadStep,std,method,std/shared/src/main/scala/cats/
 std.Queue.UnsafeBounded.FailureSignal,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1025,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.UnsafeBounded.debug,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1029,todo,,
 std.Queue.UnsafeBounded.size,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1032,todo,,
-std.Queue.UnsafeBounded.put,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1049,todo,,
-std.Queue.UnsafeBounded.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1082,todo,,
+std.Queue.UnsafeBounded.put,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1049,todo,,std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness
+std.Queue.UnsafeBounded.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1082,todo,,std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness
 std.Queue.UnsafeBounded.drain,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1116,todo,,
 std.Queue.UnsafeBounded.project,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1186,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.catsInvariantForQueue,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1190,todo,,
@@ -3214,8 +3214,8 @@ std.UnsafeUnbounded.first,std,method,std/shared/src/main/scala/cats/effect/std/U
 std.UnsafeUnbounded.last,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,25,excluded,internal: private helper; modelled as part of its public caller,
 std.UnsafeUnbounded.FailureSignal,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,26,excluded,internal: private helper; modelled as part of its public caller,
 std.UnsafeUnbounded.size,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,28,todo,,
-std.UnsafeUnbounded.put,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,38,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
-std.UnsafeUnbounded.take,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,52,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
+std.UnsafeUnbounded.put,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,38,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement;std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness
+std.UnsafeUnbounded.take,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,52,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement;std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness
 std.UnsafeUnbounded.debug,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,88,todo,,
 std.UnsafeUnbounded.Cell.data,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,102,todo,,
 std.UnsafeUnbounded.Cell.apply,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,104,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
