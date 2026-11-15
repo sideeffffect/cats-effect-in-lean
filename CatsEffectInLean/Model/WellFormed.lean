@@ -110,11 +110,9 @@ def Val.handles : Val → List Handle
 
 /-- The library of a model: `ok id` says that odd id `id` is a library closure that user code may
 name in a program (a public operation builds it). Decision 58: closure references are `Val.fn`
-values, so `WellFormed` follows them structurally (`Val.handles`); `fields` is **ignored** (kept
-only until the other tracks drop it; see `wiki/semantics/outcome-equivalence.md`). -/
+values, so `WellFormed` follows them structurally (`Val.handles`); no field lists. -/
 structure Lib where
   ok : Nat → Bool
-  fields : Val → List Nat := fun _ => []
 
 /-- A library given by `ok` only. -/
 @[reducible] def Lib.idFree (ok : Nat → Bool) : Lib := { ok := ok }
@@ -428,7 +426,7 @@ end WF
 
 * `lib.ok id`: odd id `id` is a library closure that user code may name in a program (a public
   operation builds it). Closure references are `Val.fn` values, which `WellFormed` follows
-  structurally (decision 58; `lib.fields` is ignored).
+  structurally (decision 58).
 * `H0`: the handles in the scope of the whole program (for example `Ref` cells that exist
   before it starts). Empty for a program that runs alone.
 * The start program `p` passes `progOK` with `H0` (decidable).

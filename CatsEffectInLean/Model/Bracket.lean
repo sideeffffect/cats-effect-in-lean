@@ -505,10 +505,6 @@ def isLib (id : Nat) : Bool :=
   | some l => l.good
   | none => false
 
-/-- Decision 58: closure references are `Val.fn` fields, which `WellFormed` follows structurally.
-Kept only so that other tracks still compile until they drop `Lib.fields` (ignored). -/
-def fnFields (_ : Val) : List Nat := []
-
 /-- The library of this mirror for `WellFormed`. -/
 def lib : Lib := { ok := isLib }
 

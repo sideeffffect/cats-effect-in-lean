@@ -13,7 +13,7 @@ Phase 6, batch 6.2, track Res. The model mirrors `Resource#fold`/`use`/`use_`/`u
 |---|---|
 | `Model/ResourceUse.lean` | `ULam` (namespace 20), `USrc` codes, `UEnv` (`REnv` + `resOf`), `foldLoop`, `useIO`, `allocatedIO`, `applyRelX` (`rel2`), `bothRes`, fixed twin `fixedBothRes`, dispatch `UEnv.toEnv` |
 | `Model/ResourceUseExamples.lean` | 6 runs by `decide +kernel` (both, LIFO, allocated + release) |
-| `Props/Phase6/HarnessPrivacy.lean` | (Not used by track Res since decision 58; kept until track G drops it.) The shared harness-privacy module (decision 56): tokens, `tokFreeV`/`tokFreeIO`/`tokFreeR`, `UserPrivate` |
+| `Props/Phase6/HarnessPrivacy.lean` | (Removed 2026-11-15: no statement uses it after decision 58.) The shared harness-privacy module (decision 56): tokens, `tokFreeV`/`tokFreeIO`/`tokFreeR`, `UserPrivate` |
 | `Props/Phase6/Resource.lean` | 4 statements; harness (`HLam`, log cell = token, `harness`, `envH`, `libH`), `MarkedMake`, `Private` |
 | `Proofs/Phase6/PrivacyExamples.lean` | Regression `example`s: the forgeries of review batches 4-6 are rejected |
 | `Proofs/Phase6/ResourceWitnessEnv.lean` | The witness environment `W` and its lemmas |

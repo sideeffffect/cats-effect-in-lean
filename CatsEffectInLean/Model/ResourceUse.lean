@@ -782,7 +782,4 @@ def publicLib (id : Nat) : Bool :=
 which `WellFormed` follows structurally). -/
 def lib : Lib := { ok := isLib }
 
-/-- Kept only so that other tracks still compile until they drop `Lib.fields` (ignored). -/
-def fnFields (_ : Val) : List Nat := []
-
 end CatsEffectInLean.Model.ResourceUse
