@@ -78,3 +78,8 @@ import CatsEffectInLean.Props.Phase6.ParTraverse
 import CatsEffectInLean.Proofs.Phase6.ParTraverseWitness
 import CatsEffectInLean.Proofs.Phase6.ParTraversePrivacy
 import CatsEffectInLean.Proofs.Phase6.ResourceWrongFunction
+import CatsEffectInLean.Std.CountDownLatch
+import CatsEffectInLean.Std.CyclicBarrier
+import CatsEffectInLean.Props.Phase7.CountDownLatch
+import CatsEffectInLean.Props.Phase7.CyclicBarrier
+import CatsEffectInLean.Proofs.Phase7.LatchWitness

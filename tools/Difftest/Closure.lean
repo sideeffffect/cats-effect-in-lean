@@ -234,6 +234,12 @@ inductive Lam where
   | ptF
   /-- `parTraverseN`: `.map(bs => list)` (the model already holds the list encoding). -/
   | ptList
+  -- format v2 (Phase 7, track L): `std.CountDownLatch`, `std.CyclicBarrier` run on the mirrors
+  -- `Std/CountDownLatch.lean`, `Std/CyclicBarrier.lean`
+  /-- `cdlNew`: `l => VLatch(h.newLatch(l))` (the model value is the latch itself). -/
+  | latchHandle
+  /-- `cbNew`: `b => VBarrier(h.newBarrier(b))`. -/
+  | barrierHandle
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -251,7 +257,8 @@ def Lam.all : List Lam :=
    .brcRel, .brcFinK, .brcFinEmit, .brcFinThen, .bfAcq,
    .memoSrc, .memoHandle,
    .ruUse, .raK, .raRelAs, .ruRes, .rbA, .rbB, .rbPair,
-   .ptF, .ptList]
+   .ptF, .ptList,
+   .latchHandle, .barrierHandle]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?

@@ -344,3 +344,8 @@
 ## [2026-11-15] ingest | Phase 7 start: tracks Q, S, L (decisions 59-62)
 - Updated: Project plan (Phase 7 status)
 - Raw: raw/project-decisions/2026-11-15-phase7-start.md
+
+## [2026-11-15] ingest | Track L: CountDownLatch and CyclicBarrier (Phase 7)
+- Created: CountDownLatch and CyclicBarrier model (cats-effect/latch-barrier-model.md)
+- Updated: Differential testing (format v2 ops of track L, mutation check)
+- Raw: raw/cats-effect/2026-11-15-track-l-latch-barrier-notes.md

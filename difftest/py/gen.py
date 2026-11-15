@@ -110,6 +110,9 @@ WEIGHTS = {
     # minimum); `gen_case` appends it with its own RNG (`p_par_traverse`). Weights here only
     # scale how often the two shapes are chosen there (`--boost` in opcount.py).
     'tpl_parTraverse': 1.2, 'tpl_parTraverseCancel': 0.6,
+    # format v2 (Phase 7, track L): `CountDownLatch` and `CyclicBarrier` scenarios, appended by
+    # `gen_case` with their own RNG (`p_latch`), like `parTraverseN`. Weights scale the two shapes.
+    'tpl_cdl': 1.0, 'tpl_cb': 1.0,
 }
 
 # Other knobs (probabilities and ranges).
@@ -133,6 +136,7 @@ CONFIG = {
     'p_queue_type': 0.1,       # bind_type gives a queue type
     # preempt coverage (Phase 5 gate caveat 3): small IORuntimeConfig thresholds
     'p_runtime': 0.25,
+    'p_latch': 0.08,           # Phase 7, track L: append a latch/barrier part (own RNG, see gen_case)
     'p_par_traverse': 0.08,    # batch 6.3: append a `parTraverseN` part (own RNG, see gen_case)         # replay case gets a `runtime` field (auto-yield every few iterations)
 }
 
@@ -711,6 +715,136 @@ class Gen:
                 body = {'op': 'bind', 'x': f1, 'e': {'op': 'start', 'e': get},
                         'k': {'op': 'seq', 'ps': cedes() + [{'op': 'cancel', 'f': v1}, after]}}
         return {'op': 'bind', 'x': m, 'e': {'op': 'memoize', 'e': fa}, 'k': body}
+
+    # ------------------------------------------------- format v2 (Phase 7, track L)
+
+    def latch_prefix(self, env, size, ctx):
+        """User code before an `await`/`release`: often nothing or a wait, sometimes an arbitrary
+        small program (it can raise, cancel itself or never end). `env` never holds the latch or
+        barrier variable (they are never printed)."""
+        x = self.r.random()
+        if x < 0.35:
+            return []
+        if x < 0.65:
+            return [self.pick([(3, {'op': 'cede'}), (2, {'op': 'sleep', 'ms': self.pick([(1, 0), (2, 1), (1, 10)])})])]
+        if x < 0.72:
+            return [{'op': 'canceled'}]
+        if x < 0.77:
+            return [{'op': 'raise', 'code': self.code()}]
+        return [self.prog(self.small_type(), env, max(1, size), self.child_ctx(ctx))]
+
+    def latch_wait(self, op_node, j, env, size, ctx):
+        """`prefix; await; marker` (the marker `delay fn1 nat (9_100_000 + j)` shows a return in
+        the trace), sometimes with an `onCancel` finalizer or inside `uncancelable` + `poll`."""
+        mark = {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_100_000 + j}}
+        x = self.r.random()
+        if x < 0.25:
+            w = self.tag({'op': 'onCancel', 'e': op_node, 'fin': {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_200_000 + j}}})
+        elif x < 0.4:
+            q = self.fresh('p')
+            w = {'op': 'uncancelable', 'poll': q, 'body': {'op': 'seq', 'ps': [
+                {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_300_000 + j}},
+                self.tag({'op': 'onCancel', 'e': {'op': 'poll', 'poll': q, 'e': op_node},
+                          'fin': {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_200_000 + j}}})]}}
+        else:
+            w = op_node
+        return {'op': 'seq', 'ps': self.latch_prefix(env, size, ctx) + [w, mark]}
+
+    def tpl_barrier_race(self, env, size, ctx):
+        """The cancel-versus-trip race of `CyclicBarrier` (`CyclicBarrier.scala:77-82`): `cap - 1`
+        awaiter fibers wait (the parent cedes); the parent starts a tripper fiber and at once
+        cancels some waiters. A waiter that is suspended runs its finalizers in a later task, so
+        under FIFO the tripper trips the barrier first and the cleanup sees the new epoch. Then
+        `cap` (or more) late awaiters show the count of the next generation."""
+        h = self.fresh('l')
+        hv = {'t': 'var', 'x': h}
+        cap = self.pick([(3, 2), (2, 3)])
+        node = lambda: {'op': 'cbAwait', 'b': hv}
+        mark = lambda j: {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_100_000 + j}}
+        fs = [self.fresh('x') for _ in range(cap - 1)]
+        tr = self.fresh('x')
+        late = [self.fresh('x') for _ in range(cap + self.pick([(4, 0), (1, 1)]))]
+        bodies = {f: self.latch_wait(node(), j, env, max(1, size // 4), ctx) if self.r.random() < 0.3
+                  else {'op': 'seq', 'ps': [node(), mark(j)]} for j, f in enumerate(fs)}
+        inner = {'op': 'seq', 'ps': [{'op': 'join', 'f': {'t': 'var', 'x': f}} for f in fs + [tr] + late]
+                 + [{'op': 'pure', 'v': {'t': 'unit'}}]}
+        for j, f in reversed(list(enumerate(late))):
+            inner = {'op': 'bind', 'x': f, 'e': {'op': 'start', 'e': {'op': 'seq', 'ps': [node(), mark(10 + j)]}}, 'k': inner}
+        cs = [{'op': 'cancel', 'f': {'t': 'var', 'x': f}} for f in fs if self.r.random() < 0.8]
+        after = {'op': 'seq', 'ps': cs + [{'op': 'cede'} for _ in range(self.pick([(4, 0), (1, 1)]))] + [inner]}
+        prog = {'op': 'bind', 'x': tr, 'e': {'op': 'start', 'e': {'op': 'seq', 'ps': [node(), mark(30)]}}, 'k': after}
+        prog = {'op': 'seq', 'ps': [{'op': 'cede'} for _ in range(self.pick([(1, 1), (3, 2), (1, 3)]))] + [prog]}
+        for f in reversed(fs):
+            prog = {'op': 'bind', 'x': f, 'e': {'op': 'start', 'e': bodies[f]}, 'k': prog}
+        return {'op': 'bind', 'x': h, 'e': {'op': 'cbNew', 'n': cap}, 'k': prog}
+
+    def tpl_latch(self, env, size, ctx, barrier):
+        """A `CountDownLatch` (or `CyclicBarrier`) scenario of type unit: make it, start 1-4
+        awaiter fibers (and releasers for a latch), let the parent cede, release, await, cancel
+        some fibers, start late awaiters, and join every fiber (or not, so a run can block)."""
+        if barrier and self.r.random() < 0.25:
+            return self.tpl_barrier_race(env, size, ctx)
+        h = self.fresh('l')
+        hv = {'t': 'var', 'x': h}
+        n = self.pick([(3, 1), (4, 2), (3, 3), (1, 4)])
+        node = (lambda: {'op': 'cbAwait', 'b': hv}) if barrier else (lambda: {'op': 'cdlAwait', 'l': hv})
+        rel = lambda: {'op': 'cdlRelease', 'l': hv}
+        sub = max(1, size // 4)
+        cedes = lambda: [{'op': 'cede'} for _ in range(self.pick([(3, 0), (2, 1), (1, 2), (1, 4)]))]
+        fibers = []
+        steps = []
+        k = self.pick([(1, 1), (3, 2), (3, 3), (2, 4)])
+        for j in range(k):
+            fibers.append((self.fresh('x'), self.latch_wait(node(), j, env, sub, ctx)))
+        if not barrier:
+            for i in range(self.pick([(1, 0), (3, 1), (3, 2), (2, 3), (1, 5)])):
+                body = {'op': 'seq', 'ps': self.latch_prefix(env, sub, ctx) + [
+                    {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_400_000 + i}}, rel()]}
+                fibers.append((self.fresh('x'), body))
+        self.r.shuffle(fibers)
+        started = []
+        for f, body in fibers:
+            steps.append(('start', f, body))
+            started.append(f)
+            if self.r.random() < 0.3:
+                steps.append(('do', cedes()))
+        # the parent: releases, a wait of its own, cancels, late awaiters
+        tail = []
+        for _ in range(self.pick([(3, 0), (2, 1), (2, 2), (1, 3)]) if not barrier else 0):
+            tail += cedes() + [rel()]
+        # barrier: the parent's own `await` can trip the barrier just before it cancels a
+        # released awaiter that has not run yet (the cancel loses the race; the cleanup must see
+        # the new epoch); then late awaiters show the count of the next generation
+        trip_first = barrier and self.r.random() < 0.35
+        if trip_first:
+            tail.append(self.latch_wait(node(), 20, env, sub, ctx))
+        cancels = [f for f in started if self.r.random() < (0.5 if trip_first else 0.3)]
+        for f in cancels:
+            tail += ([] if trip_first else cedes()) + [{'op': 'cancel', 'f': {'t': 'var', 'x': f}}]
+        late = []
+        for j in range(self.pick([(3, 0), (2, 1), (1, 2)] if not trip_first else [(1, 1), (3, 2), (1, 3)])):
+            late.append((self.fresh('x'), self.latch_wait(node(), 10 + j, env, sub, ctx)))
+        if barrier and not trip_first and self.r.random() < 0.3:
+            tail.append(self.latch_wait(node(), 20, env, sub, ctx))
+        joins = [{'op': 'join', 'f': {'t': 'var', 'x': f}} for f in started + [x for x, _ in late]
+                 if self.r.random() < 0.85]
+        # build: bind l = new; bind f1 = start ...; ...; tail; late starts; joins; unit
+        rest = {'op': 'seq', 'ps': tail + [] + [{'op': 'pure', 'v': {'t': 'unit'}}]} if not late else None
+        if late:
+            inner = {'op': 'seq', 'ps': cedes() + joins + [{'op': 'pure', 'v': {'t': 'unit'}}]}
+            for f, body in reversed(late):
+                inner = {'op': 'bind', 'x': f, 'e': {'op': 'start', 'e': body}, 'k': inner}
+            rest = {'op': 'seq', 'ps': tail + [inner]}
+        else:
+            rest = {'op': 'seq', 'ps': tail + cedes() + joins + [{'op': 'pure', 'v': {'t': 'unit'}}]}
+        prog = rest
+        for st in reversed(steps):
+            if st[0] == 'start':
+                prog = {'op': 'bind', 'x': st[1], 'e': {'op': 'start', 'e': st[2]}, 'k': prog}
+            elif st[1]:
+                prog = {'op': 'seq', 'ps': st[1] + [prog]}
+        new = {'op': 'cbNew', 'n': n} if barrier else {'op': 'cdlNew', 'n': n}
+        return {'op': 'bind', 'x': h, 'e': new, 'k': prog}
 
     # ------------------------------------------------------- format v1
 
@@ -1411,6 +1545,17 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
         g2.names = 10000
         cancel = pr.random() * (w['tpl_parTraverse'] + w['tpl_parTraverseCancel']) < w['tpl_parTraverseCancel']
         extra = g2.tpl_par_traverse(UNIT, {}, pr.randint(3, 12), {}, cancel)
+        prog = {'op': 'seq', 'ps': [prog, extra]}
+        check_prog(prog)
+    # Phase 7, track L: append a `CountDownLatch` or `CyclicBarrier` scenario. Own RNG, so the
+    # rest of the case does not change; the probability scales with the template weights.
+    lr = random.Random(f"difftest-latch:{seed}:{i}")
+    pl = g.c['p_latch'] * (w['tpl_cdl'] + w['tpl_cb']) / 2.0
+    if prog.get('op') != 'syncStep' and lr.random() < pl:
+        g3 = Gen(lr, weights, config)
+        g3.names = 20000
+        barrier = lr.random() * (w['tpl_cdl'] + w['tpl_cb']) < w['tpl_cb']
+        extra = g3.tpl_latch({}, lr.randint(3, 16), {}, barrier)
         prog = {'op': 'seq', 'ps': [prog, extra]}
         check_prog(prog)
     case['prog'] = prog

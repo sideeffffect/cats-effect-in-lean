@@ -371,6 +371,10 @@ def runClo (U : ResourceUse.UEnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) :
     match env with
     | [rel] => prog (.map (ResourceUse.srcU U rel) (clo node .constVal [arg]))
     | _ => DResult.harness
+  -- format v2 (Phase 7, track L): `l => VLatch(h.newLatch(l))`, `b => VBarrier(h.newBarrier(b))`.
+  -- The handle number is not observable (generated programs never print a latch or barrier).
+  | .latchHandle, _ => ret arg []
+  | .barrierHandle, _ => ret arg []
   -- format v2 (batch 6.3): `x => run(f, env + x)`, called by the mirror inside the fiber
   | .ptF, .parTraverseN _ _ f => ofTr (tr R f (node + 1) (arg :: env) vw)
   -- `.map(bs => list)`: the model already holds the list encoding
@@ -464,6 +468,8 @@ inductive LibClo where
   | memoize (l : Memoize.MLam)
   | ures (l : ResourceUse.ULam)
   | ptrav (l : ParTraverse.PT)
+  | cdl (l : CatsEffectInLean.Std.CountDownLatch.CLam)
+  | cb (l : CatsEffectInLean.Std.CyclicBarrier.BLam)
 
 /-- The library closure of an id that is not a difftest closure id, if exactly one mirror
 decodes it. -/
@@ -483,6 +489,10 @@ def libClo? (id : Nat) : Option LibClo :=
           else if k == Memoize.ns then (Memoize.MLam.ofFields tag fs).map .memoize
           else if k == ResourceUse.ns then (ResourceUse.ULam.ofFields tag fs).map .ures
           else if k == ParTraverse.ns then (ParTraverse.PT.ofFields tag fs).map .ptrav
+          else if k == CatsEffectInLean.Std.CountDownLatch.ns then
+            (CatsEffectInLean.Std.CountDownLatch.CLam.ofFields tag fs).map .cdl
+          else if k == CatsEffectInLean.Std.CyclicBarrier.ns then
+            (CatsEffectInLean.Std.CyclicBarrier.BLam.ofFields tag fs).map .cb
           else none
         | none => none
       match res, lib with
@@ -529,6 +539,8 @@ def dispatch (ho : List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (vw 
     | some (.ures l) => ResourceUse.callU (uenvOf p) (dispatchDt p) l arg vw
     | some (.memoize l) => Memoize.call (srcIO p) l arg vw
     | some (.ptrav l) => ParTraverse.call ho (dispatchDt p) l arg vw
+    | some (.cdl l) => CatsEffectInLean.Std.CountDownLatch.call l arg vw
+    | some (.cb l) => CatsEffectInLean.Std.CyclicBarrier.call l arg vw
     | none => DResult.harness.toUser
 
 /-- The `Model.UserEnv` of program `p` with `HashSet` order `ho` (see module doc). -/

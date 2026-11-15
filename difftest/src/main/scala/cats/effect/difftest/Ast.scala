@@ -25,6 +25,8 @@ enum Val:
   case VDeferred(id: Int)
   case VQueue(id: Int) // v1
   case VMemo(id: Int) // v2 (track M): the `get` of a `memoize`
+  case VLatch(id: Int) // v2 (Phase 7, track L): a `CountDownLatch`
+  case VBarrier(id: Int) // v2 (Phase 7, track L): a `CyclicBarrier`
 
 /** An argument position: a literal value or a bound variable. */
 enum Atom:
@@ -105,6 +107,17 @@ enum Prog:
   // ---- format v2 (Phase 6, batch 6.3)
   /** `IO.parTraverseN(n)(xs)(x => f).map(list)`; the list result is right-nested pairs ending in unit. */
   case ParTraverseN(n: Int, xs: List[Atom], x: String, f: Prog)
+  // ---- format v2 (Phase 7, track L)
+  /** `CountDownLatch[IO](n).map(l => VLatch(h.newLatch(l)))`. */
+  case CdlNew(n: Int)
+  /** `latchOf(l).release.as(VUnit)`. */
+  case CdlRelease(l: Atom)
+  /** `latchOf(l).await.as(VUnit)`. */
+  case CdlAwait(l: Atom)
+  /** `CyclicBarrier[IO](n).map(b => VBarrier(h.newBarrier(b)))`. */
+  case CbNew(n: Int)
+  /** `barrierOf(b).await.as(VUnit)`. */
+  case CbAwait(b: Atom)
 
 /** A `Resource[IO, Val]` (format v1). It occurs only under `AllocatedCase`. */
 enum Res:

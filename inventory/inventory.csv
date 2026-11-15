@@ -2749,16 +2749,16 @@ std.ConsoleCompanionCrossPlatform.SyncConsole.printStackTrace,std,method,std/sha
 std.ConsoleCompanionCrossPlatform.readLineWithCharsetImpl,std,method,std/shared/src/main/scala/cats/effect/std/ConsoleCrossPlatform.scala,210,excluded,internal: private helper; modelled as part of its public caller,
 std.ConsoleCompanionCrossPlatform.printStackTrace,std,method,std/shared/src/main/scala/cats/effect/std/ConsoleCrossPlatform.scala,273,excluded,internal: private helper; modelled as part of its public caller,
 std.ConsoleCompanionCrossPlatform.mapK,std,method,std/shared/src/main/scala/cats/effect/std/ConsoleCrossPlatform.scala,280,excluded,internal: private helper; modelled as part of its public caller,
-std.CountDownLatch.release,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,37,todo,,
-std.CountDownLatch.await,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,42,todo,,
+std.CountDownLatch.release,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,37,todo,,std.CountDownLatch.awaitNotEarly;std.CountDownLatch.noLostWakeup;std.CountDownLatch.releaseTotal
+std.CountDownLatch.await,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,42,todo,,std.CountDownLatch.awaitNotEarly;std.CountDownLatch.noLostWakeup;std.CountDownLatch.releaseTotal
 std.CountDownLatch.mapK,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,44,todo,,
-std.CountDownLatch.apply,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,57,todo,,
-std.CountDownLatch.ConcurrentCountDownLatch.release,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,71,todo,,
-std.CountDownLatch.ConcurrentCountDownLatch.await,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,78,todo,,
-std.CountDownLatch.State.initial,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,92,todo,,
-std.CyclicBarrier.await,std,method,std/shared/src/main/scala/cats/effect/std/CyclicBarrier.scala,40,todo,,
+std.CountDownLatch.apply,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,57,todo,,std.CountDownLatch.awaitNotEarly;std.CountDownLatch.noLostWakeup;std.CountDownLatch.releaseTotal
+std.CountDownLatch.ConcurrentCountDownLatch.release,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,71,todo,,std.CountDownLatch.awaitNotEarly;std.CountDownLatch.noLostWakeup;std.CountDownLatch.releaseTotal
+std.CountDownLatch.ConcurrentCountDownLatch.await,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,78,todo,,std.CountDownLatch.awaitNotEarly;std.CountDownLatch.noLostWakeup;std.CountDownLatch.releaseTotal
+std.CountDownLatch.State.initial,std,method,std/shared/src/main/scala/cats/effect/std/CountDownLatch.scala,92,todo,,std.CountDownLatch.awaitNotEarly;std.CountDownLatch.noLostWakeup;std.CountDownLatch.releaseTotal
+std.CyclicBarrier.await,std,method,std/shared/src/main/scala/cats/effect/std/CyclicBarrier.scala,40,todo,,std.CyclicBarrier.noEarlyTrip;std.CyclicBarrier.exactGenerations;std.CyclicBarrier.cancelNoHang;std.CyclicBarrier.cancelRemoved
 std.CyclicBarrier.mapK,std,method,std/shared/src/main/scala/cats/effect/std/CyclicBarrier.scala,50,todo,,
-std.CyclicBarrier.apply,std,method,std/shared/src/main/scala/cats/effect/std/CyclicBarrier.scala,58,todo,,
+std.CyclicBarrier.apply,std,method,std/shared/src/main/scala/cats/effect/std/CyclicBarrier.scala,58,todo,,std.CyclicBarrier.noEarlyTrip;std.CyclicBarrier.exactGenerations;std.CyclicBarrier.cancelNoHang;std.CyclicBarrier.cancelRemoved
 std.Dequeue.reverse,std,method,std/shared/src/main/scala/cats/effect/std/Dequeue.scala,33,todo,,
 std.Dequeue.mapK,std,method,std/shared/src/main/scala/cats/effect/std/Dequeue.scala,42,todo,,
 std.Dequeue.bounded,std,method,std/shared/src/main/scala/cats/effect/std/Dequeue.scala,71,todo,,

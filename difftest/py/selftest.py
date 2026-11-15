@@ -57,6 +57,10 @@ V2RES_MIN = 0.02
 # Format v2 (batch 6.3)
 V2PT_OPS = ('parTraverseN',)
 V2PT_MIN = 0.02
+# Format v2 (Phase 7, track L): appended with its own RNG (`p_latch`, about 4 % each);
+# opcount.py with `--boost tpl_cdl=12 tpl_cb=12` gives the 50,000-case runs
+V2L_OPS = ('cdlNew', 'cdlRelease', 'cdlAwait', 'cbNew', 'cbAwait')
+V2L_MIN = 0.015
 
 
 def check(cond, msg):
@@ -68,7 +72,7 @@ def check(cond, msg):
 def main():
     t0 = time.time()
     # 1. type checker
-    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race', 'bracket', 'memoize', 'resuse', 'partraverse')
+    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race', 'bracket', 'memoize', 'resuse', 'partraverse', 'latch')
              for x in (drive.REPO / f'difftest/cases/{f}.jsonl').read_text().splitlines() if x.strip()]
     check(all(well_typed(c['prog']) for c in basic), f"type checker accepts all {len(basic)} golden cases")
     N1 = {'t': 'nat', 'v': 1}
@@ -76,6 +80,9 @@ def main():
         {'op': 'map', 'e': {'op': 'pure', 'v': {'t': 'pair', 'a': N1, 'b': N1}}, 'fn': 2},  # inc on a pair
         {'op': 'bind', 'x': 'r', 'e': {'op': 'refNew', 'v': N1}, 'k': {'op': 'join', 'f': {'t': 'var', 'x': 'r'}}},
         {'op': 'poll', 'poll': 'p', 'e': {'op': 'cede'}},
+        # format v2 (track L): `cdlAwait` on a barrier; a count of 0
+        {'op': 'bind', 'x': 'b', 'e': {'op': 'cbNew', 'n': 2}, 'k': {'op': 'cdlAwait', 'l': {'t': 'var', 'x': 'b'}}},
+        {'op': 'cdlNew', 'n': 0},
         # format v2 (track M): `memoGet` on a `Ref`
         {'op': 'bind', 'x': 'r', 'e': {'op': 'refNew', 'v': N1}, 'k': {'op': 'memoGet', 'm': {'t': 'var', 'x': 'r'}}},
         {'op': 'bind', 'x': 'r', 'e': {'op': 'refNew', 'v': N1}, 'k': {'op': 'refModify', 'r': {'t': 'var', 'x': 'r'}, 'fn': 0}},
@@ -136,6 +143,9 @@ def main():
     v2pcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2PT_OPS}
     lowp = {op: f for op, f in v2pcov.items() if f < V2PT_MIN}
     check(not lowp, f"each format v2 op of batch 6.3 in >= {V2PT_MIN:.0%} of {N} cases {lowp}")
+    v2lcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2L_OPS}
+    lowl = {op: f for op, f in v2lcov.items() if f < V2L_MIN}
+    check(not lowl, f"each format v2 op of track L in >= {V2L_MIN:.1%} of {N} cases {lowl}")
 
     # 3 + 4. Scala runs: no generator bug, deterministic
     tcs = [gen.to_testcontrol(c, t) for c in a[:N // 2] for t in (1, 2)]

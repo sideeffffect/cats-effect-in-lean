@@ -8,6 +8,8 @@ import CatsEffectInLean.Model.ParTraverse
 import CatsEffectInLean.Model.Memoize
 import CatsEffectInLean.Model.ResourceUse
 import CatsEffectInLean.Std.Queue
+import CatsEffectInLean.Std.CountDownLatch
+import CatsEffectInLean.Std.CyclicBarrier
 
 /-!
 # Translation: difftest program → `Model.IO` + user environment
@@ -503,6 +505,33 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     -- `memoOf(⟦m⟧)`: the `get` itself
     match Memoize.getOfVal? (← atomVal env m) with
     | some io => pure io
+    | none => throw .typeError
+  -- format v2 (Phase 7, track L): the mirrors `Std/CountDownLatch.lean`, `Std/CyclicBarrier.lean`
+  | .cdlNew n, node, _, _ =>
+    -- `CountDownLatch[IO](n).map(l => VLatch(h.newLatch(l)))` (`CountDownLatch.scala:57-65`);
+    -- the decoder accepts only `n ≥ 1`
+    match CatsEffectInLean.Std.CountDownLatch.apply? n with
+    | some io => pure (.map io (clo node .latchHandle []))
+    | none => throw .typeError
+  | .cdlRelease l, node, env, _ => do
+    -- `latchOf(⟦l⟧).release.as(VUnit)`; `as` = `map(_ => b)` (`IO.scala:182-183`)
+    match CatsEffectInLean.Std.CountDownLatch.latchOf? (← atomVal env l) with
+    | some (r, v) => pure (.map (CatsEffectInLean.Std.CountDownLatch.releaseIO r v) (clo node .asUnit []))
+    | none => throw .typeError
+  | .cdlAwait l, node, env, _ => do
+    -- `latchOf(⟦l⟧).await.as(VUnit)`
+    match CatsEffectInLean.Std.CountDownLatch.latchOf? (← atomVal env l) with
+    | some (r, _) => pure (.map (CatsEffectInLean.Std.CountDownLatch.awaitIO r) (clo node .asUnit []))
+    | none => throw .typeError
+  | .cbNew n, node, _, _ =>
+    -- `CyclicBarrier[IO](n).map(b => VBarrier(h.newBarrier(b)))` (`CyclicBarrier.scala:58-91`)
+    match CatsEffectInLean.Std.CyclicBarrier.apply? n with
+    | some io => pure (.map io (clo node .barrierHandle []))
+    | none => throw .typeError
+  | .cbAwait b, node, env, _ => do
+    -- `barrierOf(⟦b⟧).await.as(VUnit)` (the `val await` of `CyclicBarrier.scala:67`)
+    match CatsEffectInLean.Std.CyclicBarrier.barrierOf? (← atomVal env b) with
+    | some (r, cap, v) => pure (.map (CatsEffectInLean.Std.CyclicBarrier.awaitIO r cap v) (clo node .asUnit []))
     | none => throw .typeError
 
 

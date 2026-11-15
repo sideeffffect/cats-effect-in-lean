@@ -55,7 +55,7 @@ object Json:
       case "succeeded" => only("v"); Val.VSucceeded(decodeVal(field(o, "v", t)))
       case "errored" => only("code"); Val.VErrored(Err.User(nat(field(o, "code", t), "errored.code")))
       case "canceled" => only(); Val.VCanceled
-      case "fiber" | "ref" | "deferred" | "queue" | "memo" => fail(s"value '$t': handles cannot be literals")
+      case "fiber" | "ref" | "deferred" | "queue" | "memo" | "latch" | "barrier" => fail(s"value '$t': handles cannot be literals")
       case _ => fail(s"unknown value tag '$t'")
 
   def encodeErr(e: Err): ujson.Obj = e match
@@ -77,6 +77,8 @@ object Json:
     case Val.VDeferred(i) => ujson.Obj("t" -> "deferred", "id" -> i)
     case Val.VQueue(i) => ujson.Obj("t" -> "queue", "id" -> i)
     case Val.VMemo(i) => ujson.Obj("t" -> "memo", "id" -> i)
+    case Val.VLatch(i) => ujson.Obj("t" -> "latch", "id" -> i)
+    case Val.VBarrier(i) => ujson.Obj("t" -> "barrier", "id" -> i)
 
   // --------------------------------------------------------------- programs
 
@@ -104,7 +106,9 @@ object Json:
   /** Ops of format v2 (a decode error in a v0 or v1 case). */
   val V2Ops: Set[String] = Set("race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket", "bracketCase",
     "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth",
-    "parTraverseN")
+    "parTraverseN",
+    // Phase 7, track L
+    "cdlNew", "cdlRelease", "cdlAwait", "cbNew", "cbAwait")
 
   /** Reject a v2 op anywhere in `j` (a case of format v0 or v1). */
   private def checkNoV2(j: Value): Unit = j match
@@ -267,6 +271,15 @@ object Json:
           case ujson.Arr(vs) => vs.toList.map(atom(_, scope, s"$ctx.xs"))
           case v => fail(s"$ctx.xs: expected an array, got $v")
         Prog.ParTraverseN(k.toInt, xs, x, p("f", scope + (x -> Kind.V)))
+      // ---- format v2 (Phase 7, track L)
+      case "cdlNew" | "cbNew" =>
+        only("n")
+        val k = n("n")
+        if k < 1 || k > 1000 then fail(s"$ctx.n: expected 1..1000, got $k")
+        if op == "cdlNew" then Prog.CdlNew(k.toInt) else Prog.CbNew(k.toInt)
+      case "cdlRelease" => only("l"); Prog.CdlRelease(a("l"))
+      case "cdlAwait" => only("l"); Prog.CdlAwait(a("l"))
+      case "cbAwait" => only("b"); Prog.CbAwait(a("b"))
       case "syncStep" => fail(s"$ctx: only at the root of a program")
       case r if ResOps.contains(r) => fail(s"$ctx: a resource op outside a resource position")
       case _ => fail(s"unknown op '$op'")

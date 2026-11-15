@@ -164,6 +164,20 @@ New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decod
 - `Prog.eagerReads`: `rUse`/`rAllocated` build `res` at once; `rBoth` builds both sides.
 - Fixed cases `cases/resuse.jsonl` (`cases/gen_res.py`). Generator: `rUse`, `rAllocated`, `res_both`, `tpl_resBoth` (a `both` whose one release raises: CE-0020). See [Resource use, allocated, both](../cats-effect/resource-use-both-model.md).
 
+### Format v2 ops of track L (Phase 7; same version, same `checkNoV2` gate)
+
+| op | fields | term |
+|----|--------|------|
+| `cdlNew` | `n` (1..1000) | `CountDownLatch.apply` (`F = IO`, count `n`), then `.map(l => latch(handle l))` |
+| `cdlRelease` | `l`: atom | `latchOf(⟦l⟧).release.as(VUnit)` |
+| `cdlAwait` | `l`: atom | `latchOf(⟦l⟧).await.as(VUnit)` |
+| `cbNew` | `n` (1..1000) | `CyclicBarrier.apply` (`F = IO`, capacity `n`), then `.map(b => barrier(handle b))` |
+| `cbAwait` | `b`: atom | `barrierOf(⟦b⟧).await.as(VUnit)` |
+
+- Values `{"t":"latch","id":n}`, `{"t":"barrier","id":n}` (output only; generated cases never print them). A literal is a decode error. `n < 1` is a decode error (Scala `apply` throws while it builds the term).
+- Lean side: `Std/CountDownLatch.lean`, `Std/CyclicBarrier.lean` (`apply?`, `releaseIO`, `awaitIO`); the model value is the object closure reference (`latchOf?`, `barrierOf?`); lambdas `latchHandle`, `barrierHandle`. In the Lean decoder these ops are parsed before the big `match` (as `parTraverseN`).
+- Fixed cases `cases/latch.jsonl` (`cases/gen_latch.py`). Generator: `tpl_latch`, `tpl_barrier_race`, appended by `gen_case` with their own RNG (`p_latch`). See [CountDownLatch and CyclicBarrier model](../cats-effect/latch-barrier-model.md).
+
 ## User function table
 
 `call(fn, v)` first emits `{"ev":"call","fn":fn,"arg":v}`, then applies the function. Lean must implement the same table.

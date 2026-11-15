@@ -1,7 +1,7 @@
 package cats.effect.difftest
 
 import cats.effect.{Deferred, Fiber, IO, Outcome, Poll, Ref, Resource}
-import cats.effect.std.Queue
+import cats.effect.std.{CountDownLatch, CyclicBarrier, Queue}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.*
@@ -59,6 +59,10 @@ final class Harness:
   def newQueue(q: Queue[IO, Val]): Int = synchronized { queues += q; queues.size - 1 }
   val memos = ArrayBuffer.empty[IO[Val]]
   def newMemo(g: IO[Val]): Int = synchronized { memos += g; memos.size - 1 }
+  val latches = ArrayBuffer.empty[CountDownLatch[IO]]
+  def newLatch(l: CountDownLatch[IO]): Int = synchronized { latches += l; latches.size - 1 }
+  val barriers = ArrayBuffer.empty[CyclicBarrier[IO]]
+  def newBarrier(b: CyclicBarrier[IO]): Int = synchronized { barriers += b; barriers.size - 1 }
   def newAsync(): Int = synchronized { asyncs += 1; asyncs - 1 }
 
 /** The error code of `java.util.concurrent.TimeoutException` (format v1). The value language has
@@ -137,6 +141,14 @@ final class Interp(h: Harness):
   private def memoOf(v: Val): IO[Val] = v match
     case VMemo(i) => h.memos(i)
     case _ => throw TypeError(s"not a memo handle: $v")
+
+  private def latchOf(v: Val): CountDownLatch[IO] = v match
+    case VLatch(i) => h.latches(i)
+    case _ => throw TypeError(s"not a latch handle: $v")
+
+  private def barrierOf(v: Val): CyclicBarrier[IO] = v match
+    case VBarrier(i) => h.barriers(i)
+    case _ => throw TypeError(s"not a barrier handle: $v")
 
   private def deferredOf(v: Val): (Int, Deferred[IO, Val]) = v match
     case VDeferred(i) => (i, h.deferreds(i))
@@ -297,6 +309,13 @@ final class Interp(h: Harness):
     case Prog.ParTraverseN(n, xs, x, f) =>
       IO.parTraverseN(n)(xs.map(atom(_, env)))(a => run(f, env + (x -> Bound.V(a))))
         .map(bs => bs.foldRight(VUnit: Val)((b, acc) => VPair(b, acc)))
+    // ---- format v2 (Phase 7, track L): std.CountDownLatch (CountDownLatch.scala:57-82),
+    // std.CyclicBarrier (CyclicBarrier.scala:58-91)
+    case Prog.CdlNew(n) => CountDownLatch[IO](n).map(l => VLatch(h.newLatch(l)))
+    case Prog.CdlRelease(l) => latchOf(atom(l, env)).release.as(VUnit)
+    case Prog.CdlAwait(l) => latchOf(atom(l, env)).await.as(VUnit)
+    case Prog.CbNew(n) => CyclicBarrier[IO](n).map(b => VBarrier(h.newBarrier(b)))
+    case Prog.CbAwait(b) => barrierOf(atom(b, env)).await.as(VUnit)
 
   /** `(a, oc) => ocVal(oc).flatMap(o => IO.delay(emit fin) *> run(rel, env + x + y).void)` (format v2). */
   private def caseRelease(op: String, x: String, y: String, rel: Prog, tag: Long, env: Env)

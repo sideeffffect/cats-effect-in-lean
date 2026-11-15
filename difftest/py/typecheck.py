@@ -304,6 +304,18 @@ class Checker:
             for _ in p['xs']:
                 t = ('pair', b, t)
             return t
+        # ---- format v2 (Phase 7, track L): CountDownLatch, CyclicBarrier
+        if op in ('cdlNew', 'cbNew'):
+            k = p.get('n')
+            if not isinstance(k, int) or isinstance(k, bool) or not 1 <= k <= 1000:
+                raise TypeErr(f"{op} n {k!r}")
+            return ('latch',) if op == 'cdlNew' else ('barrier',)
+        if op in ('cdlRelease', 'cdlAwait'):
+            u(self.atom(p['l'], env), ('latch',), op)
+            return ('unit',)
+        if op == 'cbAwait':
+            u(self.atom(p['b'], env), ('barrier',), op)
+            return ('unit',)
         if op == 'syncStep':
             raise TypeErr("syncStep below the root")
         if op in RES_OPS:

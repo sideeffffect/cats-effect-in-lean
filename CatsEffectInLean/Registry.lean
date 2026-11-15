@@ -16,6 +16,8 @@ import CatsEffectInLean.Proofs.Phase6.MemoizeStuck
 import CatsEffectInLean.Props.Phase6.Resource
 import CatsEffectInLean.Proofs.Phase6.ResourceBoth
 import CatsEffectInLean.Props.Phase6.ParTraverse
+import CatsEffectInLean.Props.Phase7.CountDownLatch
+import CatsEffectInLean.Props.Phase7.CyclicBarrier
 
 /-!
 # Property registry
@@ -491,7 +493,72 @@ def registry : List Entry := [
       through a Timeout.fold source) is closed by decision 58 (ParTraversePrivacy; ptsmoke: \
       rejected, and it breaks the claim when run). Satisfiable \
       (Limit.parTraverseNAtMostN_satisfiable: n = 1 reached). Wrong function: 1000 permits \
-      reaches 2 > 1 (Limit.wideRun_breaks, kernel-checked; ptsmoke). Open." }
+      reaches 2 > 1 (Limit.wideRun_breaks, kernel-checked; ptsmoke). Open." },
+  { id := "std.CountDownLatch.awaitNotEarly"
+    rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
+    prop := ``Props.Phase7.CountDownLatch.cdlAwaitNotEarly
+    status := .«open»
+    note := "Phase 7, track L. An await returns only after n release calls began (Scaladoc \
+      CountDownLatch.scala:23-27, :39-41). Harness: awaiters ws[j].attempt *> uncancelable(poll => \
+      mark 1 *> poll(l.await).onCancel(mark 3) *> mark 2), releasers us[i].attempt *> \
+      uncancelable(started += 1 *> l.release *> completed += 1), the root cancels awaiters in \
+      cancels, joins all. All user code (WellFormed cdlLib, variant-0 mirror closures only), all n, \
+      all PChoice schedules and fuel (every reachable state). Satisfiable (LatchWitness.CDL.\
+      awaitNotEarly_sat). Wrong function: variant 1 opens one release early (awaitNotEarly_wrong, \
+      cdlAwaitNotEarly_v1_false; smoke 160 of 1500 runs). Smoke: 0 violations in 1500 runs. Open." },
+  { id := "std.CountDownLatch.noLostWakeup"
+    rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
+    prop := ``Props.Phase7.CountDownLatch.cdlNoLostWakeup
+    status := .«open»
+    note := "Phase 7, track L. A blocked run after n release calls has no awaiter left in await, \
+      also with canceled and self-canceled awaiters (Scaladoc :33-36). Same harness and \
+      quantifiers. Satisfiable (noLostWakeup_sat: blocked by a releaser that never ends). Wrong \
+      function: variant 2 never completes signal (noLostWakeup_wrong; smoke 238). Smoke: 0. Open." },
+  { id := "std.CountDownLatch.releaseTotal"
+    rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
+    prop := ``Props.Phase7.CountDownLatch.cdlReleaseTotal
+    status := .«open»
+    note := "Phase 7, track L. In a blocked or done run every release returned (completed = \
+      started), also releases after the count reached 0 (one-shot: no-ops, Scaladoc :24-26). \
+      Satisfiable (releaseTotal_sat: n = 1, two releases). Wrong function: variant 3 raises \
+      after Done (releaseTotal_wrong; smoke 225). Smoke: 0. Open." },
+  { id := "std.CyclicBarrier.noEarlyTrip"
+    rows := ["std.CyclicBarrier.apply", "std.CyclicBarrier.await"]
+    prop := ``Props.Phase7.CyclicBarrier.cbNoEarlyTrip
+    status := .«open»
+    note := "Phase 7, track L. Without program cancels, passed <= cap * (entered / cap) in every \
+      reachable state: each trip needs cap fibers in await (Scaladoc CyclicBarrier.scala:24-34). \
+      Harness: group A, cancels, group B awaiters, each us.attempt *> uncancelable(poll => mark 1 \
+      *> poll(b.await).onCancel(mark 3) *> mark 2). All user code (WellFormed cbLib), all cap, \
+      schedules, fuel. Satisfiable (CB.noEarlyTrip_sat). Wrong function: variant 1 trips at cap - 1 \
+      (noEarlyTrip_wrong; smoke 606 of 1500). Smoke: 0. Open." },
+  { id := "std.CyclicBarrier.exactGenerations"
+    rows := ["std.CyclicBarrier.apply", "std.CyclicBarrier.await"]
+    prop := ``Props.Phase7.CyclicBarrier.cbExactGenerations
+    status := .«open»
+    note := "Phase 7, track L. Without program cancels, a blocked run released only full \
+      generations (passed % cap = 0) and fewer than cap fibers wait: no lost wakeup. Satisfiable \
+      (exactGenerations_sat). Wrong function: variant 4 never completes unblock \
+      (exactGenerations_wrong; smoke 589). Smoke: 0. Open." },
+  { id := "std.CyclicBarrier.cancelNoHang"
+    rows := ["std.CyclicBarrier.apply", "std.CyclicBarrier.await"]
+    prop := ``Props.Phase7.CyclicBarrier.cbCancelNoHang
+    status := .«open»
+    note := "Phase 7, track L. With program cancels at any point, a blocked run has fewer than cap \
+      fibers in await: a canceled await leaves only its own generation (code comment \
+      CyclicBarrier.scala:77-78). Satisfiable (cancelNoHang_sat). Wrong function: variant 3 drops \
+      the epoch check; the race (A0 canceled while suspended, A1 trips before A0's cleanup task) \
+      makes the next generation need cap + 1 (cancelNoHang_wrong, cbCancelNoHang_v3_false; v3.7.1 \
+      passes the same schedule, cancelNoHang_v0_race). Smoke: 0. Open." },
+  { id := "std.CyclicBarrier.cancelRemoved"
+    rows := ["std.CyclicBarrier.apply", "std.CyclicBarrier.await"]
+    prop := ``Props.Phase7.CyclicBarrier.cbCancelRemoved
+    status := .«open»
+    note := "Phase 7, track L. With as.length < cap (no trip before group B starts, after every \
+      cancel returned), passed <= cap * ((entered - canceledIn) / cap) in every state: a canceled \
+      await does not count for a trip. The hypothesis restricts the test program (a cancel that \
+      loses the race with a trip is covered by cancelNoHang). Satisfiable (cancelRemoved_sat). \
+      Wrong function: variant 2 does not re-increment (cancelRemoved_wrong). Smoke: 0. Open." }
 ]
 
 end CatsEffectInLean

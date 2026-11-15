@@ -178,6 +178,17 @@ inductive Prog where
   -- format v2 (batch 6.3)
   /-- `IO.parTraverseN(n)(xs)(x => I(f)).map(list)`; `f` binds `x`. -/
   | parTraverseN (n : Nat) (xs : List Atom) (f : Prog)
+  -- format v2 (Phase 7, track L): `std.CountDownLatch`, `std.CyclicBarrier`
+  /-- `CountDownLatch[IO](n).map(l => VLatch(h.newLatch(l)))`. -/
+  | cdlNew (n : Nat)
+  /-- `latchOf(⟦l⟧).release.as(VUnit)`. -/
+  | cdlRelease (l : Atom)
+  /-- `latchOf(⟦l⟧).await.as(VUnit)`. -/
+  | cdlAwait (l : Atom)
+  /-- `CyclicBarrier[IO](n).map(b => VBarrier(h.newBarrier(b)))`. -/
+  | cbNew (n : Nat)
+  /-- `barrierOf(⟦b⟧).await.as(VUnit)`. -/
+  | cbAwait (b : Atom)
   deriving DecidableEq, Repr
 
 /-- Number of nodes. Nodes are numbered in pre-order from 0; the children of a node with
@@ -237,6 +248,8 @@ def Prog.opName : Prog → String
   | .memoize .. => "memoize" | .memoGet .. => "memoGet"
   | .rUse .. => "rUse" | .rAllocated .. => "rAllocated" | .rBoth .. => "rBoth"
   | .parTraverseN .. => "parTraverseN"
+  | .cdlNew .. => "cdlNew" | .cdlRelease .. => "cdlRelease" | .cdlAwait .. => "cdlAwait"
+  | .cbNew .. => "cbNew" | .cbAwait .. => "cbAwait"
 
 /-- The two sub-programs of a v2 combinator (`race`, `raceOutcome`, `both`, `bothOutcome`). -/
 def Prog.combArgs? : Prog → Option (Prog × Prog)
@@ -336,7 +349,9 @@ def v1Ops : List String :=
 /-- Ops of format v2 (`Json.V2Ops`): a decode error in a v0 or v1 case. -/
 def v2Ops : List String := ["race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket",
   "bracketCase", "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth",
-  "parTraverseN"]
+  "parTraverseN",
+  -- Phase 7, track L
+  "cdlNew", "cdlRelease", "cdlAwait", "cbNew", "cbAwait"]
 /-- The resource ops. -/
 def resOps : List String := ["rPure", "rEval", "rMake", "rFlatMap", "rBoth"]
 /-- `Json.DefaultMaxSteps` in `Json.scala`. -/
@@ -403,7 +418,8 @@ partial def decodeVal (j : Json) : D Val := do
   | "succeeded" => only ["v"]; pure (.ocSucceeded (← decodeVal (← field o "v" t)))
   | "errored" => only ["code"]; pure (.ocErrored (userErr (← nat (← field o "code" t) "errored.code")))
   | "canceled" => only []; pure .ocCanceled
-  | "fiber" | "ref" | "deferred" | "queue" | "memo" => fail s!"value '{t}': handles cannot be literals"
+  | "fiber" | "ref" | "deferred" | "queue" | "memo" | "latch" | "barrier" =>
+    fail s!"value '{t}': handles cannot be literals"
   | _ => fail s!"unknown value tag '{t}'"
 
 /-- The kind of a bound name. -/
@@ -487,6 +503,15 @@ partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .i
       | .arr vs => vs.toList.mapM (fun j => atom j scope s!"{ctx}.xs")
       | v => fail s!"{ctx}.xs: expected an array, got {v.compress}"
     pure (.parTraverseN k xs (← p "f" ((x, .v) :: scope)))
+  -- format v2 (Phase 7, track L): also before the big `match`
+  else if op == "cdlNew" || op == "cbNew" then do
+    only ["n"]
+    let k ← n "n"
+    if k < 1 || k > 1000 then fail s!"{ctx}.n: expected 1..1000, got {k}"
+    pure (if op == "cdlNew" then .cdlNew k else .cbNew k)
+  else if op == "cdlRelease" then do only ["l"]; .cdlRelease <$> a "l"
+  else if op == "cdlAwait" then do only ["l"]; .cdlAwait <$> a "l"
+  else if op == "cbAwait" then do only ["b"]; .cbAwait <$> a "b"
   else
     match op with
     | "pure" => only ["v"]; .pure <$> a "v"

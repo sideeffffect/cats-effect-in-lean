@@ -39,6 +39,7 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [memoize model and CE-0030](cats-effect/memoize-model.md) | IO#memoize = kernel GenConcurrent#memoize mirror (no twin); difftest ops memoize/memoGet; CE-0030 refuted (masked `canceled *> never` hangs a racing get), 2 open | 2026-11-15 |
 | [Resource use, allocated, both, and CE-0020](cats-effect/resource-use-both-model.md) | fold/use/allocated/rel2/both mirror (`ResourceUse`), difftest v2 rUse/rAllocated/rBoth (≥51k each), CE-0020 refuted (both skips a release), 3 open; harness privacy by construction (`HarnessPrivacy`, decision 56), satisfiability witnesses; Lib.fields probe check (2 defects fixed); decision 58 harness (Val.fn, S1 gone, S2 clauses); review 9: R1 `REnv` index forgery (HOLLOW) | 2026-11-15 |
 | [race, both and fiber leaks](cats-effect/race-both-model.md) | Kernel-default mirror of race/raceOutcome/both/bothOutcome (no IO twin), leak observation liveRaceChildren, difftest v2 (≥50k per op), 5 open entries, smoke 0 violations | 2026-11-15 |
+| [CountDownLatch and CyclicBarrier model](cats-effect/latch-barrier-model.md) | Phase 7 track L: std.CountDownLatch/CyclicBarrier mirrors (latch object = `Val.fn`), difftest ops cdlNew/cdlRelease/cdlAwait/cbNew/cbAwait (mutation check: 7/7 wrong variants killed), 7 open properties with kernel witnesses, wrong-function tests and smoke; the two cancel races (epoch check needed only for a waiter canceled while suspended) | 2026-11-15 |
 
 ## semantics
 
