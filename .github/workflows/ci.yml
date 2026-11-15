@@ -148,6 +148,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       modules: ${{ steps.plan.outputs.modules }}
+      has_modules: ${{ steps.plan.outputs.has_modules }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: plan
@@ -155,10 +156,14 @@ jobs:
           modules=$(python3 scripts/heavy_closure.py --from-lakefile --matrix)
           echo "$modules"
           echo "modules=$modules" >> "$GITHUB_OUTPUT"
+          # an empty matrix is an error in GitHub Actions; skip the module jobs then (review
+          # batch 8), and let heavy-audit and heavy-proofs accept that skip only in this case
+          if [ "$modules" = "[]" ]; then echo "has_modules=false"; else echo "has_modules=true"; fi >> "$GITHUB_OUTPUT"
 
   heavy-module:
     name: Heavy module (${{ matrix.module }})
     needs: heavy-plan
+    if: needs.heavy-plan.outputs.has_modules == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     strategy:
@@ -186,7 +191,11 @@ jobs:
 
   heavy-audit:
     name: Heavy proofs audit (roots, audit_heavy, axioms)
-    needs: heavy-module
+    needs: [heavy-plan, heavy-module]
+    if: >-
+      always() && needs.heavy-plan.result == 'success' &&
+      (needs.heavy-module.result == 'success' ||
+       (needs.heavy-module.result == 'skipped' && needs.heavy-plan.outputs.has_modules == 'false'))
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     steps:
@@ -200,6 +209,7 @@ jobs:
           sudo apt-get install -y -qq bubblewrap
           sudo scripts/setup-bwrap-apparmor.sh
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.heavy-plan.outputs.has_modules == 'true'
         with:
           pattern: heavy-*
           merge-multiple: true
@@ -218,10 +228,16 @@ jobs:
     steps:
       - name: All heavy jobs succeeded
         run: |
-          echo "plan=${{ needs.heavy-plan.result }} module=${{ needs.heavy-module.result }} audit=${{ needs.heavy-audit.result }}"
+          echo "plan=${{ needs.heavy-plan.result }} module=${{ needs.heavy-module.result }} audit=${{ needs.heavy-audit.result }} has_modules=${{ needs.heavy-plan.outputs.has_modules }}"
           test "${{ needs.heavy-plan.result }}" = success
-          test "${{ needs.heavy-module.result }}" = success
           test "${{ needs.heavy-audit.result }}" = success
+          # module jobs: success, or skipped because the plan found no non-root module
+          if [ "${{ needs.heavy-plan.outputs.has_modules }}" = true ]; then
+            test "${{ needs.heavy-module.result }}" = success
+          else
+            test "${{ needs.heavy-plan.outputs.has_modules }}" = false
+            test "${{ needs.heavy-module.result }}" = skipped
+          fi
 
   inventory:
     name: Inventory check

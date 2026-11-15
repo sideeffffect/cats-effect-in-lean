@@ -66,14 +66,31 @@ if [[ -n "$artifacts_in" ]]; then
     [[ -f "$artifacts_in/$m.sha256" ]] || { echo "FAIL: no artifacts for $m (matrix job missing)"; exit 1; }
     (cd "$artifacts_in" && sha256sum --quiet -c "$m.sha256") || { echo "FAIL: artifacts of $m corrupted"; exit 1; }
   done
-  mkdir -p .lake/build
-  cp -a "$artifacts_in/build/." .lake/build/
-  cat "$artifacts_in"/*.sha256 | sort -k2 > "$safe/installed.sha"
+  # install exactly the listed files (review batch 8): a file in the artifact directory that no
+  # list names, or a listed file that is missing, is an error
+  : > "$safe/installed.sha"
+  for m in "${mods[@]}"; do
+    is_root "$m" || cat "$artifacts_in/$m.sha256" >> "$safe/installed.sha"
+  done
+  mkdir -p "$artifacts_in"
+  sed -E 's/^[0-9a-f]+  //' "$safe/installed.sha" | sort > "$safe/listed.txt"
+  (cd "$artifacts_in" && find . -mindepth 1 -not -type d -not -name '*.sha256' -printf '%P\n' | sort) \
+    > "$safe/present.txt"
+  if ! cmp -s "$safe/listed.txt" "$safe/present.txt"; then
+    echo "FAIL: artifact files and sha256 lists differ:"
+    diff "$safe/listed.txt" "$safe/present.txt" | head -20 || true
+    exit 1
+  fi
+  while IFS= read -r rel; do
+    [[ -f "$artifacts_in/$rel" && ! -L "$artifacts_in/$rel" ]] || { echo "FAIL: $rel is not a regular file"; exit 1; }
+    mkdir -p ".lake/$(dirname "$rel")"
+    cp -p "$artifacts_in/$rel" ".lake/$rel"
+  done < "$safe/listed.txt"
 fi
 
 echo "== 3. heavy modules, sandboxed, one at a time"
 scripts/heavy_build.sh "${mods[@]}"
-if [[ -n "$artifacts_in" ]]; then
+if [[ -n "$artifacts_in" && -s "$safe/installed.sha" ]]; then
   (cd .lake && sha256sum --quiet -c "$safe/installed.sha") \
     || { echo "FAIL: installed matrix artifacts were rebuilt or changed"; exit 1; }
 fi
@@ -89,10 +106,15 @@ rm -rf "$axdir"; mkdir -p "$axdir"
   for m in "${roots[@]}"; do echo "import $m"; done
   for t in "${thm_list[@]}"; do echo "#print axioms $t"; done
 } > "$axdir/HeavyAxioms.lean"
-out=$(scripts/sandbox.sh "$lake_bin" env lean "$axdir/HeavyAxioms.lean" 2>&1)
+rc=0
+out=$(scripts/sandbox.sh "$lake_bin" env lean "$axdir/HeavyAxioms.lean" 2>&1) || rc=$?
 echo "$out"
 flat=$(echo "$out" | tr '\n' ' ')
-if echo "$flat" | grep -qi 'error'; then echo "FAIL: error while checking axioms"; exit 1; fi
+# Lean reports errors as `<file>:<line>:<col>: error`; a theorem name may contain "error" (for
+# example `errorAborts`, review batch 8), so only that prefix and the exit code count
+if [[ $rc -ne 0 ]] || grep -qE ':[0-9]+:[0-9]+: error' <<< "$out"; then
+  echo "FAIL: error while checking axioms (exit $rc)"; exit 1
+fi
 n_reports=$(echo "$flat" | grep -o 'depends on axioms\|does not depend on any axioms' | wc -l)
 if [[ $n_reports -ne ${#thm_list[@]} ]]; then
   echo "FAIL: expected ${#thm_list[@]} axiom reports, got $n_reports"; exit 1
