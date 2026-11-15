@@ -322,3 +322,6 @@
 - Updated: Registry and audit (required checks)
 - Raw: raw/project-decisions/2026-11-15-branch-protection-set.md
 - Memory (RSS sampled every 2 s, local): MemoizeFixedParts max 5.50 GiB (FamFixedCedeCanceled2A); RaceLawChunks4 8.29 GiB after the change and 8.30 GiB with the old Race.lean (unchanged by this change); ResourceEvalFixedParts/Fixed_childJoin 8.40 GiB (not touched here). RSS includes mapped .olean files.
+
+## [2026-11-15] update | Phase 6 gate: reproducers re-run
+- CE-0005, CE-0020, CE-0030: reproducers re-run on v3.7.1 and series/3.x (de84c01f76b2, head unchanged since 2026-09-28): last line REPRODUCED on both; fixed copies of CE-0020/CE-0030 do not reproduce (0 seeds, 0/200). Bug records: output and duplicate queries (no new upstream issue or PR).

@@ -38,17 +38,19 @@ maybe_intended: >
   `F.both` for the finalizers; its discussion does not mention errors.
 reproducer: reproducers/CE-0020/Repro.scala
 output:
+  # v3.7.1: re-run 2026-11-15 (scala-cli, the reproducer as committed)
   v3.7.1: |
     1. Resource#both, TestControl seeds 0..999: release of B skipped in 332 seeds (first: Some(0))
     2. parTupled (Parallel[Resource]), same seeds: release of B skipped in 332 seeds (first: Some(0))
-    3. Resource#both, default runtime, 20000 runs: release of B skipped in 319 runs
+    3. Resource#both, default runtime, 20000 runs: release of B skipped in 421 runs
     4. fixed twin (attempt both chains), same seeds: release of B skipped in 0 seeds (first: None)
     REPRODUCED CE-0020
-  # series/3.x = 3.7.1-89-de84c01 (publishLocal; origin/series/3.x head de84c01f76 on 2026-11-10)
+  # series/3.x = 3.7.1-89-de84c01 (publishLocal snapshot of origin/series/3.x head de84c01f76b2f42fcee9d43aba66c82992add103,
+  # committed 2026-09-28; head checked unchanged with `gh api` on 2026-11-15). Re-run 2026-11-15.
   series/3.x: |
     1. Resource#both, TestControl seeds 0..999: release of B skipped in 332 seeds (first: Some(0))
     2. parTupled (Parallel[Resource]), same seeds: release of B skipped in 332 seeds (first: Some(0))
-    3. Resource#both, default runtime, 20000 runs: release of B skipped in 345 runs
+    3. Resource#both, default runtime, 20000 runs: release of B skipped in 332 runs
     4. fixed twin (attempt both chains), same seeds: release of B skipped in 0 seeds (first: None)
     REPRODUCED CE-0020
   # series/3.7.x = 3.7.1-15-2f94201 (publishLocal; origin/series/3.7.x head 2f9420145f, includes fix PR #4630)
@@ -59,7 +61,7 @@ output:
     4. fixed twin (attempt both chains), same seeds: release of B skipped in 0 seeds (first: None)
     REPRODUCED CE-0020
   # The default-runtime count (line 3) depends on thread timing; it is not deterministic (runs of
-  # 2026-11-10: 306-382 of 20,000). The last line is REPRODUCED only if line 1 > 0 and line 4 = 0
+  # 2026-11-10: 306-382 of 20,000; 2026-11-15: 421 and 332). The last line is REPRODUCED only if line 1 > 0 and line 4 = 0
   # (the fixed copy misses no release; review batch 5).
 expected: |
   The release of B runs in every run (lines 1-3 report 0), as in the fixed twin (line 4). The
@@ -97,6 +99,10 @@ duplicates:
     - "gh search issues 'finalizer not run' -R typelevel/cats-effect (2026-11-10): no result"
     - "gh search prs 'Resource both' -R typelevel/cats-effect (2026-11-10): #3307, #3227, #3226, #2084, #1689 and others; none handles an error of one finalizer chain"
     - "gh pr view 1689 --comments: no mention of errors or cancel in the finalizers"
+    - "gh search issues 'Resource both' -R typelevel/cats-effect (2026-11-15): #1576, #1652, #1645 (no new); none is this defect"
+    - "gh search issues 'both finalizer' / 'parTupled Resource' -R typelevel/cats-effect (2026-11-15): no result"
+    - "gh search prs 'Resource both' -R typelevel/cats-effect (2026-11-15): 10 results, none updated since 2026-11-01"
+    - "gh search prs 'both finalizer' -R typelevel/cats-effect (2026-11-15): #237 (2018) only; gh search prs 'parTupled Resource' (2026-11-15): no result"
 lean:
   property: CatsEffectInLean.Props.Phase6.Resource.bothReleasesBoth
   theorem: CatsEffectInLean.Proofs.Phase6.bothReleasesBoth_refuted

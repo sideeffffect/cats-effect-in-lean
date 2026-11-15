@@ -36,6 +36,7 @@ maybe_intended: >
   (MonadCancel.scala:452-453) shows that throwing `use` functions are an expected input.
 reproducer: reproducers/CE-0005/Repro.scala
 output:
+  # v3.7.1: re-run 2026-11-15 (scala-cli, the reproducer as committed)
   v3.7.1: |
     A: acquire = IO.canceled, use throws
       IO.bracketFull: outcome=Errored(java.lang.RuntimeException: boom), release got Errored(java.lang.RuntimeException: boom), use called=false
@@ -49,7 +50,8 @@ output:
       IO.bracketFull: outcome=Canceled(), release got Canceled(), use called=true
       kernel default: outcome=Canceled(), release got Canceled(), use called=false
     REPRODUCED CE-0005
-  # series/3.x = 3.7.1-89-de84c01 (publishLocal, 2026-11-10): same output (IO.scala:1826-1830 unchanged)
+  # series/3.x = 3.7.1-89-de84c01 (publishLocal snapshot of origin/series/3.x head de84c01f76b2f42fcee9d43aba66c82992add103,
+  # committed 2026-09-28; head checked unchanged with `gh api` on 2026-11-15). Re-run 2026-11-15: same output.
   series/3.x: |
     (same lines as v3.7.1)
     REPRODUCED CE-0005
@@ -82,6 +84,9 @@ duplicates:
     - "gh search issues 'bracket use throws' -R typelevel/cats-effect (2026-11-10): no result"
     - "gh search issues 'bracket canceled acquire use' -R typelevel/cats-effect (2026-11-10): no result"
     - "gh search prs 'bracketFull' -R typelevel/cats-effect (2026-11-10): #4630, #2126, #2074, #1572, #959 and others; none changes the defer/poll order"
+    - "gh search issues 'bracketFull' -R typelevel/cats-effect (2026-11-15): #4571, #3474, #2013, #1522, #1535 (none updated since 2026-11-01); none is this defect"
+    - "gh search issues 'bracketFull cancel' -R typelevel/cats-effect (2026-11-15): no result"
+    - "gh search prs 'bracketFull' -R typelevel/cats-effect (2026-11-15): #4630, #3311, #2074, #2126, #2129, #1924, #1493, #1572, #1579, #959, #1268 (none updated since 2026-11-01); none changes the defer/poll order"
 lean:
   property: CatsEffectInLean.Props.Phase6.Bracket.bracketFullIsKernelDefault
   theorem: CatsEffectInLean.Proofs.Phase6.bracketFullIsKernelDefault_refuted

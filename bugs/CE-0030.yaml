@@ -41,13 +41,15 @@ maybe_intended: >
   "memoize uncancelable canceled and then flatten is identity" only with one `get`.
 reproducer: reproducers/CE-0030/Repro.scala
 output:
+  # v3.7.1: re-run 2026-11-15 (scala-cli, the reproducer as committed)
   v3.7.1: |
     thresholds (1,2)       seeds with a hung get: IO#memoize  50/200, copy  50/200, fixed twin   0/200
     thresholds (1,4)       seeds with a hung get: IO#memoize  53/200, copy  53/200, fixed twin   0/200
     thresholds (2,4)       seeds with a hung get: IO#memoize  38/200, copy  38/200, fixed twin   0/200
     thresholds (512,1024)  seeds with a hung get: IO#memoize   0/200, copy   0/200, fixed twin   0/200
     REPRODUCED CE-0030
-  # series/3.x = 3.7.1-89-de84c01 (publishLocal, 2026-11-10): same output (GenConcurrent.memoize unchanged)
+  # series/3.x = 3.7.1-89-de84c01 (publishLocal snapshot of origin/series/3.x head de84c01f76b2f42fcee9d43aba66c82992add103,
+  # committed 2026-09-28; head checked unchanged with `gh api` on 2026-11-15). Re-run 2026-11-15: same output.
   series/3.x: |
     (same lines as v3.7.1)
     REPRODUCED CE-0030
@@ -92,6 +94,11 @@ duplicates:
     - "gh search issues 'memoize hang' / 'memoize cancel' / 'memoize deadlock' / 'memoize uncancelable' / 'memoize never' / 'memoize self-cancel' / 'memoize Finished' / 'memoize canceled' -R typelevel/cats-effect (2026-11-10): no result"
     - "gh search issues 'flatModifyFull' -R typelevel/cats-effect (2026-11-10): #3370 only"
     - "gh search prs 'memoize' -R typelevel/cats-effect (2026-11-10): #4105, #3890, #3351, #3518, #3080, #2729, #1204, #1484, #1552, #537, #544 and others; none changes the Finished case of flatModifyFull"
+    - "gh search issues 'memoize' -R typelevel/cats-effect (2026-11-15): 21 results, none updated since 2026-11-01; none is this race"
+    - "gh search issues 'memoize cancel' -R typelevel/cats-effect (2026-11-15): no result"
+    - "gh search issues 'flatModifyFull' -R typelevel/cats-effect (2026-11-15): #3370 only"
+    - "gh search prs 'memoize' -R typelevel/cats-effect (2026-11-15): 24 results, none updated since 2026-11-01; gh search prs 'memoize cancel' (2026-11-15): no result"
+    - "gh search prs 'flatModifyFull' -R typelevel/cats-effect (2026-11-15): #3623, #3408, #3311; none changes the Finished case"
 lean:
   property: CatsEffectInLean.Props.Phase6.Memoize.memoizeNoStuckGet
   theorem: CatsEffectInLean.Proofs.Phase6.memoizeNoStuckGet_refuted
