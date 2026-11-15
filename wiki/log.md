@@ -336,3 +336,7 @@
 - D1: Memoize registry notes, Props doc and memoize model: user code can run fa again through its own cell (source `.ref k`), as Scala can by recursion; no claim breaks (the counter is cell 0, never given to user code).
 - D3: CE-0005 and CE-0030 status comments name the review verdicts (batch 4; batch 8 witness check; batch 10). Stale memoLib doc fixed.
 - D4: inventory rows kernel.Resource.both, use, fold are `modelled` through the refuted CE-0020 entry kernel.Resource.both.releaseOnce (FAITHFUL, batch 10).
+
+## [2026-11-15] ingest | Phase 6 gate passed; Phase 7 starts
+- Updated: Phase 6 gate report (conditions met), Project plan (Phase 6 status), AGENTS.md current phase
+- Raw: raw/project-decisions/2026-11-15-phase6-gate-passed.md

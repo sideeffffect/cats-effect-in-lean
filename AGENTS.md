@@ -11,10 +11,11 @@ A refuted property is a bug candidate. It becomes a bug only when a Scala reprod
 The method comes from two earlier projects: [python-formalization](https://github.com/Broyojo/python-formalization) and [julia-in-lean](https://github.com/MilesCranmer/julia-in-lean).
 Read `wiki/methodology/lessons-for-cats-effect.md` before you plan any work.
 
-## Current phase: Phase 6 (derived combinators and `Resource`)
+## Current phase: Phase 7 (std structures)
 
-The user said "start the process" on 2026-11-10. Agents ran Phases 0–5 of `wiki/methodology/project-plan.md`. The Phase 5 gate passed in review batch 3 (`wiki/methodology/phase5-gate-report.md`). The user approved the gate on 2026-11-10.
+The user said "start the process" on 2026-11-10. Agents ran Phases 0–6 of `wiki/methodology/project-plan.md`. The user approved the Phase 5 gate on 2026-11-10. The Phase 6 gate passed in review batch 10 on 2026-11-15 (`wiki/methodology/phase6-gate-report.md`).
 Phases 6–8 run without a user gate. Each phase still needs its own review gate before the next phase starts. Phase 9 needs a separate user decision.
+New models name every closure and table entry with `Val.fn` references from the start (decision 58). Plain numbers are data only.
 Write questions for the user to `QUESTIONS.md`. Ask only the non-obvious ones; decide the rest and record the decision in the wiki.
 
 ## Pinned versions

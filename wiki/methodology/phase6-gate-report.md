@@ -1,7 +1,7 @@
-# Phase 6 gate report (draft, 2026-11-15)
+# Phase 6 gate report (2026-11-15)
 
 > Sources: own gate summary from the registry, inventory, bug records, difftest notes and review batches 4–10 (2026-11-15)
-> Raw: [Review batch 10 notes](../../raw/project-decisions/2026-11-15-review-batch-10-notes.md); [Review batch 9 notes](../../raw/project-decisions/2026-11-15-review-batch-9-notes.md); [Phase 6 start](../../raw/project-decisions/2026-11-10-phase6-start.md); [Decision 58 core notes](../../raw/cats-effect/2026-11-15-decision-58-core-notes.md); [R1 fix notes](../../raw/cats-effect/2026-11-15-review9-r1-notes.md); [Race and Memoize source references](../../raw/cats-effect/2026-11-15-race-memoize-source-refs.md)
+> Raw: [Phase 6 gate passed](../../raw/project-decisions/2026-11-15-phase6-gate-passed.md); [Review batch 10 notes](../../raw/project-decisions/2026-11-15-review-batch-10-notes.md); [Review batch 9 notes](../../raw/project-decisions/2026-11-15-review-batch-9-notes.md); [Phase 6 start](../../raw/project-decisions/2026-11-10-phase6-start.md); [Decision 58 core notes](../../raw/cats-effect/2026-11-15-decision-58-core-notes.md); [R1 fix notes](../../raw/cats-effect/2026-11-15-review9-r1-notes.md); [Race and Memoize source references](../../raw/cats-effect/2026-11-15-race-memoize-source-refs.md)
 
 ## Overview
 
@@ -75,18 +75,20 @@ Sources: [Race, both and fiber leaks](../cats-effect/race-both-model.md), [guara
 
 The reproducers are re-run by another agent at this gate; this report judges the records only.
 
-## Conditions (not blockers)
+## Conditions (not blockers): all met (2026-11-15)
 
-1. CI green on the reviewed commit `1dfe6ce` (build, audit, heavy and twin matrices). The reviewer did not run anything.
-2. The reproducer re-run (other agent) confirms `REPRODUCED` on v3.7.1 and series/3.x.
-3. One recorded `opcount.py` run of the `Resource` ops after the R1 encoding change (review batch 10, D2).
+1. CI green on the reviewed commit `1dfe6ce`: run 43709916921, all 7 required checks passed (24.7 min). CI on `66cb621` (bug-record update) also passed.
+2. Reproducer re-run (track G, `66cb621`): `REPRODUCED` for CE-0005, CE-0020 and CE-0030 on v3.7.1 and on series/3.x `de84c01`; the fixed copies of CE-0020 and CE-0030 do not reproduce. No new duplicates.
+3. `Resource` difftest after the R1 change (orchestrator, tree `c3bf1ec`): `opcount.py --seeds 81 82 83 --n 20000 --ops rUse rAllocated rBoth`, 60,000 cases, all agree, 0 unsupported; rUse 9,792, rAllocated 6,081, rBoth 3,060 agreeing cases. Track Res ran seeds 71–73 (60,000 cases, all agree) on the R1 branch before.
+
+**Phase 6 gate: PASSED** (2026-11-15). Phases 6–8 run without a user gate; Phase 7 starts.
 
 ## Open caveats
 
 1. 21 of 25 entries are open: the statements are FAITHFUL, but they need state invariants over `Step`/`SchedP` (bracket release, race control invariant, memo cell). Phase 6 adds 1 proof (a closed law, low strength).
 2. Harness privacy needed six review rounds (batches 4–9: markers, leaf fields, clock numbers, number fields, `REnv` table indices). Decision 58 plus the R1 fix close it by construction for closure and table references; Phase 7 models must use `Val.fn` for every name from the start ([Agent workflow](agent-workflow.md), "Closure references").
-3. Documentation drift (batch 10 D1, D3): a `Memoize` registry claim is false (no claim breaks); two bug records say "waits for review".
-4. Inventory (batch 10 D4): `kernel.Resource.both`/`use`/`fold` can become `modelled` through CE-0020; `makeCase` is not mirrored in general.
+3. Documentation drift (batch 10 D1, D3): fixed in `21c5ace` (Memoize notes corrected, bug-record review status updated).
+4. Inventory (batch 10 D4): `kernel.Resource.both`/`use`/`fold` are `modelled` through CE-0020 since `21c5ace` (33 modelled rows); `makeCase` is not mirrored in general.
 5. Phase 5 twins `ResourceFixed`, `SyncStepFixed` still name entries by numbers; they run only closed programs, so this is not a risk.
 
 ## See Also
