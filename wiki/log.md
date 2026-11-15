@@ -321,3 +321,4 @@
 ## [2026-11-15] ingest | Branch protection on main (decision 57 step 4)
 - Updated: Registry and audit (required checks)
 - Raw: raw/project-decisions/2026-11-15-branch-protection-set.md
+- Memory (RSS sampled every 2 s, local): MemoizeFixedParts max 5.50 GiB (FamFixedCedeCanceled2A); RaceLawChunks4 8.29 GiB after the change and 8.30 GiB with the old Race.lean (unchanged by this change); ResourceEvalFixedParts/Fixed_childJoin 8.40 GiB (not touched here). RSS includes mapped .olean files.
