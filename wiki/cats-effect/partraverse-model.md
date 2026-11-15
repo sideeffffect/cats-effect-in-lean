@@ -1,7 +1,7 @@
 # parTraverseN model
 
 > Sources: Cats Effect v3.7.1 (`kernel/.../GenConcurrent.scala:113-249`, `MiniSemaphore.scala:17-92`, `Ref.scala:123-124`, `SyncRef.scala`, `IODeferred.scala:20-80`, `IO.scala:1593-1600`); cats-core 2.13.0 (`list.scala`, `Traverse.scala`, `FlatMap.scala`, `Parallel.scala`); own Phase 6 batch 6.3 work and scala-cli runs, 2026-11-14
-> Raw: [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [parTraverseN notes](../../raw/cats-effect/2026-11-14-partraverse-notes.md); [review 7 fix notes](../../raw/cats-effect/2026-11-14-partraverse-review7.md); [deep Lib and limit notes](../../raw/cats-effect/2026-11-14-partraverse-deep-lib.md); [decision 58 notes](../../raw/cats-effect/2026-11-15-partraverse-decision58.md); [rankOrder fix](../../raw/cats-effect/2026-11-15-partraverse-rankorder-fix.md)
+> Raw: [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [parTraverseN notes](../../raw/cats-effect/2026-11-14-partraverse-notes.md); [review 7 fix notes](../../raw/cats-effect/2026-11-14-partraverse-review7.md); [deep Lib and limit notes](../../raw/cats-effect/2026-11-14-partraverse-deep-lib.md); [decision 58 notes](../../raw/cats-effect/2026-11-15-partraverse-decision58.md); [rankOrder fix](../../raw/cats-effect/2026-11-15-partraverse-rankorder-fix.md); [boosted difftest after the rankOrder fix](../../raw/cats-effect/2026-11-15-partraverse-boosted-difftest.md)
 
 ## Overview
 
@@ -49,7 +49,7 @@ Review batch 12 ([review](../../review/2026-11-15-review-batch-12.md)): the orde
 
 ## Difftest
 
-Op `parTraverseN` (format v2). Fixed cases `partraverse.jsonl` (74, all agree). Generated cases (`difftest/py/opcount.py --seeds 31 32 33 34 --n 50000 --ops parTraverseN --boost tpl_parTraverse=6 tpl_parTraverseCancel=6`, about 25 % of cases with small `runtime` thresholds): 200,000 cases, all agree; 56,654 use `parTraverseN` (14,071 to 14,235 per seed). After the generator change (the op is appended with its own RNG, `p_par_traverse`, so the other ops keep their selftest coverage): `--seeds 41 42 43 --n 30000 --boost tpl_parTraverse=8 tpl_parTraverseCancel=8`: 90,000 cases, all agree; 52,469 use `parTraverseN` (17,475 to 17,499 per seed).
+Op `parTraverseN` (format v2). Fixed cases `partraverse.jsonl` (74, all agree). Generated cases (`difftest/py/opcount.py --seeds 31 32 33 34 --n 50000 --ops parTraverseN --boost tpl_parTraverse=6 tpl_parTraverseCancel=6`, about 25 % of cases with small `runtime` thresholds): 200,000 cases, all agree; 56,654 use `parTraverseN` (14,071 to 14,235 per seed). After the generator change (the op is appended with its own RNG, `p_par_traverse`, so the other ops keep their selftest coverage): `--seeds 41 42 43 --n 30000 --boost tpl_parTraverse=8 tpl_parTraverseCancel=8`: 90,000 cases, all agree; 52,469 use `parTraverseN` (17,475 to 17,499 per seed). After the `rankOrder` fix (ghost list `all`, 2026-11-15): seeds 81-83, `--n 30000 --boost tpl_parTraverse=8 tpl_parTraverseCancel=8`: 90,000 cases, all agree; 52,428 use `parTraverseN` (17,515 / 17,541 / 17,372 per seed).
 
 ## See Also
 

@@ -394,6 +394,10 @@
 - Updated: Agent workflow (wrong-function battery section)
 - Raw: raw/project-decisions/2026-11-15-decision-63-wrong-function-battery.md
 
+## [2026-11-15] update | parTraverseN boosted difftest on the new model
+- Seeds 81-83 (30,000 each, parTraverseN boosted): 90,000 cases, all agree; 52,428 parTraverseN. The 2 unsupported cases of drive check are the old testcontrol cases two-fibers-tc-seed1/2 (decision 15), not new.
+- Raw: raw/cats-effect/2026-11-15-partraverse-boosted-difftest.md
+
 ## [2026-11-15] update | Track L: decision 63 battery
 - Updated: CountDownLatch and CyclicBarrier model (battery table, companion claims, harness guard)
 - Raw: raw/cats-effect/2026-11-15-track-l-decision63-battery.md
