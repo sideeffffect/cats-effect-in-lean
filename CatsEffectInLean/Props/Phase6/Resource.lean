@@ -29,8 +29,9 @@ and all schedules.
   event closures are never available to user code unless the library gives them, so user code may
   pass any value through. `Private` is the Phase 5 `REnv.WellFormed` clauses (review batch 8, S2)
   for every `REnv` entry that is not part of the harness: acquire programs are closed, release
-  programs and `Bind` results hold only the handles of their argument, and none of them names a
-  harness entry (`Res.idx`).
+  programs and `Bind` results hold only the handles of their argument.
+* The `REnv` table entries are references too (`Val.fn`, review batch 9 R1): the harness entries
+  are odd (library references), so user code holds one only if it is given it.
 * The parent fiber of decision 50: `withParent` (`HLam.cancelJoin`).
 * Each statement has a Lean satisfiability witness (decision 53): `Proofs/Phase6/ResourceWitness.lean`
   (with and without the parent); the CE-0020 refutation is the one of statement 1.
@@ -171,25 +172,21 @@ def tagRB : Val := .nat 4
 /-! ## Hypotheses -/
 
 /-- A resource built by user code holds only available handles (`mem`): `Res.ok` of
-`Model/Resource.lean` with the statement's `Lib`. -/
+`Model/Resource.lean` with the statement's `Lib`. Its `REnv` table entries are references
+(decision 58, review batch 9 R1): available only if held, or (even index) made by user code. -/
 def resOK (lib : Lib) (mem : Handle → Bool) : Res → Bool
   | .allocate (.user id) => WF.fnOK lib mem (.user id)
-  | .allocate (.make _ _) => true
-  | .bind source _ => resOK lib mem source
+  | .allocate (.make a r) => WF.subA mem [.fn a, .fn r]
+  | .bind source fs => WF.avail mem (.fn fs) && resOK lib mem source
   | .pure a => WF.subA mem a.handles
   | .eval fa => WF.progOK lib mem fa
 
-/-- The `REnv` table entries that a resource names: `make` acquire and release entries, `Bind`
-functions. -/
-def Res.idx : Res → List Nat
-  | .allocate (.make a r) => [a, r]
-  | .bind source fs => fs :: Res.idx source
-  | _ => []
-
 /-- A marked `make` with code `c`: `make(a0.flatMap(markA tA))(_ => IO.delay(markT tR) *> q(..))`.
-The code holds the token, so user code cannot build it; `a0` is closed user code (`progOK`); `q`
-is any user function. -/
+The code holds the token, so user code cannot build it; the acquire and release entries are
+harness entries (odd: library references, available to user code only if held, decision 58,
+review batch 9 R1); `a0` is closed user code (`progOK`); `q` is any user function. -/
 def MarkedMake (U : UEnv) (c : Val) (acq rel : Nat) (a0 : IO) (tA tR : Val) : Prop :=
+  acq % 2 = 1 ∧ rel % 2 = 1 ∧
   U.resOf c = some (Res.make acq rel) ∧
     U.r.acquire acq = .flatMap a0 (HLam.markA logCell tA).fn ∧
     (∀ a, ∃ q, U.r.release rel a = .ok (.flatMap (.delay (HLam.markT logCell tR).fn) (uid q))) ∧
@@ -199,15 +196,13 @@ def MarkedMake (U : UEnv) (c : Val) (acq rel : Nat) (a0 : IO) (tA tR : Val) : Pr
 /-- The `REnv` entries that are not part of the harness (`acqs`, `rels`, `ks`: harness table
 entries; `cs`: harness codes) are Scala code (review batch 8, S2: the Phase 5 `REnv.WellFormed`
 clauses, with `libH`): acquire programs are closed; a release program and a `Bind` result hold
-only the handles of their argument; a resource of a code holds only the handles of the code; and
-none of them names a harness table entry. -/
+only the handles of their argument; a resource of a code holds only the handles of the code.
+Table entries are references (`resOK`), so none of them can name a harness entry. -/
 def Private (U : UEnv) (acqs rels ks : List Nat) (cs : List Val) : Prop :=
-  (∀ k a r, k ∉ ks → U.r.bind k a = .ok r →
-    resOK libH (a.handles.contains ·) r = true ∧ ∀ i ∈ Res.idx r, i ∉ acqs ++ rels ++ ks) ∧
+  (∀ k a r, k ∉ ks → U.r.bind k a = .ok r → resOK libH (a.handles.contains ·) r = true) ∧
   (∀ k, k ∉ acqs → WF.progOK libH (fun _ => false) (U.r.acquire k) = true) ∧
   (∀ k a q, k ∉ rels → U.r.release k a = .ok q → WF.progOK libH (a.handles.contains ·) q = true) ∧
-  (∀ c r, c ∉ cs → U.resOf c = some r →
-    resOK libH (c.handles.contains ·) r = true ∧ ∀ i ∈ Res.idx r, i ∉ acqs ++ rels ++ ks)
+  (∀ c r, c ∉ cs → U.resOf c = some r → resOK libH (c.handles.contains ·) r = true)
 
 /-! ## Statements -/
 
@@ -246,7 +241,7 @@ def flatMapReleaseOrder : Prop :=
   ∀ (U : UEnv) (ca cb : Val) (acqA relA acqB relB : Nat) (a0 b0 : IO) (f k : Nat) (viaParent : Bool),
     MarkedMake U ca acqA relA a0 tagA tagRA →
     MarkedMake U cb acqB relB b0 tagB tagRB →
-    (∀ x, U.r.bind k x = .ok (Res.make acqB relB)) →
+    (∀ x, U.r.bind k x = .ok (Res.make acqB relB)) → k % 2 = 1 →
     Private U [acqA, acqB] [relA, relB] [k] [ca, cb] →
     WellFormed libH [] (envH U (withParent viaParent (useOf U f ((Res.make acqA relA).flatMap k)))) harness →
     ∀ o, outcomesP {} counterMaskModel

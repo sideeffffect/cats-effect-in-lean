@@ -22,6 +22,7 @@ allows it and its captured handles are available. Each forgery that a review fou
   the form that decision 58 gives the `parTraverseN` codes (`srcAction` with a `Val.fn` field;
   track G switches `Model/ParTraverse.lean` to it).
 * Batch 8, S1: user code may pass any value through (`x => IO.pure(x)` passes `CallOK`).
+* Batch 9, R1: an `REnv` release entry named by number inside a `USrc` source (`forge`).
 -/
 
 namespace CatsEffectInLean.Proofs.Phase6.PrivacyExamples
@@ -130,6 +131,23 @@ example : WF.progOK (fun id => (Codec.isLibId id)) (fun _ => false)
   decide +kernel
 
 end F2
+
+/-! ## Batch 9, R1: an `REnv` table entry named by number in a `Resource` source code -/
+
+/-- `rel(ec)` with `rel = RelFn.const relA ()`: the release entry `relA` of the table. -/
+def forgeSrc (relA : Nat) : Val := (USrc.relApp (RelFn.const relA .unit).toVal .unit .unit).toVal
+
+/-- `IO.unit.flatMap(_ => <external source forgeSrc>)` with the public `Bracket` leaf `_ => this`
+(review batch 9). `srcU` would run the release program of the entry. -/
+def forge (relA : Nat) : IO :=
+  .flatMap (.pure .unit) (Bracket.BLam.constThis (Bracket.Src.ext (forgeSrc relA)).toVal).fn
+
+/-- With the harness release entry (odd, `code 1`) it is rejected: the entry is a reference that
+user code does not hold. -/
+example : WF.progOK libH (fun _ => false) (forge (code 1)) = false := by decide +kernel
+
+/-- With an own entry (even index that captures nothing) it is accepted. -/
+example : WF.progOK libH (fun _ => false) (forge 6) = true := by decide +kernel
 
 /-! ## Batch 8, S1: user code may pass any value through -/
 

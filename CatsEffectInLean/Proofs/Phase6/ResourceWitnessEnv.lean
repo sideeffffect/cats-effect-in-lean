@@ -38,8 +38,10 @@ def userR : Nat → UserResult
 def user : UserEnv where
   call k _ _ := userR k
 
-/-- A harness code: a number whose closure value holds the token `Ref` 0. -/
-def code (i : Nat) : Nat := 2 * valToNat (cloVal hns 60 [.ref logCell, .nat i])
+/-- A harness table entry: an odd index (a library reference, decision 58, review batch 9 R1). -/
+def code (i : Nat) : Nat := 2 * valToNat (cloVal hns 60 [.ref logCell, .nat i]) + 1
+
+theorem code_odd (i : Nat) : code i % 2 = 1 := by unfold code; omega
 
 def cA : Val := .pair (.ref logCell) (.nat 20)
 def cB : Val := .pair (.ref logCell) (.nat 21)
@@ -115,7 +117,8 @@ theorem codes_named : Handle.ref logCell ∈ cA.handles ∧ Handle.ref logCell �
 theorem markedA (failA two withBind : Bool) :
     MarkedMake (W failA two withBind) cA (code 0) (code 1) (.pure .unit) tagA tagRA := by
   obtain ⟨hA, -, hu⟩ := codes_named
-  exact ⟨by simp [W], by simp [W, renv], fun _ => ⟨if failA then 5 else 6, by simp [W, renv]⟩, hu, hA⟩
+  exact ⟨code_odd 0, code_odd 1, by simp [W], by simp [W, renv],
+    fun _ => ⟨if failA then 5 else 6, by simp [W, renv]⟩, hu, hA⟩
 
 theorem markedB (failA withBind : Bool) :
     MarkedMake (W failA true withBind) cB (code 2) (code 3) (.pure .unit) tagB tagRB := by
@@ -123,6 +126,7 @@ theorem markedB (failA withBind : Bool) :
   have hc02 : code 2 ≠ code 0 := by decide +kernel
   have hc13 : code 3 ≠ code 1 := by decide +kernel
   have hBA : cB ≠ cA := by decide
-  exact ⟨by simp [W, hBA], by simp [W, renv, hc02], fun _ => ⟨6, by simp [W, renv, hc13]⟩, hu, hB⟩
+  exact ⟨code_odd 2, code_odd 3, by simp [W, hBA], by simp [W, renv, hc02],
+    fun _ => ⟨6, by simp [W, renv, hc13]⟩, hu, hB⟩
 
 end CatsEffectInLean.Proofs.Phase6.ResourceWitnessEnv

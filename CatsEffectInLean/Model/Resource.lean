@@ -48,6 +48,13 @@ tuple. A `Val` cannot hold a function or an `IO`. So such a value is a `Val` tha
 * `acquire k`: the `F[A]` acquire of `make` (a value in the Scala source; named by index).
 * `release k a`: the release builder `A => F[Unit]` of `make`. Pure; it can throw.
 
+The table entries are **references** (decision 58, review batch 9 R1): in every value the index
+`k` of a `bind`, `acquire` or `release` entry is a `Val.fn k` (`RelFn.const`, `AllocFn.make`,
+the stack frames, `makePair`, `ioRelease`), not a data number. In Scala these are values (an
+`IO`, a function) that code holds only if it was given them. So `WellFormed` treats an entry like
+a closure: even index = an entry that user code may make itself (if its captured handles are
+available), odd index = an entry of the library or a test harness, available only if held.
+
 Restriction: `bind` and `release` have no side effects. `make` calls `release(a)` inside the
 `map` of acquire (`Resource.scala:902`); the model calls `release k a` there to see a throw,
 and calls it again when the release runs (the same `IO`, because the function is pure).
@@ -148,13 +155,13 @@ inductive RelFn where
 
 def RelFn.toVal : RelFn → Val
   | .unit => tagged 0 .unit
-  | .const k a => tagged 1 (.pair (.nat k) a)
+  | .const k a => tagged 1 (.pair (.fn k) a)
   | .user id => tagged 2 (.fn id)
   | .guarantee a b => tagged 3 (.pair a.toVal b.toVal)
 
 def RelFn.ofVal : Val → Option RelFn
   | .pair (.nat 0) .unit => some .unit
-  | .pair (.nat 1) (.pair (.nat k) a) => some (.const k a)
+  | .pair (.nat 1) (.pair (.fn k) a) => some (.const k a)
   | .pair (.nat 2) (.fn id) => some (.user id)
   | .pair (.nat 3) (.pair a b) =>
     match RelFn.ofVal a, RelFn.ofVal b with
@@ -163,7 +170,7 @@ def RelFn.ofVal : Val → Option RelFn
   | _ => none
 
 /-- The `F[Unit]` value `release(a)` of `make` (tag 10). -/
-def ioRelease (k : Nat) (a : Val) : Val := tagged 10 (.pair (.nat k) a)
+def ioRelease (k : Nat) (a : Val) : Val := tagged 10 (.pair (.fn k) a)
 
 /-- The stack of `allocatedCase` (`Resource.scala:466-469`): `Nil` or `Frame(head, tail)`.
 Each `head` is a `Bind` function (`REnv.bind`). -/
@@ -171,20 +178,20 @@ abbrev Stack := List Nat
 
 def stackToVal : Stack → Val
   | [] => .none
-  | h :: t => .some (.pair (.nat h) (stackToVal t))
+  | h :: t => .some (.pair (.fn h) (stackToVal t))
 
 def stackOfVal : Val → Option Stack
   | .none => some []
-  | .some (.pair (.nat h) t) => (stackOfVal t).map (h :: ·)
+  | .some (.pair (.fn h) t) => (stackOfVal t).map (h :: ·)
   | _ => none
 
 def allocFnToVal : AllocFn → Val
   | .user id => tagged 0 (.fn id)
-  | .make a r => tagged 1 (.pair (.nat a) (.nat r))
+  | .make a r => tagged 1 (.pair (.fn a) (.fn r))
 
 def allocFnOfVal : Val → Option AllocFn
   | .pair (.nat 0) (.fn id) => some (.user id)
-  | .pair (.nat 1) (.pair (.nat a) (.nat r)) => some (.make a r)
+  | .pair (.nat 1) (.pair (.fn a) (.fn r)) => some (.make a r)
   | _ => none
 
 /-- The library lambdas, with their captured data. -/
@@ -220,7 +227,7 @@ def Clo.toVal : Clo → Val
   | .onErrorH r => tagged 3 r.toVal
   | .raiseK t => tagged 4 (.err t)
   | .handleUnit => tagged 5 .unit
-  | .makePair k => tagged 6 (.nat k)
+  | .makePair k => tagged 6 (.fn k)
   | .applyPair => tagged 7 .unit
   | .spin => tagged 8 .unit
 
@@ -240,7 +247,7 @@ def Clo.ofVal : Val → Option Clo
   | .pair (.nat 3) r => (RelFn.ofVal r).map .onErrorH
   | .pair (.nat 4) (.err t) => some (.raiseK t)
   | .pair (.nat 5) .unit => some .handleUnit
-  | .pair (.nat 6) (.nat k) => some (.makePair k)
+  | .pair (.nat 6) (.fn k) => some (.makePair k)
   | .pair (.nat 7) .unit => some .applyPair
   | .pair (.nat 8) .unit => some .spin
   | _ => none
@@ -381,7 +388,7 @@ def cloCall (r : REnv) (c : Clo) (arg : Val) (v : View) : UserResult :=
     | .ok _ => { out := .ret (.pair arg (ioRelease k arg)) }
   | .applyPair =>
     match arg with
-    | .pair a (.pair (.nat 10) (.pair (.nat k) a')) => { out := .ret (.pair a (RelFn.const k a').toVal) }
+    | .pair a (.pair (.nat 10) (.pair (.fn k) a')) => { out := .ret (.pair a (RelFn.const k a').toVal) }
     | _ => throwR illTyped
   | .spin => { out := .prog spinIO }
 
@@ -415,8 +422,8 @@ user functions are user functions of `REnv.user` (id `k` is `uid k` in programs)
 programs pass `WF.progOK`. `make` names closed programs (`REnv.acquire`, `REnv.release`). -/
 def Res.ok (mem : Handle → Bool) : Res → Bool
   | .allocate (.user id) => WF.fnOK lib mem (.user id)
-  | .allocate (.make _ _) => true
-  | .bind source _ => Res.ok mem source
+  | .allocate (.make a r) => WF.subA mem [.fn a, .fn r]
+  | .bind source fs => WF.avail mem (.fn fs) && Res.ok mem source
   | .pure a => WF.sub mem a.handles
   | .eval fa => WF.progOK lib mem fa
 

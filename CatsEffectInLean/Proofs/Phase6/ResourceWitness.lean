@@ -91,12 +91,12 @@ theorem flat_private : Private WF2 [code 0, code 2] [code 1, code 3] [code 4] [c
 theorem flat_sat (viaParent : Bool) :
     MarkedMake WF2 cA (code 0) (code 1) (.pure .unit) tagA tagRA ∧
     MarkedMake WF2 cB (code 2) (code 3) (.pure .unit) tagB tagRB ∧
-    (∀ x, WF2.r.bind (code 4) x = .ok (Res.make (code 2) (code 3))) ∧
+    (∀ x, WF2.r.bind (code 4) x = .ok (Res.make (code 2) (code 3))) ∧ code 4 % 2 = 1 ∧
     Private WF2 [code 0, code 2] [code 1, code 3] [code 4] [cA, cB] ∧
     WellFormed libH [] (envH WF2 (bodyFlat viaParent)) harness ∧
     ∃ o, outcomesP {} counterMaskModel (envH WF2 (bodyFlat viaParent)) harness o ∧
       (∃ oc, o.summary = .done oc) ∧ logOf o = [tagA, tagB, tagRB, tagRA] := by
-  refine ⟨markedA _ _ _, markedB _ _, fun _ => by simp [WF2, W, renv],
+  refine ⟨markedA _ _ _, markedB _ _, fun _ => by simp [WF2, W, renv], code_odd 4,
     flat_private, wellFormed _ _ _ _, ?_⟩
   cases viaParent
   · obtain ⟨o, ho, hs, hl⟩ := obs_of_run (env := envH WF2 (bodyFlat false)) (fuel := 8000) (cs := [])
