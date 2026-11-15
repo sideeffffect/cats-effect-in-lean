@@ -531,7 +531,7 @@ def registry : List Entry := [
       Harness: group A, cancels, group B awaiters, each us.attempt *> uncancelable(poll => mark 1 \
       *> poll(b.await).onCancel(mark 3) *> mark 2). All user code (WellFormed cbLib), all cap, \
       schedules, fuel. Satisfiable (CB.noEarlyTrip_sat). Wrong function: variant 1 trips at cap - 1 \
-      (noEarlyTrip_wrong; smoke 606 of 1500). Smoke: 0. Open." },
+      (noEarlyTrip_wrong; smoke 612 of 1500). Smoke: 0. Open." },
   { id := "std.CyclicBarrier.exactGenerations"
     rows := ["std.CyclicBarrier.apply", "std.CyclicBarrier.await"]
     prop := ``Props.Phase7.CyclicBarrier.cbExactGenerations
@@ -539,7 +539,7 @@ def registry : List Entry := [
     note := "Phase 7, track L. Without program cancels, a blocked run released only full \
       generations (passed % cap = 0) and fewer than cap fibers wait: no lost wakeup. Satisfiable \
       (exactGenerations_sat). Wrong function: variant 4 never completes unblock \
-      (exactGenerations_wrong; smoke 589). Smoke: 0. Open." },
+      (exactGenerations_wrong; smoke 584). Smoke: 0. Open." },
   { id := "std.CyclicBarrier.cancelNoHang"
     rows := ["std.CyclicBarrier.apply", "std.CyclicBarrier.await"]
     prop := ``Props.Phase7.CyclicBarrier.cbCancelNoHang
@@ -549,7 +549,7 @@ def registry : List Entry := [
       CyclicBarrier.scala:77-78). Satisfiable (cancelNoHang_sat). Wrong function: variant 3 drops \
       the epoch check; the race (A0 canceled while suspended, A1 trips before A0's cleanup task) \
       makes the next generation need cap + 1 (cancelNoHang_wrong, cbCancelNoHang_v3_false; v3.7.1 \
-      passes the same schedule, cancelNoHang_v0_race). Smoke: 0. Open." },
+      passes the same schedule, cancelNoHang_v0_race; smoke race shape: v3 20 of 800, v3.7.1 0). Smoke: 0. Open." },
   { id := "std.CyclicBarrier.cancelRemoved"
     rows := ["std.CyclicBarrier.apply", "std.CyclicBarrier.await"]
     prop := ``Props.Phase7.CyclicBarrier.cbCancelRemoved
@@ -558,7 +558,7 @@ def registry : List Entry := [
       cancel returned), passed <= cap * ((entered - canceledIn) / cap) in every state: a canceled \
       await does not count for a trip. The hypothesis restricts the test program (a cancel that \
       loses the race with a trip is covered by cancelNoHang). Satisfiable (cancelRemoved_sat). \
-      Wrong function: variant 2 does not re-increment (cancelRemoved_wrong). Smoke: 0. Open." }
+      Wrong function: variant 2 does not re-increment (cancelRemoved_wrong; smoke 3 of 1500 random, 20 of 800 removal shape). Smoke: 0. Open." }
 ]
 
 end CatsEffectInLean

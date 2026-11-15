@@ -68,3 +68,23 @@ Duplicate searches (read-only): `gh search issues --repo typelevel/cats-effect "
 (#1863, #1719, #1217), `"CountDownLatch"` (#1863, #1057, #3603, #3073, #2720, #1217, #1719),
 `"cyclic barrier cancel"` (none), `"barrier epoch"` (none), `gh search prs ... "CyclicBarrier"`
 (#1413, #1607), `"barrier"` (#1407, #1413, #1417 and runtime PRs). No open bug about either structure.
+
+## Smoke results (test/Phase7/LatchSmoke.lean, 9 min, 0.84 GB)
+
+- v3.7.1: 0 violations, 0 hypothesis failures. Latch: 1,500 runs, 564 blocked, 311 with a returned
+  awaiter; wrong variants 1/2/3: 160/238/225 violating runs. Barrier: 1,500 runs without and with
+  cancels: 625/749 blocked, 1,053 with a trip, 250 with a canceled waiter; variant 1: 612, variant 4:
+  584, variant 2 (statement 4): 3, variant 3 (statement 3): 0 on random inputs.
+- Fixed shapes (800 schedules: FIFO prefix 0-39, preempt the root, sometimes 40 FIFO steps, then
+  random): race shape variant 3: 20, v3.7.1: 0; removal shape variant 2: 20, v3.7.1: 0.
+- Pure random schedules (preempt with probability 1/4, random picks) did not hit the window where
+  A0 waits and the root cancels it (only FIFO prefixes of 9 or 10 steps): 0 of 800 runs.
+- The first barrier smoke used the latch-based `nv`; `cbLib` does not list `CountDownLatch` closures,
+  so 80 runs failed the evaluated hypothesis. Fixed by leaving `nv` out of the barrier family.
+
+## Depth run
+
+`opcount.py --seeds 71 72 73 --n 45000 --ops cdlNew cdlRelease cdlAwait cbNew cbAwait --boost tpl_cdl=12 tpl_cb=12`
+(after the `tpl_barrier_race` template; 51 min): 135,000 cases, all agree, 0 unsupported. Agreeing:
+cdlNew 58,783 (71: 19,530, 72: 19,665, 73: 19,588), cdlRelease 56,600, cdlAwait 58,783, cbNew 59,251
+(71: 19,754, 72: 19,612, 73: 19,885), cbAwait 59,251.

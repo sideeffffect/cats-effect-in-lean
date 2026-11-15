@@ -24,7 +24,7 @@ Phase 7, batch 7.1, track L. Mirrors of `std.CountDownLatch` and `std.CyclicBarr
 
 Ops `cdlNew`, `cdlRelease`, `cdlAwait`, `cbNew`, `cbAwait` ([format](../methodology/difftest-program-format.md)). Generator templates `tpl_latch`, `tpl_barrier_race`, appended by `gen_case` with their own RNG (`p_latch`); other cases do not change. Fixed cases `latch.jsonl`: 54 agree.
 - Mutation check (2,000 cases each): all 7 wrong variants killed (24–206 mismatches). The no-epoch-check mutant first survived (race 1 only); `tpl_barrier_race` (race 2) kills it.
-- Depth run: see "Results" below.
+- Depth run: `opcount.py --seeds 71 72 73 --n 45000 --ops cdlNew cdlRelease cdlAwait cbNew cbAwait --boost tpl_cdl=12 tpl_cb=12`: 135,000 cases, **all agree**, 0 unsupported. Agreeing cases per op: `cdlNew`/`cdlAwait` 58,783, `cdlRelease` 56,600, `cbNew`/`cbAwait` 59,251 (each about 19,000 per seed). Model bugs found: none.
 
 ## Properties (`Props/Phase7/`)
 
@@ -45,7 +45,8 @@ Harness: awaiters `user.attempt *> uncancelable(poll => mark 1 *> poll(await).on
 ## Results
 
 - Witnesses and wrong-function facts: `Proofs/Phase7/LatchWitness.lean` (kernel, 1 min 52 s, 1.1 GB): one `*_sat` and one `*_wrong` per statement; `cancelNoHang_v0_race` (v3.7.1 passes the race schedule); `cdlAwaitNotEarly_v1_false`, `cbCancelNoHang_v3_false`.
-- Smoke: `test/Phase7/LatchSmoke.lean` (random inputs and schedules; safety statements in every state; hypotheses evaluated).
+- Smoke: `test/Phase7/LatchSmoke.lean` (9 min; random inputs and schedules; safety statements in every state; hypotheses evaluated: `progOK` of every user program, `as.length < cap`). v3.7.1: 0 violations of all 7 statements; 0 hypothesis failures. Latch (1,500 runs): 564 blocked, 311 with a returned awaiter; wrong variants 1/2/3 violate their statement in 160/238/225 runs. Barrier (1,500 runs each, no cancels / cancels): 625 / 749 blocked, 1,053 with a trip, 250 with a canceled waiter; variant 1 → 612, variant 4 → 584, variant 2 (statement 4) → 3. The cancel races need fixed shapes (800 schedules each, a preemption of the root at a FIFO prefix of 0–39 steps): race shape, variant 3 → 20 hangs, v3.7.1 → 0; removal shape, variant 2 → 20, v3.7.1 → 0. Lesson: random schedules almost never put the cancel in the narrow window where a waiter is suspended (FIFO prefix 9 or 10).
+- The CDL witness `nv` (a program that waits forever) uses `CountDownLatch` closures; `cbLib` does not list them, so the barrier smoke has no `nv` (first run: 80 hypothesis failures, fixed).
 - No proof yet: a proof needs a state invariant over `Step`/`SchedP` (as the Phase 6 open entries).
 
 ## See Also

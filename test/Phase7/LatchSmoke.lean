@@ -219,19 +219,27 @@ def stats34 (v : Nat) : Nat × Nat × Nat × Nat × Nat := Id.run do
 /-! Two input shapes with many schedules, for the cancel races (random inputs rarely hit them):
 `race`: `cap = 2`, two group A awaiters, cancel A0, two group B awaiters (statement 3; the
 no-epoch-check variant 3 hangs when A1 trips before A0's cleanup runs); `removal`: `cap = 2`, one
-group A awaiter, cancel A0, two group B awaiters (statement 4, `as.length < cap`; variant 2 trips
-early). -/
+group A awaiter, cancel A0, one group B awaiter (statement 4, `as.length < cap`; variant 2 lets
+B0 trip alone). -/
+
+/-- Schedules for the shapes: FIFO for `i % 40` micro-steps, a preemption of the root, then (in
+every second block of 40 runs) 40 FIFO micro-steps, then a random schedule. The cancel must land
+while A0 waits; that window is narrow (FIFO prefix of 9 or 10 steps), so pure random schedules
+rarely hit it. -/
+def shapeSched (i : Nat) : List PChoice :=
+  List.replicate (i % 40) (.pick 0) ++ [.preempt] ++ List.replicate (40 * ((i / 40) % 2)) (.pick 0) ++
+    sched (i + 31) 200
 
 def shapeRuns (as bs : List IO) (v : Nat) : List (List (Sched CounterMask)) :=
-  (List.range 800).map fun i => states (env as bs u) (prog 2 as bs [0] v) (sched (i + 31) 200)
+  (List.range 800).map fun i => states (env as bs u) (prog 2 as bs [0] v) (shapeSched i)
 
 def raceViol (v : Nat) : Nat :=
   ((shapeRuns [.pure .unit, .pure .unit] [.pure .unit, .pure .unit] v).filter
     (fun ss => bad3 2 (ss.getLastD (Sched.init counterMaskModel (.pure .unit))))).length
 def removalViol (v : Nat) : Nat :=
-  ((shapeRuns [.pure .unit] [.pure .unit, .pure .unit] v).filter (fun ss => ss.any (bad4 2))).length
+  ((shapeRuns [.pure .unit] [.pure .unit] v).filter (fun ss => ss.any (bad4 2))).length
 def removalCanceled : Nat :=
-  ((shapeRuns [.pure .unit] [.pure .unit, .pure .unit] 0).filter
+  ((shapeRuns [.pure .unit] [.pure .unit] 0).filter
     (fun ss => canceledIn (ss.getLastD (Sched.init counterMaskModel (.pure .unit))) > 0)).length
 
 #eval (raceViol 0, raceViol 3, removalViol 0, removalViol 2, removalCanceled)
