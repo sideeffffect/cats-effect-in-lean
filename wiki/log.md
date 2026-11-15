@@ -282,3 +282,7 @@
 ## [2026-11-15] ingest | Track Res: decision 58 core (Val.fn closure references)
 - Updated: Outcome sets (decision 58 rule), Resource use/both (harness, Private = S2), Bracket model (F1), Registry and audit (check 9 removed), Agent workflow
 - Raw: raw/cats-effect/2026-11-15-decision-58-core-notes.md
+
+## [2026-11-15] ingest | Track Res: review batch 9 R1 (REnv table references), wrong-function tests, W1
+- Updated: Resource use/both, Outcome sets
+- Raw: raw/cats-effect/2026-11-15-review9-r1-notes.md
