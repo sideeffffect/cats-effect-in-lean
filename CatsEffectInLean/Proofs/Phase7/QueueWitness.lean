@@ -237,4 +237,37 @@ theorem seqSpec_satisfiable :
   exact ⟨⟨o, concAny_of_keep concKeep_bounded2, ⟨3000, [], ho⟩, hp.2.trans h1.symm, hp.1⟩,
     ⟨o', asyncAny_of_keep asyncKeep_bounded2, ⟨3000, [], ho'⟩, hp'.2.trans h3.symm, hp'.1⟩⟩
 
+/-! ## Statement 8 (`syncHandoff`): satisfiable, element `1`, both parts -/
+
+def handoffRun : Option Obs := runObsP {} counterMaskModel henv 3000 [] (handoffRoot (.nat 1))
+def handoffOfferRun : Option Obs := runObsP {} counterMaskModel henv 3000 [] (handoffOfferRoot (.nat 1))
+
+def handoffEvents : List (Nat × Nat × Val) :=
+  [(6, 0, .nat 1), (2, 1, .some (.nat 1)), (0, 0, .nat 1), (7, 0, .ocSucceeded .unit), (7, 1, .ocSucceeded .unit)]
+def handoffOfferEvents : List (Nat × Nat × Val) :=
+  [(1, 0, .nat 1), (3, 1, .pair (.nat 1) (.bool true)), (7, 0, .ocSucceeded .unit), (7, 1, .ocSucceeded .unit)]
+
+theorem handoffRun_ok : handoffRun.map (fun o =>
+    o.summary == .done (.succeeded .unit) && events o.out == handoffEvents) = some true := by
+  decide +kernel
+
+theorem handoffOfferRun_ok : handoffOfferRun.map (fun o =>
+    o.summary == .done (.succeeded .unit) && events o.out == handoffOfferEvents) = some true := by
+  decide +kernel
+
+/-- Stopped runs of both inputs of statement 8 exist and meet its claims (element `1`). -/
+theorem syncHandoff_satisfiable :
+    (∃ fuel o, runObsP {} counterMaskModel henv fuel [] (handoffRoot (.nat 1)) = some o ∧
+      (evTryTook, 1, Val.some (.nat 1)) ∈ events o.out ∧ (evJoined, 0, Val.ocSucceeded .unit) ∈ events o.out ∧
+      (evJoined, 1, Val.ocSucceeded .unit) ∈ events o.out ∧ o.summary = .done (.succeeded .unit)) ∧
+    (∃ fuel o, runObsP {} counterMaskModel henv fuel [] (handoffOfferRoot (.nat 1)) = some o ∧
+      (evTryOffered, 1, Val.pair (.nat 1) (.bool true)) ∈ events o.out ∧ (evTook, 0, Val.nat 1) ∈ events o.out ∧
+      (evJoined, 0, Val.ocSucceeded .unit) ∈ events o.out ∧ (evJoined, 1, Val.ocSucceeded .unit) ∈ events o.out ∧
+      o.summary = .done (.succeeded .unit)) := by
+  obtain ⟨o, ho, hp⟩ := exists_of_map handoffRun_ok
+  obtain ⟨o', ho', hp'⟩ := exists_of_map handoffOfferRun_ok
+  simp only [Bool.and_eq_true, beq_iff_eq] at hp hp'
+  refine ⟨⟨3000, o, ho, ?_, ?_, ?_, hp.1⟩, ⟨3000, o', ho', ?_, ?_, ?_, ?_, hp'.1⟩⟩ <;>
+    simp [hp.2, hp'.2, handoffEvents, handoffOfferEvents, evTryTook, evTryOffered, evTook, evJoined]
+
 end CatsEffectInLean.Proofs.Phase7.QueueWitness

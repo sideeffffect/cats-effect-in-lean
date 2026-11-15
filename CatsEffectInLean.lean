@@ -102,3 +102,6 @@ import CatsEffectInLean.Proofs.Phase7.QueueBatterySync
 import CatsEffectInLean.Proofs.Phase7.LatchBattery
 import CatsEffectInLean.Proofs.Phase7.SemaphoreBatteryDefs
 import CatsEffectInLean.Proofs.Phase7.SemaphoreBattery
+import CatsEffectInLean.Proofs.Phase7.QueueBatteryConcOther
+import CatsEffectInLean.Proofs.Phase7.QueueBatteryAsyncOther
+import CatsEffectInLean.Proofs.Phase7.QueueBatteryFactory

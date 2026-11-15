@@ -1,7 +1,7 @@
 # Semaphore and Mutex model, CE-0060
 
 > Sources: Cats Effect v3.7.1 (`std/.../Semaphore.scala:28-298`, `std/.../Mutex.scala:24-112`, `std/.../LockQueue.scala:24-110`, `kernel/.../Resource.scala:156-208`, `:388-397`, `:879-880`, `:942-944`, `:1229-1234`, `kernel/jvm-native/.../SyncRef.scala:30-95`, `kernel/.../Ref.scala:123-124`, `:208-250`, `IO.scala:1715-1720`, `:1822-1830`, `:1996-2180`, `IODeferred.scala:62-79`, `docs/std/mutex.md:6-7`); cats-core 2.13.0 (`cats/instances/queue.scala:136-138`, `cats/Traverse.scala:299-309`, `cats/Foldable.scala:591-596`, `cats/instances/option.scala:145-149`); PR #4648; own Phase 7 track S work and scala-cli runs, 2026-11-15
-> Raw: [Review batch 13 notes](../../raw/project-decisions/2026-11-15-review-batch-13-notes.md); [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md); [Review 11b fixes](../../raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md); [Review 12 and battery](../../raw/cats-effect/2026-11-15-semaphore-mutex-review12-battery.md)
+> Raw: [Review batch 13 notes](../../raw/project-decisions/2026-11-15-review-batch-13-notes.md); [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md); [Review 11b fixes](../../raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md); [Review 12 and battery](../../raw/cats-effect/2026-11-15-semaphore-mutex-review12-battery.md); [Review 13](../../raw/cats-effect/2026-11-15-semaphore-mutex-review13.md)
 
 ## Overview
 
@@ -74,7 +74,7 @@ cases.
 | `std.Mutex.lock.mutualExclusion` | open | at most one counted holder at once |
 | `std.Mutex.lock.noDeadlock` | open | behaviour tables: every stopped run is `Succeeded(())` with `Succeeded` join records (the lock is free at the end), or `fatal` (review batch 12 form) |
 | `std.Semaphore.count.atRest` | refuted (CE-0060) | all fibers ended → `count = available` |
-| `std.Semaphore.acquireN.fifo` | open | strict FIFO: after `releaseN(r)` the longest prefix with sum ≤ r is served |
+| `std.Semaphore.acquireN.fifo` | open | strict FIFO: after `releaseN(r)` the longest prefix with sum ≤ r is served; every read while requests wait gives `available = 0` and the waiting sum as `count` (review batch 13, O1) |
 | `std.Mutex.lock.semaphoreTwin` | open | each (outcome, trace) of `Mutex` is one of `Semaphore(1)` (one direction; the converse is a different claim, not registered) |
 
 Smoke (`lake exe semsmoke 40`): 13,920 stopped runs, 0 violations of the open statements; every
@@ -108,6 +108,14 @@ kernel-checked wrong-function battery (`Proofs/Phase7/SemaphoreBattery.lean`, 38
 | lock | lock.noDeadlock | lock.noDeadlock | lock.mutualExclusion | lock.noDeadlock |
 
 Each row also has the v3.7.1 run of the same input, which meets the statement (`good_*`).
+
+Review batch 13 (2026-11-15): all 8 entries FAITHFUL; H2/W2 closed. L3: factory rows
+(`Semaphore.apply` with `F = IO`, `Mutex.apply`: raises, hangs; drops/doubles have no meaning for a factory; `mapK`
+and `in` are not mirrored). O1: no statement read `available`/`count` while a fiber waits, so a read
+wrong only under contention passed. The FIFO root now reads `(available, count)` at every spin step
+(requests wait then) and stops with `Left` on any value the Scaladoc does not allow; rows
+`available_contended` and `count_contended` (kernel) break it, and both variants are right at rest
+(`contended_ok_at_rest`). The battery has 46 rows now.
 
 Why open: a proof for all schedules needs a state invariant over `Step`/`SchedP` (for example
 permits + held + sunk = k + released), as the open Phase 6 entries.

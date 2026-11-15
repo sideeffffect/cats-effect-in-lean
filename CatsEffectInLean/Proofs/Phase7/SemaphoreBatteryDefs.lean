@@ -42,11 +42,16 @@ open CatsEffectInLean.Props.Phase7.Semaphore
 /-- The public operations of decision 63. -/
 inductive Op where
   | acquire | acquireN | release | releaseN | tryAcquire | tryAcquireN | available | count | permit | lock
+  /-- The factories `Semaphore[IO](k)` and `Mutex[IO]` (review batch 13, L3). -/
+  | semApply | mutexApply
   deriving DecidableEq, Repr
 
 /-- The variants (`wrongValue` replaces drops/doubles for the reads). -/
 inductive Var where
   | raises | hangs | drops | doubles | wrongValue
+  /-- A read that is right when nobody waits and wrong while the waiter queue is not empty
+  (`available` returns one more, `count` one less; review batch 13, O1). -/
+  | contended
   deriving DecidableEq, Repr
 
 def E9 : Err := { code := 9 }
@@ -69,6 +74,10 @@ inductive WL where
   | retK
   /-- A read that returns one more. -/
   | plus1
+  /-- `available` that returns `permits + 1` while the waiter queue is not empty. -/
+  | availCont
+  /-- `count` that returns one less while the waiter queue is not empty. -/
+  | countCont
   deriving DecidableEq, Repr
 
 def WL.toVal : WL → Val
@@ -79,6 +88,8 @@ def WL.toVal : WL → Val
   | .again m mm pp => cloVal wns 4 [.fn m, .poll mm pp]
   | .retK => cloVal wns 5 []
   | .plus1 => cloVal wns 6 []
+  | .availCont => cloVal wns 7 []
+  | .countCont => cloVal wns 8 []
 
 def WL.id (l : WL) : Nat := 2 * valToNat l.toVal + 1
 def WL.fn (l : WL) : Fn := .user l.id
@@ -93,6 +104,8 @@ def WL.ofId? (id : Nat) : Option WL :=
     | some (66, 4, [.fn m, .poll mm pp]) => some (.again m mm pp)
     | some (66, 5, []) => some .retK
     | some (66, 6, []) => some .plus1
+    | some (66, 7, []) => some .availCont
+    | some (66, 8, []) => some .countCont
     | _ => none
   else none
 
@@ -131,6 +144,17 @@ def WL.call (w : WL) (arg : Val) : UserResult :=
     | .nat n => { out := .ret (.nat (n + 1)) }
     | .int i => { out := .ret (.int (i + 1)) }
     | _ => illW
+  | .availCont =>
+    match arg with
+    | .pair (.nat p) w => { out := .ret (.nat (if ((unlistV w).getD []).isEmpty then p else p + 1)) }
+    | _ => illW
+  | .countCont =>
+    match (CatsEffectInLean.Model.Semaphore.call (fun _ _ _ => illW) .countK arg {}).out with
+    | .ret (.int c) =>
+      match arg with
+      | .pair _ w => { out := .ret (.int (if ((unlistV w).getD []).isEmpty then c else c - 1)) }
+      | _ => illW
+    | _ => illW
 
 /-- The inner environment: the `WL` closures, then `u`. -/
 def inner (u : UserEnv) : UserEnv where
@@ -150,19 +174,35 @@ def badOf (var : Var) (io drop dbl : IO) : IO :=
   | .hangs => hangIO
   | .drops => drop
   | .doubles => dbl
-  | .wrongValue => io
+  | .wrongValue | .contended => io
 
 /-- The replacement of a library term for the operations `available`, `count`, `permit`, `lock`. -/
 def repl (op : Op) (var : Var) : IO → Option IO
   | io@(.map (.delay (.user g)) (.user k)) =>
     match SL.ofId? g, SL.ofId? k, op with
-    | some (.getThunk _), some .availK, .available
+    | some (.getThunk _), some .availK, .available =>
+      some (match var with
+        | .raises => .error E9
+        | .hangs => hangIO
+        | .contended => .map (.delay (.user g)) WL.availCont.fn
+        | _ => .map io WL.plus1.fn)
     | some (.getThunk _), some .countK, .count =>
       some (match var with
         | .raises => .error E9
         | .hangs => hangIO
+        | .contended => .map (.delay (.user g)) WL.countCont.fn
         | _ => .map io WL.plus1.fn)
-    | _, _, _ => none
+    | some (.newRef _), some .mkSem, .semApply =>
+      some (match var with
+        | .hangs => hangIO
+        | _ => .error E9)
+    | _, _, _ =>
+      match Mutex.ML.ofId? g, Mutex.ML.ofId? k, op with
+      | some (.newRef _), some .mkMutex, .mutexApply =>
+        some (match var with
+          | .hangs => hangIO
+          | _ => .error E9)
+      | _, _, _ => none
   | io@(.uncancelable (.user b)) =>
     match Bracket.BLam.ofId? b, op with
     | some (.bfBody acq use rel), .permit =>

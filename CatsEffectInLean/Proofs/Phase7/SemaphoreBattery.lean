@@ -25,6 +25,13 @@ constant user code `cu`, whose `WellFormed` hypothesis holds for the wrong envir
 | count | stmt 2 | stmt 2 | n/a (read): wrong value, stmt 7 | n/a (read) |
 | permit | stmt 2 | stmt 2 | stmt 2 | stmt 2 |
 | lock | stmt 5 | stmt 5 | stmt 4 | stmt 5 |
+| `Semaphore[IO](k)` (apply) | stmt 2 | stmt 2 | n/a (factory) | n/a (factory) |
+| `Mutex[IO]` (apply) | stmt 5 | stmt 5 | n/a (factory) | n/a (factory) |
+
+Extra rows: `available`, `count` "contended" (wrong only while a fiber waits): stmt 7. A factory
+has no effect besides making the object, so drops/doubles have no meaning for it. `mapK` and `in`
+are not mirrored (no row): `MapKSemaphore`/`TransformedMutex` only map each operation with a natural
+transformation, and `in` builds the same `impl` with `Ref.in`.
 
 Statement numbers: 2 `std.Semaphore.noDeadlock`, 4 `std.Mutex.lock.mutualExclusion`, 5
 `std.Mutex.lock.noDeadlock`, 7 `std.Semaphore.acquireN.fifo`.
@@ -225,6 +232,48 @@ theorem inputs_ok :
   intro i hi
   match i, hi with
   | 0, _ => exact .inr (by decide)
+
+/-! ### Review batch 13: factories (L3) and reads under contention (O1) -/
+
+/-- `Semaphore[IO](k)` raises / hangs: the root ends `Errored` / `blocked`. -/
+theorem semApply_raises : (semRun (wrongEnv .semApply .raises behaved) 1 [.permit 0 (.ok .unit)] [.join 0]).map
+    (c2 [.permit 0 (.ok .unit)] [.join 0] 1) = some false := by
+  decide +kernel
+theorem semApply_hangs : (semRun (wrongEnv .semApply .hangs behaved) 1 [.permit 0 (.ok .unit)] [.join 0]).map
+    (c2 [.permit 0 (.ok .unit)] [.join 0] 1) = some false := by
+  decide +kernel
+
+/-- `Mutex[IO]` raises / hangs. -/
+theorem mutexApply_raises : (mutRun (wrongEnv .mutexApply .raises behaved) [.permit 0 (.ok .unit)] [.join 0]).map
+    (c5 [.permit 0 (.ok .unit)] [.join 0]) = some false := by
+  decide +kernel
+theorem mutexApply_hangs : (mutRun (wrongEnv .mutexApply .hangs behaved) [.permit 0 (.ok .unit)] [.join 0]).map
+    (c5 [.permit 0 (.ok .unit)] [.join 0]) = some false := by
+  decide +kernel
+
+/-- `available` returns one more only while a fiber waits: the FIFO spin read under contention
+(`[1, 1]`, `r = 2`) sees `available = 1`, and the root ends `Succeeded(Left(...))`. -/
+theorem available_contended :
+    (runObsP {} counterMaskModel (wrongFifo .available .contended) 3000 [] (fifoRoot [1, 1] 2)).map (c7 [1, 1] 2) = some false := by
+  decide +kernel
+
+/-- `count` returns one less only while a fiber waits: the spin read sees `count = -2` with one
+request of 1 in the queue (`[1]`, `r = 1`). -/
+theorem count_contended :
+    (runObsP {} counterMaskModel (wrongFifo .count .contended) 3000 [] (fifoRoot [1] 1)).map (c7 [1] 1) = some false := by
+  decide +kernel
+
+theorem good_fifo_contended :
+    (runObsP {} counterMaskModel fifoEnv 3000 [] (fifoRoot [1, 1] 2)).map (c7 [1, 1] 2) = some true ∧
+    (runObsP {} counterMaskModel fifoEnv 3000 [] (fifoRoot [1] 1)).map (c7 [1] 1) = some true := by
+  constructor <;> decide +kernel
+
+/-- Both contention variants are right when nobody waits: on the FIFO root with no request they meet
+the claim (so only the reads under contention catch them). -/
+theorem contended_ok_at_rest :
+    (runObsP {} counterMaskModel (wrongFifo .available .contended) 3000 [] (fifoRoot [] 1)).map (c7 [] 1) = some true ∧
+    (runObsP {} counterMaskModel (wrongFifo .count .contended) 3000 [] (fifoRoot [] 1)).map (c7 [] 1) = some true := by
+  constructor <;> decide +kernel
 
 /-- `availRaises` of review batch 12 (H2): `Semaphore#available` always raises. The root ends
 `Errored(E9)`, which the review-batch-12 form of statement 2 rejects. -/

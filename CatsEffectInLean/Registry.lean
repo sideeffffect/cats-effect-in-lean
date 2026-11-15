@@ -720,13 +720,19 @@ def registry : List Entry := [
       (eager removal, as v3.7.0): Proofs/Phase7/SemaphoreCountFixed.lean (4 inputs x 12 \
       schedules, kernel) and semsmoke. Reproducer: v3.7.1, series/3.x, series/3.7.x." },
   { id := "std.Semaphore.acquireN.fifo"
-    rows := ["std.Semaphore.acquireN", "std.Semaphore.releaseN", "std.Semaphore.count"]
+    rows := ["std.Semaphore.acquireN", "std.Semaphore.releaseN", "std.Semaphore.count",
+      "std.Semaphore.available"]
     prop := ``Props.Phase7.Semaphore.semFifo
     status := .«open»
     note := "Strict FIFO (S:58-61): Semaphore(0); the requests n_1..n_m enter the queue in order \
-      (the parent spins on count); after releaseN(r) the longest prefix with sum <= r is served \
-      (joins succeed) and count = r - sum. All n, r and schedules; no user code. Satisfiable \
-      (semFifo_satisfiable). semsmoke: 0 violations; wrong function 'LIFO' breaks it. Open." },
+      (the parent spins on (available, count)); after releaseN(r) the longest prefix with sum <= r is \
+      served (joins succeed) and count = r - sum. Review batch 13 O1: every spin read happens while \
+      requests wait, and must give available = 0 and count = -(sum before F_i) or -(sum up to F_i) \
+      (S:38-53; no waiter is canceled, so CE-0060 does not apply); any other pair ends the root \
+      Succeeded(Left(pair)), which the claim rejects. All n, r and schedules; no user code. \
+      Satisfiable (semFifo_satisfiable). Wrong functions: 'LIFO' (semsmoke), and SemaphoreBattery \
+      available_contended / count_contended (wrong only while a fiber waits, kernel; right at rest: \
+      contended_ok_at_rest), count_wrongValue. Open." },
   { id := "std.Mutex.lock.semaphoreTwin"
     rows := ["std.Mutex.lock", "std.Mutex.apply", "std.Semaphore.permit", "std.LockQueue.lock"]
     prop := ``Props.Phase7.Semaphore.mutexSemaphoreTwin
@@ -824,6 +830,21 @@ def registry : List Entry := [
       hangs, drops or doubles its effect breaks it. All Async kinds, under sequential consistency. Satisfiable \
       (QueueWitness.seqSpec_satisfiable). Battery: QueueBatteryAsync (BoundedAsyncQueue, 18 rows). Smoke: \
       qsmoke (every kind). Open." },
+  { id := "std.Queue.Synchronous.tryHandoff"
+    rows := ["std.Queue.synchronous", "std.Queue.Synchronous.tryTake", "std.Queue.Synchronous.tryOffer", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.take"]
+    prop := ``Props.Phase7.Queue.syncHandoff
+    status := .«open»
+    note := "Decision 63 gap (Synchronous#tryTake drops) and review batch 13 G1 (Synchronous#tryOffer always \
+      false), closed: Scaladoc QueueSource tryTake (dequeue if one is available without fiber blocking), \
+      QueueSink tryOffer (enqueue without semantically blocking) and synchronous (an element passes when a \
+      taker and an offerer meet, both are freed, Queue.scala:139-148); code Queue.scala:274-290, :347-353 \
+      hands the element over. A per-run claim over all schedules cannot tell a broken try* from one that ran \
+      before the partner registered, so the statement uses the FIFO replay schedule: the waiting partner \
+      suspends before the try* fiber starts. For every element x and fuel: tryTake = Some(x) (resp. tryOffer \
+      = true and the taker took x), both joins Succeeded, root Succeeded. Satisfiable \
+      (QueueWitness.syncHandoff_satisfiable). Wrong functions: tryTake drops (sync_tryTake_drops), tryOffer \
+      always false (sync_tryOffer_false_breaks), tryOffer drops (sync_tryOffer_drops_handoff), kernel-checked. \
+      Open." },
   { id := "std.CountDownLatch.awaitCompletes"
     rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
     prop := ``Props.Phase7.CountDownLatch.cdlAwaitCompletes
