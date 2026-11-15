@@ -64,7 +64,6 @@ import CatsEffectInLean.Props.Phase6.Memoize
 import CatsEffectInLean.Proofs.Phase6.MemoizeStuck
 import CatsEffectInLean.Model.ResourceUse
 import CatsEffectInLean.Model.ResourceUseExamples
-import CatsEffectInLean.Props.Phase6.HarnessPrivacy
 import CatsEffectInLean.Props.Phase6.Resource
 import CatsEffectInLean.Proofs.Phase6.ResourceWitnessEnv
 import CatsEffectInLean.Proofs.Phase6.ResourceWitness
@@ -78,3 +77,4 @@ import CatsEffectInLean.Model.ParTraverse
 import CatsEffectInLean.Props.Phase6.ParTraverse
 import CatsEffectInLean.Proofs.Phase6.ParTraverseWitness
 import CatsEffectInLean.Proofs.Phase6.ParTraversePrivacy
+import CatsEffectInLean.Proofs.Phase6.ResourceWrongFunction

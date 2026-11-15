@@ -1,7 +1,7 @@
 # Resource use, allocated, both, and CE-0020
 
 > Sources: Cats Effect v3.7.1 (`Resource.scala:156-314`, `:388-397`, `:464-552`, `:826-993`, `:1229-1234`; `IO.scala:961-962`, `:1822`, `:2062-2064`, `:2152`, `:2161`; `SyncRef.scala:30`, `:65-73`; `GenSpawn.scala:476-498`); upstream commit `3af09e6d56` (PR #4630); own Phase 6 track Res work and scala-cli runs, 2026-11-10
-> Raw: [Review batch 9 notes](../../raw/project-decisions/2026-11-15-review-batch-9-notes.md); [Decision 58 core notes](../../raw/cats-effect/2026-11-15-decision-58-core-notes.md); [Lib fields probe notes](../../raw/cats-effect/2026-11-14-lib-fields-probe-notes.md); [Review batch 6 notes](../../raw/project-decisions/2026-11-14-review-batch-6-notes.md); [Track Res notes](../../raw/cats-effect/2026-11-10-track-res-resource-notes.md); [Merge with track M](../../raw/cats-effect/2026-11-10-track-res-merge-m-notes.md); [Review batch 5 fixes](../../raw/cats-effect/2026-11-10-track-res-review5-fix-notes.md); [Harness privacy (decision 56)](../../raw/cats-effect/2026-11-14-harness-privacy-notes.md)
+> Raw: [Review 9 R1 notes](../../raw/cats-effect/2026-11-15-review9-r1-notes.md); [Review batch 9 notes](../../raw/project-decisions/2026-11-15-review-batch-9-notes.md); [Decision 58 core notes](../../raw/cats-effect/2026-11-15-decision-58-core-notes.md); [Lib fields probe notes](../../raw/cats-effect/2026-11-14-lib-fields-probe-notes.md); [Review batch 6 notes](../../raw/project-decisions/2026-11-14-review-batch-6-notes.md); [Track Res notes](../../raw/cats-effect/2026-11-10-track-res-resource-notes.md); [Merge with track M](../../raw/cats-effect/2026-11-10-track-res-merge-m-notes.md); [Review batch 5 fixes](../../raw/cats-effect/2026-11-10-track-res-review5-fix-notes.md); [Harness privacy (decision 56)](../../raw/cats-effect/2026-11-14-harness-privacy-notes.md)
 
 ## Overview
 
@@ -13,7 +13,7 @@ Phase 6, batch 6.2, track Res. The model mirrors `Resource#fold`/`use`/`use_`/`u
 |---|---|
 | `Model/ResourceUse.lean` | `ULam` (namespace 20), `USrc` codes, `UEnv` (`REnv` + `resOf`), `foldLoop`, `useIO`, `allocatedIO`, `applyRelX` (`rel2`), `bothRes`, fixed twin `fixedBothRes`, dispatch `UEnv.toEnv` |
 | `Model/ResourceUseExamples.lean` | 6 runs by `decide +kernel` (both, LIFO, allocated + release) |
-| `Props/Phase6/HarnessPrivacy.lean` | (Not used by track Res since decision 58; kept until track G drops it.) The shared harness-privacy module (decision 56): tokens, `tokFreeV`/`tokFreeIO`/`tokFreeR`, `UserPrivate` |
+| `Props/Phase6/HarnessPrivacy.lean` | (Removed 2026-11-15: no statement uses it after decision 58.) The shared harness-privacy module (decision 56): tokens, `tokFreeV`/`tokFreeIO`/`tokFreeR`, `UserPrivate` |
 | `Props/Phase6/Resource.lean` | 4 statements; harness (`HLam`, log cell = token, `harness`, `envH`, `libH`), `MarkedMake`, `Private` |
 | `Proofs/Phase6/PrivacyExamples.lean` | Regression `example`s: the forgeries of review batches 4-6 are rejected |
 | `Proofs/Phase6/ResourceWitnessEnv.lean` | The witness environment `W` and its lemmas |
@@ -56,6 +56,7 @@ Test harness (decision 58, 2026-11-15; before: decision 56 `HarnessPrivacy`).
 - Closure references are `Val.fn`; `WellFormed libH` holds user code to the available handles (`WF.avail`). The resource codes hold the token, so user code cannot build them. S1 is gone: user code may pass any value through.
 - `Private` (review batch 8, S2): the Phase 5 `REnv.WellFormed` clauses for every non-harness `REnv` entry, and no such entry names a harness table entry (`Res.idx`).
 - `libH.ok` = `ResourceUse.publicLib` (Bracket, Race, Timeout) and the public harness closures; `ULam`, `Clo` are internal.
+- Review batch 9 R1 (fixed 2026-11-15): `REnv` table entries were data numbers, so a `USrc` source could run the harness release entry (`forge`). Now every table index is a `Val.fn` reference; harness entries are odd. Wrong-function tests: `Proofs/Phase6/ResourceWrongFunction.lean`. See [R1 notes](../../raw/cats-effect/2026-11-15-review9-r1-notes.md).
 - History: `UserMarkersOnly` (batch 5: forgery through `ULam.allocFn`), `NoForge` with an escape clause (batch 6: clock forgery) were HOLLOW. The forgeries are regression `example`s now.
 
 **Review batch 5 (2026-11-10):** `UserMarkersOnly` is forgeable. `usesId` does not look into library closure fields, so user code can run a marker through `ULam.allocFn (.user m)` and `WellFormed` accepts it. So `use.releaseOnce` and `flatMap.releaseOrder` are false for every implementation (HOLLOW), and CE-0020 is HOLLOW as registered (the bug and its witness are real; a correct `both` also refutes the statement). Fix: harness-only markers (decision 54). `eval.preservesCancelable` is FAITHFUL as a statement. See [review batch 5](../../review/2026-11-10-review-batch-5.md).

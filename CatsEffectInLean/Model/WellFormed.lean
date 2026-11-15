@@ -66,7 +66,8 @@ held fiber).
    classes in private code. Only reflection or the `Object` methods (`eq`, `hashCode`,
    `toString`) can tell two polls apart, and the model leaves these out. Without this clause a
    well-formed body could branch on `Val.poll 0 0` (`IdPoll`) and tell `syncStep` apart from
-   the run loop (`review/2026-11-10-review-batch-2.md`, entry 5).
+   the run loop (`review/2026-11-10-review-batch-2.md`, entry 5). The renaming also reaches the
+   values that closure references (`Val.fn`) name (`rnRef`, review batch 9 W1).
 
 `WellFormed` checks the start program `p` with `progOK` against `H0` (decidable), every user
 function (each even id, each argument, each heap view) with `CallOK`, and all user code with
@@ -109,11 +110,9 @@ def Val.handles : Val → List Handle
 
 /-- The library of a model: `ok id` says that odd id `id` is a library closure that user code may
 name in a program (a public operation builds it). Decision 58: closure references are `Val.fn`
-values, so `WellFormed` follows them structurally (`Val.handles`); `fields` is **ignored** (kept
-only until the other tracks drop it; see `wiki/semantics/outcome-equivalence.md`). -/
+values, so `WellFormed` follows them structurally (`Val.handles`); no field lists. -/
 structure Lib where
   ok : Nat → Bool
-  fields : Val → List Nat := fun _ => []
 
 /-- A library given by `ok` only. -/
 @[reducible] def Lib.idFree (ok : Nat → Bool) : Lib := { ok := ok }
@@ -281,14 +280,59 @@ for every poll. -/
 /-- A renaming of `Poll` handles. -/
 abbrev PollRen := Nat → Nat → Nat × Nat
 
-/-- Does a value hold a `Poll` handle? -/
+/-- The fuel of `hasPollF`/`rnValF` (nesting depth of the values inside closure references; at the
+bound the rest of the value counts as holding no `Poll` and stays unchanged, consistently). -/
+def pollFuel : Nat := 4096
+
+/-- `hasPoll` with fuel, also inside closure references (`Val.fn`, review batch 9 W1). -/
+def hasPollF : Nat → Val → Bool
+  | 0, _ => false
+  | f + 1, .pair a b => hasPollF f a || hasPollF f b
+  | f + 1, .left v | f + 1, .right v | f + 1, .some v | f + 1, .ocSucceeded v => hasPollF f v
+  | _ + 1, .poll _ _ => true
+  | f + 1, .fn k =>
+    match cloOfId k with
+    | some c => hasPollF f c
+    | none => false
+  | _ + 1, _ => false
+
+/-- `rnVal` with fuel, also inside closure references: a reference to a closure whose value holds
+a `Poll` becomes the reference to the renamed closure value (as `rnId`). -/
+def rnValF : Nat → PollRen → Val → Val
+  | 0, _, v => v
+  | f + 1, σ, .pair a b => .pair (rnValF f σ a) (rnValF f σ b)
+  | f + 1, σ, .left v => .left (rnValF f σ v)
+  | f + 1, σ, .right v => .right (rnValF f σ v)
+  | f + 1, σ, .some v => .some (rnValF f σ v)
+  | f + 1, σ, .ocSucceeded v => .ocSucceeded (rnValF f σ v)
+  | _ + 1, σ, .poll m s => .poll (σ m s).1 (σ m s).2
+  | f + 1, σ, .fn k =>
+    match cloOfId k with
+    | some c => if hasPollF f c then .fn (2 * valToNat (rnValF f σ c) + k % 2) else .fn k
+    | none => .fn k
+  | _ + 1, _, v => v
+
+/-- Does the closure that a reference names hold a `Poll` (review batch 9 W1)? -/
+def hasPollRef (k : Nat) : Bool :=
+  match cloOfId k with
+  | some c => hasPollF pollFuel c
+  | none => false
+
+/-- The reference to the renamed closure value. -/
+def rnRef (σ : PollRen) (k : Nat) : Nat :=
+  match cloOfId k with
+  | some c => if hasPollF pollFuel c then 2 * valToNat (rnValF pollFuel σ c) + k % 2 else k
+  | none => k
+
+/-- Does a value hold a `Poll` handle (also inside a closure reference)? -/
 def hasPoll : Val → Bool
   | .pair a b => hasPoll a || hasPoll b
   | .left v | .right v | .some v | .ocSucceeded v => hasPoll v
   | .poll _ _ => true
+  | .fn k => hasPollRef k
   | _ => false
 
-/-- Rename the `Poll` handles of a value. -/
+/-- Rename the `Poll` handles of a value (also inside closure references). -/
 def rnVal (σ : PollRen) : Val → Val
   | .pair a b => .pair (rnVal σ a) (rnVal σ b)
   | .left v => .left (rnVal σ v)
@@ -296,6 +340,7 @@ def rnVal (σ : PollRen) : Val → Val
   | .some v => .some (rnVal σ v)
   | .ocSucceeded v => .ocSucceeded (rnVal σ v)
   | .poll m s => .poll (σ m s).1 (σ m s).2
+  | .fn k => .fn (rnRef σ k)
   | v => v
 
 /-- Rename the `Poll` handles of an outcome. -/
@@ -379,9 +424,9 @@ end WF
 
 /-- Programs and user code that Scala can express (decision 27; clauses in the module doc).
 
-* `lib.ok id`: odd id `id` is a library closure of the model (a mirrored Cats Effect lambda);
-  `lib.fields`: its function fields (decision 56). A `Nat → Bool` is a library without
-  function fields.
+* `lib.ok id`: odd id `id` is a library closure that user code may name in a program (a public
+  operation builds it). Closure references are `Val.fn` values, which `WellFormed` follows
+  structurally (decision 58).
 * `H0`: the handles in the scope of the whole program (for example `Ref` cells that exist
   before it starts). Empty for a program that runs alone.
 * The start program `p` passes `progOK` with `H0` (decidable).
@@ -650,13 +695,80 @@ theorem callOK_of_reach {lib : Lib} {H0 : List Handle} {env : UserEnv} {id : Nat
 
 /-! ### Lemmas for clause 6 (`PollOpaque`) -/
 
+theorem rnValF_of_hasPollF_false (σ : PollRen) : ∀ (f : Nat) (v : Val), hasPollF f v = false → rnValF f σ v = v
+  | 0, _, _ => rfl
+  | f + 1, v, h => by
+    cases v with
+    | pair a b =>
+      simp only [hasPollF, Bool.or_eq_false_iff] at h
+      simp only [rnValF, rnValF_of_hasPollF_false σ f a h.1, rnValF_of_hasPollF_false σ f b h.2]
+    | left v => simp only [hasPollF] at h; simp only [rnValF, rnValF_of_hasPollF_false σ f v h]
+    | right v => simp only [hasPollF] at h; simp only [rnValF, rnValF_of_hasPollF_false σ f v h]
+    | some v => simp only [hasPollF] at h; simp only [rnValF, rnValF_of_hasPollF_false σ f v h]
+    | ocSucceeded v => simp only [hasPollF] at h; simp only [rnValF, rnValF_of_hasPollF_false σ f v h]
+    | poll m s => simp [hasPollF] at h
+    | fn k =>
+      simp only [rnValF]
+      cases hc : cloOfId k with
+      | none => rfl
+      | some c => simp only [hasPollF, hc] at h; simp [h]
+    | _ => rfl
+
+theorem cloOfId_two_mul_add' (c : Val) (b : Nat) (hb : b < 2) :
+    cloOfId (2 * valToNat c + b) = some c := by
+  rcases (show b = 0 ∨ b = 1 by omega) with rfl | rfl
+  · simp only [cloOfId]; rw [show (2 * valToNat c + 0) / 2 = valToNat c by omega, natToVal_valToNat]
+  · simp only [cloOfId]; rw [show (2 * valToNat c + 1) / 2 = valToNat c by omega, natToVal_valToNat]
+
+theorem hasPollF_rnValF (σ : PollRen) : ∀ (f : Nat) (v : Val), hasPollF f (rnValF f σ v) = hasPollF f v
+  | 0, _ => rfl
+  | f + 1, v => by
+    cases v with
+    | pair a b => simp only [rnValF, hasPollF, hasPollF_rnValF σ f a, hasPollF_rnValF σ f b]
+    | left v => simp only [rnValF, hasPollF, hasPollF_rnValF σ f v]
+    | right v => simp only [rnValF, hasPollF, hasPollF_rnValF σ f v]
+    | some v => simp only [rnValF, hasPollF, hasPollF_rnValF σ f v]
+    | ocSucceeded v => simp only [rnValF, hasPollF, hasPollF_rnValF σ f v]
+    | poll m s => rfl
+    | fn k =>
+      cases hc : cloOfId k with
+      | none => simp only [rnValF, hasPollF, hc]
+      | some c =>
+        by_cases hp : hasPollF f c = true
+        · simp only [rnValF, hc, hp, ite_true, hasPollF]
+          rw [cloOfId_two_mul_add' _ _ (Nat.mod_lt _ (by omega))]
+          simp only [hasPollF_rnValF σ f c, hp]
+        · simp only [Bool.not_eq_true] at hp
+          simp only [rnValF, hc, hp, Bool.false_eq_true, ite_false, hasPollF]
+    | _ => rfl
+
 theorem rnVal_of_hasPoll_false (σ : PollRen) : ∀ v : Val, hasPoll v = false → rnVal σ v = v := by
   intro v
-  induction v <;> simp_all [hasPoll, rnVal]
+  induction v with
+  | fn k =>
+    intro h
+    simp only [hasPoll, hasPollRef] at h
+    simp only [rnVal, rnRef]
+    cases hc : cloOfId k with
+    | none => rfl
+    | some c => rw [hc] at h; simp [h]
+  | _ => simp_all [hasPoll, rnVal]
 
 @[simp] theorem hasPoll_rnVal (σ : PollRen) : ∀ v : Val, hasPoll (rnVal σ v) = hasPoll v := by
   intro v
-  induction v <;> simp_all [hasPoll, rnVal]
+  induction v with
+  | fn k =>
+    simp only [rnVal, hasPoll, hasPollRef, rnRef]
+    cases hc : cloOfId k with
+    | none => simp [hc]
+    | some c =>
+      by_cases hp : hasPollF pollFuel c = true
+      · simp only [hp, ite_true]
+        rw [cloOfId_two_mul_add' _ _ (Nat.mod_lt _ (by omega))]
+        simp only [hasPollF_rnValF, hp]
+      · simp only [Bool.not_eq_true] at hp
+        simp [hc, hp]
+  | _ => simp_all [hasPoll, rnVal]
 
 theorem cloOfId_two_mul_add (c : Val) (b : Nat) (hb : b < 2) :
     cloOfId (2 * valToNat c + b) = some c := by
