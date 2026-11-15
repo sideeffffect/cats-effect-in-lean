@@ -359,3 +359,8 @@
 - Created: CountDownLatch and CyclicBarrier model (cats-effect/latch-barrier-model.md)
 - Updated: Differential testing (format v2 ops of track L, mutation check)
 - Raw: raw/cats-effect/2026-11-15-track-l-latch-barrier-notes.md
+
+## [2026-11-15] review | Review batch 11a: track Q (Queue)
+- Created: review/2026-11-15-review-batch-11a.md
+- Updated: Agent workflow and review protocol (review log, raw link)
+- Raw: raw/project-decisions/2026-11-15-review-batch-11a-notes.md

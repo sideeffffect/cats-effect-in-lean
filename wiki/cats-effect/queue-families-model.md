@@ -1,7 +1,7 @@
 # Queue families model (Phase 7, track Q)
 
 > Sources: Cats Effect v3.7.1 (`std/.../Queue.scala:31-1206`, `UnsafeUnbounded.scala:23-113`, `QueueSource.scala:23-80`, `kernel/jvm-native/.../SyncRef.scala`, `kernel/.../Ref.scala:123-124`, `IO.scala:1353-1431`, `:1548`, `:1996-2163`, `IOFiber.scala:225-260`, `:1210-1266`, `tests/.../QueueSuite.scala:787-890`); own Lean work, difftest and smoke runs, 2026-11-15
-> Raw: [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
+> Raw: [Review batch 11a notes](../../raw/project-decisions/2026-11-15-review-batch-11a-notes.md); [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
 
 ## Overview
 
@@ -51,6 +51,8 @@ Harness: `rootIO k scripts plan mode`. Fibers run scripts of `offer`, `tryOffer`
 Each entry: witness (`QueueWitness`), wrong function (`QueueWrongFunction`, kernel-checked; `qsmoke wrong`), smoke (`qsmoke`).
 
 Scope of the quantification: the queue state is private (the object reference), and a queue never calls user code, so a user program acts on a queue only through method calls in fibers, canceled at any point; the harness quantifies over exactly these (all scripts, plans, schedules). Each call runs in the atomic pattern that the CE test suite checks (`QueueSuite.scala:793-850`); a plain `take` that is canceled after it returned loses its value by definition, and a `take` inside `timeout` or `race` is the CE-0003 shape (#4571), so these are not in the statements. The atomicity of `take` under cancel is not in the Scaladoc; its source is that test (an undisputed invariant).
+
+Review batch 11a ([review](../../review/2026-11-15-review-batch-11a.md)): `noLoss`, `noDup`, `noDeadlock`, `twinSeq` FAITHFUL as statements. `fifo` HOLLOW: the hypothesis "at most one taking script" is not documented; fix: tag removal events with the script index and state per-consumer, per-producer order. `takerLiveness` HOLLOW: the count hypothesis counts canceled consumers, so the cancel pass-on (`cleanup`, `notifyNextTaker`, `notifyAnyway`) is not tested for `AbstractQueue` and `unbounded`; fix: `blocked` only if every recorded offer is removed and every started offer returned. `takerLiveness` sees `blocked` runs only, not a livelock.
 
 Open points: proofs need invariants over `SchedP` runs (as the Phase 6 entries). No linearizability statement yet (only the sequential twin and FIFO). `mapK` (`Q:51-58`, open issue #4483), `tryTakeN`/`tryOfferN`, `unsafeBounded`, `unsafeUnbounded` are not mirrored.
 
