@@ -720,13 +720,19 @@ def registry : List Entry := [
       (eager removal, as v3.7.0): Proofs/Phase7/SemaphoreCountFixed.lean (4 inputs x 12 \
       schedules, kernel) and semsmoke. Reproducer: v3.7.1, series/3.x, series/3.7.x." },
   { id := "std.Semaphore.acquireN.fifo"
-    rows := ["std.Semaphore.acquireN", "std.Semaphore.releaseN", "std.Semaphore.count"]
+    rows := ["std.Semaphore.acquireN", "std.Semaphore.releaseN", "std.Semaphore.count",
+      "std.Semaphore.available"]
     prop := ``Props.Phase7.Semaphore.semFifo
     status := .«open»
     note := "Strict FIFO (S:58-61): Semaphore(0); the requests n_1..n_m enter the queue in order \
-      (the parent spins on count); after releaseN(r) the longest prefix with sum <= r is served \
-      (joins succeed) and count = r - sum. All n, r and schedules; no user code. Satisfiable \
-      (semFifo_satisfiable). semsmoke: 0 violations; wrong function 'LIFO' breaks it. Open." },
+      (the parent spins on (available, count)); after releaseN(r) the longest prefix with sum <= r is \
+      served (joins succeed) and count = r - sum. Review batch 13 O1: every spin read happens while \
+      requests wait, and must give available = 0 and count = -(sum before F_i) or -(sum up to F_i) \
+      (S:38-53; no waiter is canceled, so CE-0060 does not apply); any other pair ends the root \
+      Succeeded(Left(pair)), which the claim rejects. All n, r and schedules; no user code. \
+      Satisfiable (semFifo_satisfiable). Wrong functions: 'LIFO' (semsmoke), and SemaphoreBattery \
+      available_contended / count_contended (wrong only while a fiber waits, kernel; right at rest: \
+      contended_ok_at_rest), count_wrongValue. Open." },
   { id := "std.Mutex.lock.semaphoreTwin"
     rows := ["std.Mutex.lock", "std.Mutex.apply", "std.Semaphore.permit", "std.LockQueue.lock"]
     prop := ``Props.Phase7.Semaphore.mutexSemaphoreTwin

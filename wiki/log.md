@@ -414,3 +414,7 @@
 - Created: review/2026-11-15-review-batch-13.md
 - Updated: Agent workflow and review protocol (review log, battery rules), Queue families model, Semaphore and Mutex model, CountDownLatch and CyclicBarrier model
 - Raw: raw/project-decisions/2026-11-15-review-batch-13-notes.md
+
+## [2026-11-15] update | Track S: review batch 13 (L3 factory rows, O1 reads under contention)
+- Updated: Semaphore and Mutex model (FIFO root reads available/count under contention; battery 46 rows)
+- Raw: raw/cats-effect/2026-11-15-semaphore-mutex-review13.md

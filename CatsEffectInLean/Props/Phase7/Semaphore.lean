@@ -596,34 +596,51 @@ with 2 permits available, an `acquireN(3)` will always be satisfied before a lat
 `acquireN(1)`."
 
 The root: `Semaphore[IO](0)`; for each `n_i` in order, start fiber `F_i = s.acquireN(n_i)`, then
-spin on `count` (`cede` between reads) until `count = -(n_1 + ... + n_i)` (so `F_i` is in the queue
-before `F_{i+1}` calls `acquireN`). Then `s.releaseN(r)`, then join `F_1 .. F_j`, where `j` is the
-longest prefix with `n_1 + ... + n_j ≤ r`, then read `count`. With strict FIFO the first `j`
-requests get their permits and the others wait, so every run that stops ends `Succeeded(count)`
+spin (`cede` between reads) on `(available, count)` until `count = -(n_1 + ... + n_i)` (so `F_i` is in
+the queue before `F_{i+1}` calls `acquireN`). Then `s.releaseN(r)`, then join `F_1 .. F_j`, where
+`j` is the longest prefix with `n_1 + ... + n_j ≤ r`, then read `count`. With strict FIFO the first
+`j` requests get their permits and the others wait, so every run that stops ends `Succeeded(count)`
 with `count = r - (n_1 + ... + n_m)`. A later request served first leaves some `F_i` (`i ≤ j`)
-waiting: its join blocks (`blocked`). No user code. -/
+waiting: its join blocks (`blocked`). No user code.
+
+Reads under contention (review batch 13, O1). While the root spins, the earlier requests wait in
+the queue (no permit was released yet) and `F_i` either has not called `acquireN` yet or waits too.
+The Scaladoc (`S:38-53`) then promises `available = 0` ("the number of permits currently available")
+and `count = -(n_1 + ... + n_{i-1})` or `-(n_1 + ... + n_i)` ("the number of permits callers are
+waiting for when there are no permits available"; no waiter is canceled here, so CE-0060 does not
+apply). Every spin read checks both; any other pair stops the root with `Succeeded(Left((available,
+count)))`, which the claim rejects. So an `available` or `count` that is wrong only while a fiber
+waits breaks this statement (`Proofs/Phase7/SemaphoreBattery.lean`, `available_contended`,
+`count_contended`). -/
 
 def fns : Nat := 64
 
 inductive FL where
   /-- `s => start F_1 ...` (the root continuation). -/
   | afterSem (reqs : Val) (r : Nat)
-  /-- `fiber => spin until count = target, then the next fiber`. -/
-  | started (s : Nat) (reqs rest : Val) (r : Nat) (fs : Val) (target : Nat)
-  /-- `c => if (c == -target) next else cede *> spin`. -/
-  | check (s : Nat) (reqs rest : Val) (r : Nat) (fs : Val) (target : Nat)
-  /-- `_ => count.flatMap(check)` (after a `cede`). -/
-  | spin (s : Nat) (reqs rest : Val) (r : Nat) (fs : Val) (target : Nat)
+  /-- `fiber => spin until count = target, then the next fiber`; `prev` = the target before `F_i`. -/
+  | started (s : Nat) (reqs rest : Val) (r : Nat) (fs : Val) (target prev : Nat)
+  /-- `(a, c) => if (a == 0 && c == -target) next else if (a == 0 && c == -prev) cede *> spin
+  else IO.pure(Left((a, c)))`. -/
+  | check (s : Nat) (reqs rest : Val) (r : Nat) (fs : Val) (target prev : Nat)
+  /-- `_ => read.flatMap(check)` (after a `cede`). -/
+  | spin (s : Nat) (reqs rest : Val) (r : Nat) (fs : Val) (target prev : Nat)
   /-- `_ => join F_1 .. F_j, then count`. -/
   | joins (s : Nat) (fs : Val) (j : Nat)
+  /-- `a => s.count.map(c => (a, c))` (the spin read). -/
+  | withCount (s : Nat)
+  /-- `c => (a, c)`. -/
+  | pairA (a : Val)
   deriving DecidableEq, Repr
 
 def FL.toVal : FL → Val
   | .afterSem reqs r => cloVal fns 0 [reqs, .nat r]
-  | .started s reqs rest r fs t => cloVal fns 1 [.fn s, reqs, rest, .nat r, fs, .nat t]
-  | .check s reqs rest r fs t => cloVal fns 2 [.fn s, reqs, rest, .nat r, fs, .nat t]
-  | .spin s reqs rest r fs t => cloVal fns 3 [.fn s, reqs, rest, .nat r, fs, .nat t]
+  | .started s reqs rest r fs t p => cloVal fns 1 [.fn s, reqs, rest, .nat r, fs, .nat t, .nat p]
+  | .check s reqs rest r fs t p => cloVal fns 2 [.fn s, reqs, rest, .nat r, fs, .nat t, .nat p]
+  | .spin s reqs rest r fs t p => cloVal fns 3 [.fn s, reqs, rest, .nat r, fs, .nat t, .nat p]
   | .joins s fs j => cloVal fns 4 [.fn s, fs, .nat j]
+  | .withCount s => cloVal fns 5 [.fn s]
+  | .pairA a => cloVal fns 6 [a]
 
 def FL.id (l : FL) : Nat := 2 * valToNat l.toVal + 1
 def FL.fn (l : FL) : Fn := .user l.id
@@ -632,10 +649,12 @@ def FL.ofId? (id : Nat) : Option FL :=
   if isLibId id then
     match (cloOfId id).bind ofCloVal with
     | some (64, 0, [reqs, .nat r]) => some (.afterSem reqs r)
-    | some (64, 1, [.fn s, reqs, rest, .nat r, fs, .nat t]) => some (.started s reqs rest r fs t)
-    | some (64, 2, [.fn s, reqs, rest, .nat r, fs, .nat t]) => some (.check s reqs rest r fs t)
-    | some (64, 3, [.fn s, reqs, rest, .nat r, fs, .nat t]) => some (.spin s reqs rest r fs t)
+    | some (64, 1, [.fn s, reqs, rest, .nat r, fs, .nat t, .nat p]) => some (.started s reqs rest r fs t p)
+    | some (64, 2, [.fn s, reqs, rest, .nat r, fs, .nat t, .nat p]) => some (.check s reqs rest r fs t p)
+    | some (64, 3, [.fn s, reqs, rest, .nat r, fs, .nat t, .nat p]) => some (.spin s reqs rest r fs t p)
     | some (64, 4, [.fn s, fs, .nat j]) => some (.joins s fs j)
+    | some (64, 5, [.fn s]) => some (.withCount s)
+    | some (64, 6, [a]) => some (.pairA a)
     | _ => none
   else none
 
@@ -646,10 +665,13 @@ def prefixLen : List Nat → Nat → Nat
   | [], _ => 0
   | n :: rest, r => if n ≤ r then prefixLen rest (r - n) + 1 else 0
 
+/-- The spin read `s.available.flatMap(a => s.count.map(c => (a, c)))`. -/
+def fifoRead (s : Nat) : IO := .flatMap (availableIO s) (FL.withCount s).fn
+
 /-- Start the next fiber, or release and join. -/
 def fifoNext (s : Nat) (reqs rest : Val) (r : Nat) (fs : Val) (target : Nat) : IO :=
   match natsOf rest with
-  | n :: rest' => .flatMap (.start (acquireNIO s n)) (FL.started s reqs (listV (rest'.map Val.nat)) r fs (target + n)).fn
+  | n :: rest' => .flatMap (.start (acquireNIO s n)) (FL.started s reqs (listV (rest'.map Val.nat)) r fs (target + n) target).fn
   | [] => .flatMap (releaseNIO s r) (FL.joins s fs (prefixLen (natsOf reqs) r)).fn
 
 def FL.call (h : FL) (arg : Val) (v : View) : UserResult :=
@@ -658,13 +680,17 @@ def FL.call (h : FL) (arg : Val) (v : View) : UserResult :=
     match arg with
     | .fn s => { out := .prog (fifoNext s reqs reqs r (listV []) 0) }
     | _ => illT
-  | .started s reqs rest r fs t =>
+  | .started s reqs rest r fs t p =>
     let fs' := listV (((unlistV fs).getD []) ++ [arg])
-    { out := .prog (.flatMap (countIO s) (FL.check s reqs rest r fs' t).fn) }
-  | .check s reqs rest r fs t =>
-    if arg == .int (-(t : Int)) then { out := .prog (fifoNext s reqs rest r fs t) }
-    else { out := .prog (.flatMap .cede (FL.spin s reqs rest r fs t).fn) }
-  | .spin s reqs rest r fs t => { out := .prog (.flatMap (countIO s) (FL.check s reqs rest r fs t).fn) }
+    { out := .prog (.flatMap (fifoRead s) (FL.check s reqs rest r fs' t p).fn) }
+  | .check s reqs rest r fs t p =>
+    if arg == .pair (.nat 0) (.int (-(t : Int))) then { out := .prog (fifoNext s reqs rest r fs t) }
+    else if arg == .pair (.nat 0) (.int (-(p : Int))) then
+      { out := .prog (.flatMap .cede (FL.spin s reqs rest r fs t p).fn) }
+    else { out := .prog (.pure (.left arg)) }
+  | .spin s reqs rest r fs t p => { out := .prog (.flatMap (fifoRead s) (FL.check s reqs rest r fs t p).fn) }
+  | .withCount s => { out := .prog (.map (countIO s) (FL.pairA arg).fn) }
+  | .pairA a => { out := .ret (.pair a arg) }
   | .joins s fs j =>
     match j, (unlistV fs).getD [] with
     | j' + 1, .fiber t :: rest => { out := .prog (.flatMap (IO.joinOf t (v.outcome t)) (FL.joins s (listV rest) j').fn) }
