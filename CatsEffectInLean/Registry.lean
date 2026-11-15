@@ -332,7 +332,8 @@ def registry : List Entry := [
       tag. Decision 58: closure references are Val.fn; WellFormed libH holds user code to the \
       available handles (WF.avail: held, or own user closures); events and resource codes hold \
       the token; Private = the Phase 5 REnv clauses for non-harness entries (review batch 8 S2); \
-      no user-code restriction beyond WellFormed (S1 gone). \
+      no user-code restriction beyond WellFormed (S1 gone); REnv table entries are Val.fn \
+      references, harness entries odd (review batch 9 R1, regression example forge). \
       Counterexample: A's release raises; F.both in the makeCase release cancels the fiber of B's \
       finalizer chain before it starts (one schedule, decide +kernel); all hypotheses proven \
       (also the satisfiability witness). Fixed twin (attempt both chains) satisfies the \
@@ -345,7 +346,9 @@ def registry : List Entry := [
     status := .«open»
     note := "Invariant (decision 50): make(acq)(rel).use(f) in the harness, directly or under the \
       harness parent that cancels and joins; release tag logged exactly as often as the acquire \
-      tag. Decision 58 harness (Val.fn, WF.avail; Private = REnv clauses, S2). \
+      tag. Decision 58 harness (Val.fn, WF.avail; Private = REnv clauses, S2; table entries are \
+      references, review batch 9 R1). Wrong-function: use without release breaks it \
+      (Proofs/Phase6/ResourceWrongFunction.lean, noReleaseUse_breaks). \
       Satisfiability witnesses with and without the parent (Proofs/Phase6/ResourceWitness.lean, \
       use_sat). Smoke: hypotheses evaluated, 3 releases x 4 bodies x parent/no parent x 900 \
       schedules (test/Phase6/ResourceSmoke.lean). Open: needs the bracket state invariant of \
@@ -356,7 +359,8 @@ def registry : List Entry := [
     status := .«open»
     note := "Invariant: make(A).flatMap(_ => make(B)).use(f) in the harness: each release tag iff its \
       acquire tag, and RB is logged before RA (LIFO; fold nests bracketFull). Decision 58 harness \
-      (the flatMap function is a harness entry, excluded by Private). Satisfiability witnesses with \
+      (table entries are references, harness entries odd, review batch 9 R1). \
+      Wrong-function: FIFO release order breaks it (ResourceWrongFunction.fifo_breaks). Satisfiability witnesses with \
       and without the parent (ResourceWitness.lean, flat_sat). Smoke: hypotheses evaluated, 24 \
       configurations x 900 schedules. Open: same missing state invariant, for two nested brackets." },
   { id := "kernel.Resource.eval.preservesCancelable"
