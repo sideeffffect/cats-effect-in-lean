@@ -1,4 +1,14 @@
+import CatsEffectInLean.Proofs.Phase6.RaceLawChunks0
+import CatsEffectInLean.Proofs.Phase6.RaceLawChunks1
+import CatsEffectInLean.Proofs.Phase6.RaceLawChunks2
+import CatsEffectInLean.Proofs.Phase6.RaceLawChunks3
+import CatsEffectInLean.Proofs.Phase6.RaceLawChunks4
+import CatsEffectInLean.Proofs.Phase6.RaceLawChunks5
+import CatsEffectInLean.Proofs.Phase6.RaceLawChunks6
+import CatsEffectInLean.Proofs.Phase6.RaceLawChunks7
+import CatsEffectInLean.Proofs.Phase6.RaceLawChunks8
 import CatsEffectInLean.Proofs.Phase6.RaceLawChunks9
+
 
 /-!
 # `GenSpawnLaws.uncancelableRaceNotInherited` for `IO` (Phase 6, track P)

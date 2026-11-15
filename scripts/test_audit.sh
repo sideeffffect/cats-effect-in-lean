@@ -90,6 +90,7 @@ expect_fail heavy_wrong_type_full        "expected exactly \`AuditFixtures.Props
 expect_fail heavy_no_thm_main            "status CatsEffectInLean.Status.proven, but no theorem is given"
 expect_fail heavy_not_def_main           "is not a \`def\`"
 expect_fail heavy_open_modelled_main     "inventory row core.Fx.addComm: status modelled, but no named registry entry is proven or refuted"
+expect_fail heavy_bad_axiom_full         "uses forbidden axioms [AuditFixtures.Generated.BadAxiom.cheat]"
 expect_fail heavy_duplicate_id           "duplicate entry id fx.addZero"
 
 if [ "$fails" -ne 0 ]; then
