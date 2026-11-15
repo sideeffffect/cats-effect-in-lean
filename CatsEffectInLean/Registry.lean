@@ -307,9 +307,14 @@ def registry : List Entry := [
       uncancelable(_ => canceled)); v3.7.1 is stuck exactly for the self-canceling fa \
       (Proofs/Phase6/MemoizeFixed.lean). Hypothesis satisfiable: MemoizeStuck.fa_wf; observed \
       memo cell not forgeable (Proofs/Phase6/MemoizeSat.lean, decision 54). Decision 58 (review 9 R1 survey, track G): fa's code is the odd reference faSrc, not the \
-      number 0, and the test closures (constFa) are not public: user code cannot run fa outside \
-      the tested memoize (MemoizeSat.forged_source, forged_constFa). The counter changes only \
-      through the tested memoize's source .ref c (handle never given to user code)." },
+      number 0, and the test closures (constFa) are not public, so user code cannot name fa \
+      (MemoizeSat.forged_source, forged_constFa). It can still run fa again through its own \
+      cell k: srcIO fa (.ref k) is k.update(_ + 1) *> fa, and the Memoize/Timeout closures with \
+      a source field are public (review 10, D1). Scala can do the same by recursion (def fa = \
+      IO.ref(0).flatMap(r => (r.update(_ + 1) *> fa).timeout(..))), so this is ordinary user \
+      code, not a forgery. No claim breaks: the counter of atMostOnce is cell 0, allocated \
+      first, never given to user code, so a user cell k is never cell 0; noStuckGet and \
+      getsAgree are about the tested memo cell and the two get fibers." },
   { id := "core.IO.memoize.getsAgree"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeGetsAgree
@@ -320,9 +325,14 @@ def registry : List Entry := [
       (decision 53): MemoizeSat.getsAgree_sat (fa = IO.cede: a get subscribes during the \
       evaluation, root completes with a pair). Open: a proof for all fa \
       needs a state invariant over SchedP (memo cell, deferred cell, go fiber outcome). Decision 58 (review 9 R1 survey, track G): fa's code is the odd reference faSrc, not the \
-      number 0, and the test closures (constFa) are not public: user code cannot run fa outside \
-      the tested memoize (MemoizeSat.forged_source, forged_constFa). The counter changes only \
-      through the tested memoize's source .ref c (handle never given to user code)." },
+      number 0, and the test closures (constFa) are not public, so user code cannot name fa \
+      (MemoizeSat.forged_source, forged_constFa). It can still run fa again through its own \
+      cell k: srcIO fa (.ref k) is k.update(_ + 1) *> fa, and the Memoize/Timeout closures with \
+      a source field are public (review 10, D1). Scala can do the same by recursion (def fa = \
+      IO.ref(0).flatMap(r => (r.update(_ + 1) *> fa).timeout(..))), so this is ordinary user \
+      code, not a forgery. No claim breaks: the counter of atMostOnce is cell 0, allocated \
+      first, never given to user code, so a user cell k is never cell 0; noStuckGet and \
+      getsAgree are about the tested memo cell and the two get fibers." },
   { id := "core.IO.memoize.atMostOnce"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeAtMostOnce
@@ -333,9 +343,14 @@ def registry : List Entry := [
       MemoizeSat.atMostOnce_sat (counter 1, a get during the evaluation). Counter and memo cell \
       not forgeable (MemoizeSat.forged_*). Open: same missing invariant as \
       core.IO.memoize.getsAgree (at most one Evaluating transition while no get is canceled). Decision 58 (review 9 R1 survey, track G): fa's code is the odd reference faSrc, not the \
-      number 0, and the test closures (constFa) are not public: user code cannot run fa outside \
-      the tested memoize (MemoizeSat.forged_source, forged_constFa). The counter changes only \
-      through the tested memoize's source .ref c (handle never given to user code)." },
+      number 0, and the test closures (constFa) are not public, so user code cannot name fa \
+      (MemoizeSat.forged_source, forged_constFa). It can still run fa again through its own \
+      cell k: srcIO fa (.ref k) is k.update(_ + 1) *> fa, and the Memoize/Timeout closures with \
+      a source field are public (review 10, D1). Scala can do the same by recursion (def fa = \
+      IO.ref(0).flatMap(r => (r.update(_ + 1) *> fa).timeout(..))), so this is ordinary user \
+      code, not a forgery. No claim breaks: the counter of atMostOnce is cell 0, allocated \
+      first, never given to user code, so a user cell k is never cell 0; noStuckGet and \
+      getsAgree are about the tested memo cell and the two get fibers." },
   -- Phase 6, track Res (Resource use/allocated/both)
   { id := "kernel.Resource.both.releaseOnce"
     rows := ["kernel.Resource.both", "kernel.Resource.use", "kernel.Resource.fold"]

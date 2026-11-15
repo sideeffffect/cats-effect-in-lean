@@ -28,7 +28,7 @@ Phase 6, batch 6.2, track M. Mirror of `IO#memoize`, difftest ops `memoize`/`mem
 
 - The memo state is a `Ref` cell: `Unevaluated` = `none`, `Evaluating(d, n)` = `pair (deferred d) (nat n)`, `Finished(Left e)` = `left (err e)`, `Finished(Right(IO.pure a))` = `right (some a)`, `Finished(Right(canceled *> never))` = `right none`.
 - `SyncRef.get`/`update`/`modify` are one `Delay` thunk each; the `modify` function runs inside the thunk, so `fiber.get` (a `Deferred` read) and the `IO` values that it builds use the view of that step.
-- The source code of `fa` is the odd reference `faSrc = .fn 1` (decision 58; before: the number 0, which user code could use to run `fa` outside the tested `memoize`). The test closures (`TLam`) are not public. The counter changes only through the source `.ref c`.
+- The source code of `fa` is the odd reference `faSrc = .fn 1` (decision 58; before: the number 0). The test closures (`TLam`) are not public, so user code cannot name `fa`. It can still run `fa` again through its own cell `k` (source `.ref k`, a public `Memoize`/`Timeout` closure), as Scala can by recursion (review 10, D1). No claim breaks: the counter is cell 0, allocated first and never given to user code.
 - A `Val` cannot hold an `IO`. The `F[B]` result of `modify` and the `IO` inside `Right` are effect codes (`Eff`); `flattenK` (the `fa => fa` of `flatten`) builds the `IO` (`effIO`). Same iteration count as Scala.
 - `go` uses `IO#guaranteeCase`; its three closures are mirrored again (`gcBody`, `gcOnError`, `gcTap`), because the finalizer is a library closure. The leaves (`reportError`, `raiseK`, `asK`) are the `Bracket` closures; `never` is `Timeout.neverIO`.
 - The `get` is a value: `Eff.get r src variant` (`getVal`).

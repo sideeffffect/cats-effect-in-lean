@@ -26,12 +26,15 @@ the same (`tests/shared/src/test/scala/cats/effect/MemoizeSuite.scala:106-117`: 
 
 The memoized action is given to the mirror by a source code. `fa` itself is `faSrc`, a closure
 reference with the odd harness id `1`: user code can name it only if it holds it (`WF.avail`),
-and it never receives it. (Before, the code was the data number `0`, so user code inside `fa`
-could build a public `memoize` closure with source `0` and run `fa` outside the tested
-`memoize`.) The counted action of `countedTwoGets` has the code `.ref c`: it needs the counter
-handle, which user code never holds. The test-program closures (`TLam`) are not public either:
-`constFa` would run `fa` by name. So the counter of `memoizeAtMostOnce` changes only through the
-tested `memoize` (its source `.ref c`).
+and it never receives it. (Before, the code was the data number `0`.) The test-program closures
+(`TLam`) are not public either: `constFa` would run `fa` by name.
+
+User code can still run `fa` again, as Scala can by recursion: with its own cell `k`, the
+source `.ref k` is `k.update(_ + 1) *> fa`, and the `Memoize` and `Timeout` closures with a
+source field are public (review 10, D1). Scala: `def fa: IO[Unit] = IO.ref(0).flatMap(r =>
+(r.update(_ + 1) *> fa).timeout(1.nano))`. No claim breaks: the counter of `memoizeAtMostOnce`
+is cell 0, which `countedTwoGets` allocates first and never gives to user code, so a user cell
+is never cell 0; the other statements are about the tested memo cell and the two `get` fibers.
 
 ## Test program (decision 50: only program fibers)
 
@@ -180,11 +183,10 @@ def timeoutOf? (id : Nat) : Option Timeout.TLam :=
 are not public (`constFa` would run `fa` by name; decision 58). -/
 def isLib (id : Nat) : Bool := CatsEffectInLean.Model.Memoize.isLib id
 
-/-- The `WellFormed` library of these statements (decision 56): `Memoize` closures, the
-`Bracket` leaves `reportK`/`reportEc`/`reportThunk`/`raiseK`/`asK`, and `Timeout` closures. They
-keep no closure id in a number field: their fields are source codes, `Ref`/`Deferred`/poll
-handles, errors, values and the variant number (`Model/Memoize.lean` `MLam.toVal`; the `Bracket`
-leaves listed hold an error or a value; `TLam.toVal`). So `Lib.idFree` is exact. -/
+/-- The `WellFormed` library of these statements: `Memoize` closures, the `Bracket` leaves
+`reportK`/`reportEc`/`reportThunk`/`raiseK`/`asK`, and `Timeout` closures (`Model/Memoize.lean`
+`isLib`). Decision 58: references are `Val.fn` values that `WellFormed` follows structurally, so
+the `Lib` lists only the public ids. -/
 @[reducible] def memoLib : Lib := Lib.idFree isLib
 
 private def noUser : Nat → Val → View → UserResult := fun _ _ _ =>

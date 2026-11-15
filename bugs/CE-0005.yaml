@@ -1,6 +1,6 @@
 id: CE-0005
 title: "IO.bracketFull calls `use` while a cancel is pending; a throwing `use` turns a canceled bracket into Errored (kernel bracketFull gives Canceled)"
-status: draft  # found in Phase 6 track G (2026-11-10); Lean refutation done, waits for review
+status: draft  # found in Phase 6 track G (2026-11-10); reviewed FAITHFUL (low strength) in review/2026-11-10-review-batch-4.md, verdict carried in review/2026-11-15-review-batch-10.md (light re-check)
 priority: low
 kind: twin-divergence
 area: core

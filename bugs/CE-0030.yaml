@@ -1,6 +1,6 @@
 id: CE-0030
 title: "IO#memoize: a `get` that races with the self-cancelation of `fa` waits forever in a masked `never` and cannot be canceled"
-status: draft  # found in Phase 6 track M (2026-11-10); Lean refutation done, waits for review
+status: draft  # found in Phase 6 track M (2026-11-10); reviewed FAITHFUL (with caveats) in review/2026-11-10-review-batch-4.md, witness checked against the deep hypotheses in review/2026-11-15-review-batch-8.md, FAITHFUL in review/2026-11-15-review-batch-10.md
 priority: medium
 kind: liveness
 area: kernel
