@@ -105,43 +105,6 @@ def checkModule (env : Environment) (who : String) (n pfx : Name) : List String 
       [s!"{who}: `{n}` is declared in module `{m}`, expected a module under `{pfx}`"]
   | none => [s!"{who}: `{n}` is not from an imported module"]
 
-/-! ### Check `lib-fields` (decision 56)
-
-A `WellFormed` statement whose `Lib` has no function fields uses the shallow capture. That is right
-only for libraries whose closures keep no closure id in a number field. The audit cannot decide
-that by itself, so every such use must carry a written justification (`Entry.libNote`). A use is
-`Lib.idFree` (also through the coercion from `Nat → Bool`), or a `Lib.mk ok (fun _ => [])` literal,
-in the value of `prop` or of any definition that it uses (transitively, within the project). -/
-
-/-- A `Lib.mk` literal whose `fields` is the constant empty list. -/
-def isFieldlessLibLit (e : Expr) : Bool :=
-  e.isAppOfArity ``CatsEffectInLean.Model.Lib.mk 2 &&
-    match e.getArg! 1 with
-    | .lam _ _ b _ => b.isAppOf ``List.nil
-    | _ => false
-
-/-- Does `prop` use a `Lib` without function fields? Walks the definitions it uses (names under
-`CatsEffectInLean` or `AuditFixtures`), with a work bound. -/
-def usesFieldlessLib (env : Environment) (prop : Name) : Bool := Id.run do
-  let inScope (n : Name) : Bool := (`CatsEffectInLean).isPrefixOf n || (`AuditFixtures).isPrefixOf n
-  let mut todo : List Name := [prop]
-  let mut seen : NameSet := {}
-  for _ in [0:200000] do
-    match todo with
-    | [] => return false
-    | n :: rest =>
-      todo := rest
-      if seen.contains n then continue
-      seen := seen.insert n
-      if n == ``CatsEffectInLean.Model.Lib.idFree then return true
-      match env.find? n with
-      | some (.defnInfo d) =>
-        if (d.value.find? isFieldlessLibLit).isSome then return true
-        for c in d.value.getUsedConstants do
-          if inScope c && !seen.contains c then todo := c :: todo
-      | _ => pure ()
-  return true
-
 /-- The exact type that the theorem of an entry must have. -/
 def expectedType (prop : Name) : Status → Option Expr
   | .proven => some (.const prop [])
@@ -166,9 +129,6 @@ def checkEntry (cfg : Config) (env : Environment) (e : Entry) (full : Bool := tr
       errs := errs ++ [s!"{who}: property `{e.prop}` has type `{d.type}`, expected `Prop`"]
     errs := errs ++ checkModule env who e.prop cfg.propModulePrefix
     errs := errs ++ (← checkAxioms env who e.prop)
-    if e.libNote.trimAscii.isEmpty && usesFieldlessLib env e.prop then
-      errs := errs ++ [s!"{who}: property `{e.prop}` uses a Lib without function fields " ++
-        "(Lib.idFree, or { ok := _ }) and gives no libNote (decision 56)"]
   | some _ => errs := errs ++ [s!"{who}: property `{e.prop}` is not a `def`"]
   -- the theorem
   match expectedType e.prop e.status, e.thm with

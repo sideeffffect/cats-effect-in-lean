@@ -279,6 +279,10 @@
 - Updated: Agent workflow (closure references section)
 - Raw: raw/project-decisions/2026-11-15-decision-58-closure-refs.md
 
+## [2026-11-15] ingest | Track Res: decision 58 core (Val.fn closure references)
+- Updated: Outcome sets (decision 58 rule), Resource use/both (harness, Private = S2), Bracket model (F1), Registry and audit (check 9 removed), Agent workflow
+- Raw: raw/cats-effect/2026-11-15-decision-58-core-notes.md
+
 ## [2026-11-15] ingest | Heavy CI fixes after run 43651882144 and review batch 8
 - Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md (section "Fixes after CI run 43651882144")
 - Updated: Registry and audit (heavy CI fixes)

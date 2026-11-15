@@ -121,18 +121,18 @@ inductive Src where
 /-- The code of a source. -/
 def Src.toVal : Src → Val
   | .ext s => .left s
-  | .deferUse use a m p => .right (cloVal ns 100 [.nat use, a, .poll m p])
-  | .pollUnitThen use a m p => .right (cloVal ns 101 [.nat use, a, .poll m p])
-  | .pollDefer use a m p => .right (cloVal ns 102 [.nat use, a, .poll m p])
+  | .deferUse use a m p => .right (cloVal ns 100 [.fn use, a, .poll m p])
+  | .pollUnitThen use a m p => .right (cloVal ns 101 [.fn use, a, .poll m p])
+  | .pollDefer use a m p => .right (cloVal ns 102 [.fn use, a, .poll m p])
 
 /-- The inverse of `Src.toVal`. -/
 def Src.ofVal : Val → Option Src
   | .left s => some (.ext s)
   | .right c =>
     match ofCloVal c with
-    | some (k, 100, [.nat use, a, .poll m p]) => if k == ns then some (.deferUse use a m p) else none
-    | some (k, 101, [.nat use, a, .poll m p]) => if k == ns then some (.pollUnitThen use a m p) else none
-    | some (k, 102, [.nat use, a, .poll m p]) => if k == ns then some (.pollDefer use a m p) else none
+    | some (k, 100, [.fn use, a, .poll m p]) => if k == ns then some (.deferUse use a m p) else none
+    | some (k, 101, [.fn use, a, .poll m p]) => if k == ns then some (.pollUnitThen use a m p) else none
+    | some (k, 102, [.fn use, a, .poll m p]) => if k == ns then some (.pollDefer use a m p) else none
     | _ => none
   | _ => none
 
@@ -214,26 +214,26 @@ def BLam.toVal : BLam → Val
   | .reportK => cloVal ns 5 []
   | .reportEc e => cloVal ns 6 [.err e]
   | .reportThunk e => cloVal ns 7 [.err e]
-  | .gcBody src k => cloVal ns 8 [src, .nat k]
-  | .gcOnError k => cloVal ns 9 [.nat k]
-  | .gcTap k => cloVal ns 10 [.nat k]
-  | .bfBody acq use rel => cloVal ns 11 [.nat acq, .nat use, .nat rel]
-  | .bfK use rel m p => cloVal ns 12 [.nat use, .nat rel, .poll m p]
+  | .gcBody src k => cloVal ns 8 [src, .fn k]
+  | .gcOnError k => cloVal ns 9 [.fn k]
+  | .gcTap k => cloVal ns 10 [.fn k]
+  | .bfBody acq use rel => cloVal ns 11 [.fn acq, .fn use, .fn rel]
+  | .bfK use rel m p => cloVal ns 12 [.fn use, .fn rel, .poll m p]
   | .deferThunk => cloVal ns 13 []
-  | .deferEv use a m p => cloVal ns 14 [.nat use, a, .poll m p]
-  | .relA rel a => cloVal ns 15 [.nat rel, a]
+  | .deferEv use a m p => cloVal ns 14 [.fn use, a, .poll m p]
+  | .relA rel a => cloVal ns 15 [.fn rel, a]
   | .constThis src => cloVal ns 16 [src]
-  | .dropOc rel => cloVal ns 17 [.nat rel]
+  | .dropOc rel => cloVal ns 17 [.fn rel]
   | .constFin fin => cloVal ns 18 [fin]
-  | .dgcBody src k => cloVal ns 19 [src, .nat k]
-  | .dgcOnError k => cloVal ns 20 [.nat k]
+  | .dgcBody src k => cloVal ns 19 [src, .fn k]
+  | .dgcOnError k => cloVal ns 20 [.fn k]
   | .unitH => cloVal ns 21 []
-  | .dgcTap k => cloVal ns 22 [.nat k]
-  | .dbfBody acq use rel => cloVal ns 23 [.nat acq, .nat use, .nat rel]
-  | .dbfK use rel m p => cloVal ns 24 [.nat use, .nat rel, .poll m p]
-  | .thenUse use a => cloVal ns 25 [.nat use, a]
-  | .fbfBody acq use rel => cloVal ns 26 [.nat acq, .nat use, .nat rel]
-  | .fbfK use rel m p => cloVal ns 27 [.nat use, .nat rel, .poll m p]
+  | .dgcTap k => cloVal ns 22 [.fn k]
+  | .dbfBody acq use rel => cloVal ns 23 [.fn acq, .fn use, .fn rel]
+  | .dbfK use rel m p => cloVal ns 24 [.fn use, .fn rel, .poll m p]
+  | .thenUse use a => cloVal ns 25 [.fn use, a]
+  | .fbfBody acq use rel => cloVal ns 26 [.fn acq, .fn use, .fn rel]
+  | .fbfK use rel m p => cloVal ns 27 [.fn use, .fn rel, .poll m p]
 
 /-- The inverse of `BLam.toVal` on the tag and the fields (namespace already checked). -/
 def BLam.ofFields : Nat → List Val → Option BLam
@@ -245,26 +245,26 @@ def BLam.ofFields : Nat → List Val → Option BLam
   | 5, [] => some .reportK
   | 6, [.err e] => some (.reportEc e)
   | 7, [.err e] => some (.reportThunk e)
-  | 8, [src, .nat k] => some (.gcBody src k)
-  | 9, [.nat k] => some (.gcOnError k)
-  | 10, [.nat k] => some (.gcTap k)
-  | 11, [.nat acq, .nat use, .nat rel] => some (.bfBody acq use rel)
-  | 12, [.nat use, .nat rel, .poll m p] => some (.bfK use rel m p)
+  | 8, [src, .fn k] => some (.gcBody src k)
+  | 9, [.fn k] => some (.gcOnError k)
+  | 10, [.fn k] => some (.gcTap k)
+  | 11, [.fn acq, .fn use, .fn rel] => some (.bfBody acq use rel)
+  | 12, [.fn use, .fn rel, .poll m p] => some (.bfK use rel m p)
   | 13, [] => some .deferThunk
-  | 14, [.nat use, a, .poll m p] => some (.deferEv use a m p)
-  | 15, [.nat rel, a] => some (.relA rel a)
+  | 14, [.fn use, a, .poll m p] => some (.deferEv use a m p)
+  | 15, [.fn rel, a] => some (.relA rel a)
   | 16, [src] => some (.constThis src)
-  | 17, [.nat rel] => some (.dropOc rel)
+  | 17, [.fn rel] => some (.dropOc rel)
   | 18, [fin] => some (.constFin fin)
-  | 19, [src, .nat k] => some (.dgcBody src k)
-  | 20, [.nat k] => some (.dgcOnError k)
+  | 19, [src, .fn k] => some (.dgcBody src k)
+  | 20, [.fn k] => some (.dgcOnError k)
   | 21, [] => some .unitH
-  | 22, [.nat k] => some (.dgcTap k)
-  | 23, [.nat acq, .nat use, .nat rel] => some (.dbfBody acq use rel)
-  | 24, [.nat use, .nat rel, .poll m p] => some (.dbfK use rel m p)
-  | 25, [.nat use, a] => some (.thenUse use a)
-  | 26, [.nat acq, .nat use, .nat rel] => some (.fbfBody acq use rel)
-  | 27, [.nat use, .nat rel, .poll m p] => some (.fbfK use rel m p)
+  | 22, [.fn k] => some (.dgcTap k)
+  | 23, [.fn acq, .fn use, .fn rel] => some (.dbfBody acq use rel)
+  | 24, [.fn use, .fn rel, .poll m p] => some (.dbfK use rel m p)
+  | 25, [.fn use, a] => some (.thenUse use a)
+  | 26, [.fn acq, .fn use, .fn rel] => some (.fbfBody acq use rel)
+  | 27, [.fn use, .fn rel, .poll m p] => some (.fbfK use rel m p)
   | _, _ => none
 
 /-- The closure id (odd, `Codec.libFn`). -/
@@ -505,35 +505,12 @@ def isLib (id : Nat) : Bool :=
   | some l => l.good
   | none => false
 
-/-- The closure ids in a source code (`Src`): the `use` function of an internal source. An
-external source (`Src.ext s`) is a value; its handles are seen directly. -/
-def Src.fnIds (c : Val) : List Nat :=
-  match Src.ofVal c with
-  | some (.deferUse use _ _ _) | some (.pollUnitThen use _ _ _) | some (.pollDefer use _ _ _) => [use]
-  | _ => []
+/-- Decision 58: closure references are `Val.fn` fields, which `WellFormed` follows structurally.
+Kept only so that other tracks still compile until they drop `Lib.fields` (ignored). -/
+def fnFields (_ : Val) : List Nat := []
 
-/-- The function fields of a closure of this mirror (decision 56, `Lib.fields`): the user
-functions and leaves that it names by number. -/
-def BLam.fnIds : BLam → List Nat
-  | .gBody src fin => Src.fnIds src ++ Src.fnIds fin
-  | .gOnError fin | .gTap fin | .constFin fin => Src.fnIds fin
-  | .gcBody src k | .dgcBody src k => Src.fnIds src ++ [k]
-  | .gcOnError k | .gcTap k | .dgcOnError k | .dgcTap k => [k]
-  | .bfBody acq use rel | .dbfBody acq use rel | .fbfBody acq use rel => [acq, use, rel]
-  | .bfK use rel _ _ | .dbfK use rel _ _ | .fbfK use rel _ _ => [use, rel]
-  | .deferEv use _ _ _ | .thenUse use _ => [use]
-  | .relA rel _ | .dropOc rel => [rel]
-  | .constThis src => Src.fnIds src
-  | _ => []
-
-/-- `Lib.fields` of this mirror on a closure value. -/
-def fnFields (c : Val) : List Nat :=
-  match ofCloVal c with
-  | some (k, tag, fs) => if k == ns then ((BLam.ofFields tag fs).map BLam.fnIds).getD [] else []
-  | none => []
-
-/-- The library of this mirror for `WellFormed` (decision 56): `isLib` and the function fields. -/
-def lib : Lib := { ok := isLib, fields := fnFields }
+/-- The library of this mirror for `WellFormed`. -/
+def lib : Lib := { ok := isLib }
 
 /-! ## Lemmas: an environment that runs the mirror
 

@@ -90,8 +90,9 @@ def exitCanceled : Val := .ocCanceled
 
 /-- The `resource` function of an `Allocate` (`Poll[F] => F[(A, ExitCase => F[Unit])]`). -/
 inductive AllocFn where
-  /-- User code (`Resource.applyFull(resource)`, `Resource.scala:879-880`): user function
-  `id` of `REnv.user`, called with the `poll` value. -/
+  /-- User code (`Resource.applyFull(resource)`, `Resource.scala:879-880`): the function value
+  with closure id `id` (`Val.fn id`, decision 58; user function `id / 2` of `REnv.user` for an
+  even id, `fnIndex`), called with the `poll` value. -/
   | user (id : Nat)
   /-- `Resource.make(acquire)(release)` (`Resource.scala:900-902`) =
   `apply(acquire.map(a => a -> release(a)))`; `apply` (`:826-832`) =
@@ -134,8 +135,8 @@ inductive RelFn where
   /-- `(_: ExitCase) => release` (`Resource.scala:830`), where `release` = `release(a)` of
   `make` (`Resource.scala:902`): `REnv.release k a`. -/
   | const (k : Nat) (a : Val)
-  /-- A function value from user code: user function `id` of `REnv.user`, called with the
-  `ExitCase`. -/
+  /-- A function value from user code: closure id `id` (`Val.fn id`, decision 58; `fnIndex`),
+  called with the `ExitCase`. -/
   | user (id : Nat)
   /-- `rel2 = (ec: ExitCase) => rel(ec).guarantee(F.unit >> release(ec))`
   (`Resource.scala:490`). Application not mirrored (module doc). -/
@@ -148,13 +149,13 @@ inductive RelFn where
 def RelFn.toVal : RelFn → Val
   | .unit => tagged 0 .unit
   | .const k a => tagged 1 (.pair (.nat k) a)
-  | .user id => tagged 2 (.nat id)
+  | .user id => tagged 2 (.fn id)
   | .guarantee a b => tagged 3 (.pair a.toVal b.toVal)
 
 def RelFn.ofVal : Val → Option RelFn
   | .pair (.nat 0) .unit => some .unit
   | .pair (.nat 1) (.pair (.nat k) a) => some (.const k a)
-  | .pair (.nat 2) (.nat id) => some (.user id)
+  | .pair (.nat 2) (.fn id) => some (.user id)
   | .pair (.nat 3) (.pair a b) =>
     match RelFn.ofVal a, RelFn.ofVal b with
     | some a', some b' => some (.guarantee a' b')
@@ -178,11 +179,11 @@ def stackOfVal : Val → Option Stack
   | _ => none
 
 def allocFnToVal : AllocFn → Val
-  | .user id => tagged 0 (.nat id)
+  | .user id => tagged 0 (.fn id)
   | .make a r => tagged 1 (.pair (.nat a) (.nat r))
 
 def allocFnOfVal : Val → Option AllocFn
-  | .pair (.nat 0) (.nat id) => some (.user id)
+  | .pair (.nat 0) (.fn id) => some (.user id)
   | .pair (.nat 1) (.pair (.nat a) (.nat r)) => some (.make a r)
   | _ => none
 
@@ -250,6 +251,11 @@ def cloFn (c : Clo) : Fn := libFn c.toVal
 /-- User function `k` (even id). -/
 def uid (k : Nat) : Fn := .user (2 * k)
 
+/-- The `REnv.user` index of a closure id: user function `id / 2` for an even id; an odd id (a
+library closure that an extension of this model runs as a function value, `ResourceUse`) is passed
+on as it is. -/
+def fnIndex (id : Nat) : Nat := if id % 2 == 0 then id / 2 else id
+
 /-- User code at the `Resource` level. See the module doc. -/
 structure REnv where
   /-- Ordinary user code. Function `k` has id `2 * k` in programs (`uid k`). -/
@@ -304,7 +310,7 @@ def applyRel (r : REnv) (v : View) : RelFn → Val → List UserEffect × Except
   | .unit, _ => ([], .ok (.pure .unit))
   -- `(_: ExitCase) => release` (`Resource.scala:830`)
   | .const k a, _ => ([], r.release k a)
-  | .user id, ec => progOf (r.user.callV id ec v)
+  | .user id, ec => progOf (r.user.callV (fnIndex id) ec v)
   -- `rel2` (`Resource.scala:490`): not mirrored
   | .guarantee _ _, _ => ([], .error notMirrored)
 
@@ -326,7 +332,7 @@ def cloCall (r : REnv) (c : Clo) (arg : Val) (v : View) : UserResult :=
     let k := cloFn (.allocK stack release arg)
     match res with
     | .user id =>
-      let (es, p) := progOf (r.user.callV id arg v)
+      let (es, p) := progOf (r.user.callV (fnIndex id) arg v)
       withEffects es (p.map (fun p => .flatMap p k))
     | .make acq rel =>
       -- `_ => resource` with `resource = acquire.map(a => a -> release(a)).map { ... }`
@@ -400,32 +406,15 @@ def REnv.toEnv (r : REnv) : UserEnv where
 /-- The library closures of this model: odd ids that decode to a `Clo`. -/
 def isLib (id : Nat) : Bool := isLibId id && ((cloOfId id).bind Clo.ofVal).isSome
 
-/-- The user functions that a release function value names (`RelFn.user k` is user function `k`,
-program id `2 * k`). -/
-def RelFn.fnIds : RelFn → List Nat
-  | .user k => [2 * k]
-  | .guarantee a b => a.fnIds ++ b.fnIds
-  | _ => []
-
-/-- The function fields of a closure of this mirror (decision 56, `Lib.fields`). `Bind`, acquire
-and release codes are `REnv` functions (no captured handles); `AllocFn.user k` and
-`RelFn.user k` name user function `k` (program id `2 * k`). -/
-def Clo.fnIds : Clo → List Nat
-  | .evalK _ r | .onErrorH r => r.fnIds
-  | .allocBody (.user k) _ r => 2 * k :: r.fnIds
-  | .allocBody _ _ r | .allocK _ r _ => r.fnIds
-  | _ => []
-
-def fnFields (c : Val) : List Nat := ((Clo.ofVal c).map Clo.fnIds).getD []
-
-/-- The library of this mirror for `WellFormed` (decision 56). -/
-def lib : Lib := { ok := isLib, fields := fnFields }
+/-- The library of this mirror for `WellFormed` (decision 58: function values are `Val.fn`
+fields, which `WellFormed` follows structurally). -/
+def lib : Lib := { ok := isLib }
 
 /-- A `Resource` value that user code built holds only held handles (`mem`). Its `Allocate`
 user functions are user functions of `REnv.user` (id `k` is `uid k` in programs), its `Eval`
 programs pass `WF.progOK`. `make` names closed programs (`REnv.acquire`, `REnv.release`). -/
 def Res.ok (mem : Handle → Bool) : Res → Bool
-  | .allocate (.user k) => WF.capOK lib mem (2 * k)
+  | .allocate (.user id) => WF.fnOK lib mem (.user id)
   | .allocate (.make _ _) => true
   | .bind source _ => Res.ok mem source
   | .pure a => WF.sub mem a.handles

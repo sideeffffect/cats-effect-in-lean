@@ -65,9 +65,6 @@ structure Entry where
   bug : Option String := none
   /-- Free text, for example why an `open` entry is hard. -/
   note : String := ""
-  /-- Decision 56: if `prop` uses a `WellFormed` library without function fields (`Lib.idFree`),
-  why that is right: its closures keep no closure id in a number field. The audit requires it. -/
-  libNote : String := ""
   deriving Repr, Inhabited
 
 /-- The registry. One entry per (law, instance) (decision 16). -/
@@ -75,7 +72,6 @@ def registry : List Entry := [
   { id := "laws.MonadCancelLaws.canceledAssociatesLeftOverFlatMap.IO"
     rows := ["laws.MonadCancelLaws.canceledAssociatesLeftOverFlatMap"]
     prop := ``Props.IO.MonadCancelLaws.canceledAssociatesLeftOverFlatMap
-    libNote := "Plain IO (WellFormedIO = WellFormed (Lib.idFree fun _ => false)): no library closure is allowed, so no closure keeps an id in a number field."
     status := .proven
     thm := ``Proofs.IO.MonadCancelLaws.canceledAssociatesLeftOverFlatMap_proven
     note := "IO, EqvP (all schedules, preemption at any run-loop iteration); fa never runs \
@@ -83,7 +79,6 @@ def registry : List Entry := [
   { id := "laws.MonadCancelLaws.forceRCanceledShortCircuits.IO"
     rows := ["laws.MonadCancelLaws.forceRCanceledShortCircuits"]
     prop := ``Props.IO.MonadCancelLaws.forceRCanceledShortCircuits
-    libNote := "Plain IO (WellFormedIO = WellFormed (Lib.idFree fun _ => false)): no library closure is allowed, so no closure keeps an id in a number field."
     status := .proven
     thm := ``Proofs.IO.MonadCancelLaws.forceRCanceledShortCircuits_proven
     note := "IO, EqvP; forceR = handleError(_ => ()).productR (IO.scala:452-454); fa never runs \
@@ -91,7 +86,6 @@ def registry : List Entry := [
   { id := "laws.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary.IO"
     rows := ["laws.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary"]
     prop := ``Props.IO.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary
-    libNote := "Plain IO (WellFormedIO = WellFormed (Lib.idFree fun _ => false)): no library closure is allowed, so no closure keeps an id in a number field."
     status := .«open»
     note := "Believed true: the NB comment (L/MonadCancelLaws.scala:47-60) is about the monad laws, \
       not this law. Bounded smoke tests (11 fa, picks and outside cancels) agree. Proof needs a \
@@ -100,7 +94,6 @@ def registry : List Entry := [
   { id := "laws.MonadCancelLaws.uncancelablePollIsIdentity.IO"
     rows := ["laws.MonadCancelLaws.uncancelablePollIsIdentity"]
     prop := ``Props.IO.MonadCancelLaws.uncancelablePollIsIdentity
-    libNote := "Plain IO (WellFormedIO = WellFormed (Lib.idFree fun _ => false)): no library closure is allowed, so no closure keeps an id in a number field."
     status := .«open»
     note := "Open, statement now with EqvP (decision 36). The replay-Eqv difference for \
       fa = start(emit 9) >> emit 1 >> n flatMaps >> emit 2 (n = 509 at default thresholds) is gone: \
@@ -111,7 +104,6 @@ def registry : List Entry := [
     rows := ["core.IO.syncStep#2", "core.IO.IOAsync.syncStep", "core.SyncStep.MaxSteps",
       "core.SyncStep.interpret#2", "core.SyncIO.unsafeRunSync"]
     prop := ``Props.Calibration.syncStepIdentitySyncIO
-    libNote := "Lib.idFree (fun _ => false): no library closure is allowed, so no closure keeps an id in a number field."
     status := .refuted
     thm := some ``Proofs.Calibration.syncStepIdentitySyncIO_refuted
     bug := some "bugs/CE-0001.yaml"
@@ -145,7 +137,6 @@ def registry : List Entry := [
       "core.IO.timeout", "core.IO.racePair",
       "core.IOFiber.runLoop.RacePair", "core.IO.asyncCheckAttempt"]
     prop := ``Props.Calibration.QueueTimeout.takeTimeoutNoLostElement
-    libNote := "queueLib = Lib.idFree isLib: Queue and Timeout closures keep no closure id in a number field (Props/Calibration/QueueTimeout.lean, doc of queueLib)."
     status := .refuted
     thm := some ``Proofs.Calibration.QueueTimeout.takeTimeoutNoLostElement_refuted
     bug := some "bugs/CE-0003.yaml"
@@ -182,7 +173,6 @@ def registry : List Entry := [
       "core.IO.bothOutcome", "core.IO.bothOutcome#2", "kernel.GenSpawn.race",
       "kernel.GenSpawn.raceOutcome", "kernel.GenSpawn.both", "kernel.GenSpawn.bothOutcome"]
     prop := ``Props.Phase6.Race.combNoLeak
-    libNote := "raceLib = Lib.idFree isLib: Race and Timeout closures keep no closure id in a number field (Props/Phase6/Race.lean, doc of raceLib)."
     status := .«open»
     note := "No leaked fiber: for the four kernel defaults (IO dispatches to them, no own body), \
       all WellFormed sides, all user code and all PChoice schedules, when the root (the \
@@ -199,7 +189,6 @@ def registry : List Entry := [
       "core.IO.bothOutcome", "core.IO.bothOutcome#2", "kernel.GenSpawn.race",
       "kernel.GenSpawn.raceOutcome", "kernel.GenSpawn.both", "kernel.GenSpawn.bothOutcome"]
     prop := ``Props.Phase6.Race.combCanceledNoLeak
-    libNote := "raceLib = Lib.idFree isLib: Race and Timeout closures keep no closure id in a number field (Props/Phase6/Race.lean, doc of raceLib)."
     status := .«open»
     note := "Decision 50 form of combNoLeak: a parent starts the combinator, cancels it and joins \
       it; at root completion fiber 1 has no live race child. Same smoke evidence; open for the \
@@ -210,7 +199,6 @@ def registry : List Entry := [
   { id := "core.IO.timeout.noLeak"
     rows := ["core.IO.timeout"]
     prop := ``Props.Phase6.Race.timeoutNoLeak
-    libNote := "raceLib = Lib.idFree isLib: Race and Timeout closures keep no closure id in a number field (Props/Phase6/Race.lean, doc of raceLib)."
     status := .«open»
     note := "fa.timeout(d), direct and canceled by a parent (decision 50): at root completion the \
       timeout's racePair (source and sleep) has no live child. Smoke as combNoLeak; open. Track P (2026-11-10): not settled. Proven so far: F1/F1b/F2 frame lemmas for all runs \
@@ -220,7 +208,6 @@ def registry : List Entry := [
   { id := "core.IO.raceOutcome.isWinnerOutcome"
     rows := ["core.IO.raceOutcome", "kernel.GenSpawn.raceOutcome"]
     prop := ``Props.Phase6.Race.raceOutcomeIsWinnerOutcome
-    libNote := "raceLib = Lib.idFree isLib: Race and Timeout closures keep no closure id in a number field (Props/Phase6/Race.lean, doc of raceLib)."
     status := .«open»
     note := "raceOutcome returns Left(oc) only if fiber 1 (fa) ended with oc, Right(oc) only if \
       fiber 2 (fb) did. Smoke: leaksmoke (0 violations). Open: same invariant argument (needs H, \
@@ -277,11 +264,10 @@ def registry : List Entry := [
       child canceled). Smoke by #guard with the hypotheses checked \
       (test/Phase6/BracketSmokeParent.lean: 18 inputs; a bracket without release breaks it). \
       Open: a universal proof needs an invariant on scheduler states (the onCancel release is on \
-      the finalizer stack iff counter 0 > counter 1). Review batch 6 (decision 56): a Bracket leaf that captured a counter handle could be \
-      named by number in BLam.thenUse; WellFormed now takes Bracket.lib, whose captured \
-      handles follow the function fields of library closures (deep WF.captured), so the \
-      forgery is rejected (Proofs/Phase6/PrivacyExamples.lean). Construction: the counters are \
-      the first cells of the run, never given to user code; events capture them." },
+      the finalizer stack iff counter 0 > counter 1). Decision 58: closure references are Val.fn; WellFormed holds user code to the available \
+      handles (WF.avail), so the batch 6 leaf forgery and the batch 8 F1 source forgery are \
+      rejected (Proofs/Phase6/PrivacyExamples.lean). Construction: the counters are the first \
+      cells of the run, never given to user code; events capture them." },
   { id := "core.IO.guarantee.finalizerOnce"
     rows := ["core.IO.guarantee"]
     prop := ``Props.Phase6.Bracket.guaranteeFinalizerOnce
@@ -292,16 +278,14 @@ def registry : List Entry := [
       kernel.MonadCancel.guarantee removed (not mirrored here). Satisfiable: \
       Proofs.Phase6.BracketWitness.guaranteeFinalizerOnce_satisfiable. Smoke by #guard with the \
       hypotheses checked (12 inputs; a guarantee without finalizer breaks it). Open: same \
-      missing state invariant as core.IO.bracket.releaseOnce. Review batch 6 (decision 56): a Bracket leaf that captured a counter handle could be \
-      named by number in BLam.thenUse; WellFormed now takes Bracket.lib, whose captured \
-      handles follow the function fields of library closures (deep WF.captured), so the \
-      forgery is rejected (Proofs/Phase6/PrivacyExamples.lean). Construction: the counters are \
-      the first cells of the run, never given to user code; events capture them." },
+      missing state invariant as core.IO.bracket.releaseOnce. Decision 58: closure references are Val.fn; WellFormed holds user code to the available \
+      handles (WF.avail), so the batch 6 leaf forgery and the batch 8 F1 source forgery are \
+      rejected (Proofs/Phase6/PrivacyExamples.lean). Construction: the counters are the first \
+      cells of the run, never given to user code; events capture them." },
   -- Phase 6, track M (memoize)
   { id := "core.IO.memoize.noStuckGet"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeNoStuckGet
-    libNote := "memoLib = Lib.idFree isLib: Memoize closures, the listed Bracket leaves and Timeout closures keep no closure id in a number field (Props/Phase6/Memoize.lean, doc of memoLib). The CE-0030 witness meets this hypothesis unchanged (same Lib)."
     status := .refuted
     thm := some ``Proofs.Phase6.memoizeNoStuckGet_refuted
     bug := some "bugs/CE-0030.yaml"
@@ -318,7 +302,6 @@ def registry : List Entry := [
   { id := "core.IO.memoize.getsAgree"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeGetsAgree
-    libNote := "memoLib = Lib.idFree isLib: Memoize closures, the listed Bracket leaves and Timeout closures keep no closure id in a number field (Props/Phase6/Memoize.lean, doc of memoLib). The CE-0030 witness meets this hypothesis unchanged (same Lib)."
     status := .«open»
     note := "Two concurrent gets observe the same outcome when the root completes (all \
       WellFormed fa, all PChoice schedules). Smoke: 9 fa x 400 random schedules, 0 violations; a \
@@ -329,7 +312,6 @@ def registry : List Entry := [
   { id := "core.IO.memoize.atMostOnce"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeAtMostOnce
-    libNote := "memoLib = Lib.idFree isLib: Memoize closures, the listed Bracket leaves and Timeout closures keep no closure id in a number field (Props/Phase6/Memoize.lean, doc of memoLib). The CE-0030 witness meets this hypothesis unchanged (same Lib)."
     status := .«open»
     note := "Without a cancel from the program, fa starts at most once (counter <= 1 in every \
       reachable state of countedTwoGets). Smoke: 9 fa x 400 random schedules, max 1; a memoize \
@@ -347,9 +329,10 @@ def registry : List Entry := [
     note := "Invariant: Resource.both(A, B).use(f) (Resource.scala:286-314, use = fold with \
       IO.bracketFull), sides are marked make in a harness with a log cell (the token, Ref 0, \
       allocated first); every run that ends: each release tag is logged as often as its acquire \
-      tag. Restated after review batch 6 (decision 56): harness privacy by construction \
-      (Props/Phase6/HarnessPrivacy.lean): events capture the token, codes are token names, user \
-      code cannot name a token (Private, no escape clause), WellFormed with the deep Lib. \
+      tag. Decision 58: closure references are Val.fn; WellFormed libH holds user code to the \
+      available handles (WF.avail: held, or own user closures); events and resource codes hold \
+      the token; Private = the Phase 5 REnv clauses for non-harness entries (review batch 8 S2); \
+      no user-code restriction beyond WellFormed (S1 gone). \
       Counterexample: A's release raises; F.both in the makeCase release cancels the fiber of B's \
       finalizer chain before it starts (one schedule, decide +kernel); all hypotheses proven \
       (also the satisfiability witness). Fixed twin (attempt both chains) satisfies the \
@@ -362,7 +345,7 @@ def registry : List Entry := [
     status := .«open»
     note := "Invariant (decision 50): make(acq)(rel).use(f) in the harness, directly or under the \
       harness parent that cancels and joins; release tag logged exactly as often as the acquire \
-      tag. Harness privacy by construction (decision 56, HarnessPrivacy; Private, deep Lib). \
+      tag. Decision 58 harness (Val.fn, WF.avail; Private = REnv clauses, S2). \
       Satisfiability witnesses with and without the parent (Proofs/Phase6/ResourceWitness.lean, \
       use_sat). Smoke: hypotheses evaluated, 3 releases x 4 bodies x parent/no parent x 900 \
       schedules (test/Phase6/ResourceSmoke.lean). Open: needs the bracket state invariant of \
@@ -372,8 +355,8 @@ def registry : List Entry := [
     prop := ``Props.Phase6.Resource.flatMapReleaseOrder
     status := .«open»
     note := "Invariant: make(A).flatMap(_ => make(B)).use(f) in the harness: each release tag iff its \
-      acquire tag, and RB is logged before RA (LIFO; fold nests bracketFull). Harness privacy by \
-      construction (decision 56; the flatMap code is a token name). Satisfiability witnesses with \
+      acquire tag, and RB is logged before RA (LIFO; fold nests bracketFull). Decision 58 harness \
+      (the flatMap function is a harness entry, excluded by Private). Satisfiability witnesses with \
       and without the parent (ResourceWitness.lean, flat_sat). Smoke: hypotheses evaluated, 24 \
       configurations x 900 schedules. Open: same missing state invariant, for two nested brackets." },
   { id := "kernel.Resource.eval.preservesCancelable"

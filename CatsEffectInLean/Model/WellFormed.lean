@@ -91,6 +91,8 @@ inductive Handle where
   | poll (maskId : Nat) (fiber : Nat)
   /-- The `cb` and `get` of one `IOCont` (`Val.cont`). -/
   | cont (state : Nat)
+  /-- A closure reference (`Val.fn`, decision 58). -/
+  | fn (id : Nat)
   deriving DecidableEq, Repr
 
 /-- The handles in a value. -/
@@ -102,25 +104,21 @@ def Val.handles : Val → List Handle
   | .deferred i => [.deferred i]
   | .poll m s => [.poll m s]
   | .cont s => [.cont s]
+  | .fn i => [.fn i]
   | _ => []
 
-/-- The library of a model (decision 56): `ok id` says that odd id `id` is a mirrored library
-lambda; `fields c` gives the closure ids that a library closure value `c` keeps in number fields
-(its function fields, for example `use` of `Bracket.BLam.thenUse use a`). A library that keeps no
-closure id in a number field has `fields = fun _ => []`. A plain `Nat → Bool` is such a library
-(the coercion). -/
+/-- The library of a model: `ok id` says that odd id `id` is a library closure that user code may
+name in a program (a public operation builds it). Decision 58: closure references are `Val.fn`
+values, so `WellFormed` follows them structurally (`Val.handles`); `fields` is **ignored** (kept
+only until the other tracks drop it; see `wiki/semantics/outcome-equivalence.md`). -/
 structure Lib where
   ok : Nat → Bool
   fields : Val → List Nat := fun _ => []
 
-/-- A library whose closures keep **no** closure id in a number field (an explicit claim, decision
-56). A registered statement that uses it (directly, through the coercion below, or through any
-definition) must give a written justification in its registry entry (`Entry.libNote`); the audit
-fails otherwise (`lake exe audit`, check `lib-fields`). So a statement cannot fall back to the
-shallow capture silently. -/
+/-- A library given by `ok` only. -/
 @[reducible] def Lib.idFree (ok : Nat → Bool) : Lib := { ok := ok }
 
-/-- A `Nat → Bool` is a library without function fields (`Lib.idFree`); the audit sees it. -/
+/-- A `Nat → Bool` is a library. -/
 instance : Coe (Nat → Bool) Lib := ⟨Lib.idFree⟩
 
 namespace WF
@@ -130,37 +128,47 @@ open Codec
 /-- Are all handles of `hs` held (`mem`)? -/
 def sub (mem : Handle → Bool) (hs : List Handle) : Bool := hs.all mem
 
-/-- The depth bound of `capturedD`: a closure field that names a closure whose field names a
-closure ... Real chains are short: a code is much larger than the numbers in it (`valToNat` of
-`nat 0` is 98), so a chain of depth `d` needs a number with more than `2 ^ d` bits. -/
+/-- The depth bound of `availD`: a user closure that captured a reference to a user closure that
+captured ... Each nested id is strictly smaller than its parent (its code is inside the parent's
+code), so real chains are short. At the bound `availD` answers "held only" (stricter). -/
 def capDepth : Nat := 64
 
-/-- The handles that the closure with id `id` captured (`Model/Codec.lean`, decision 56): the
-handles in its closure value, and, through each function field (`lib.fields`), the handles that
-the named closure captured, recursively. `none`: the depth bound is reached (the closure is then
-rejected, `capOK`). A closure that names another closure in a field holds that closure, so it
-holds what that closure captured (review batch 6: a `Bracket` leaf that captured a `Ref`, named
-by number in `BLam.thenUse`). -/
-def capturedD (lib : Lib) : Nat → Nat → Option (List Handle)
-  | 0, _ => none
-  | d + 1, id =>
-    match cloOfId id with
-    | some c => (lib.fields c).foldr (fun j acc =>
-        match capturedD lib d j, acc with
-        | some a, some b => some (a ++ b)
-        | _, _ => none) (some c.handles)
-    | none => some []
+/-- The handles that the closure with id `id` captured: the handles of its closure value
+(`Model/Codec.lean`), closure references (`Handle.fn`) included. A number that is not a closure
+code captures nothing. `lib` is not used (decision 58: no field lists). -/
+def cloHandles (id : Nat) : List Handle :=
+  match cloOfId id with
+  | some c => c.handles
+  | none => []
 
-/-- The captured handles of closure `id` (empty if the depth bound is reached; used as held
-handles of the closure itself, `CallOK`). -/
-def captured (lib : Lib) (id : Nat) : List Handle := (capturedD lib capDepth id).getD []
+/-- `cloHandles`, with the library of the statement (not used). -/
+def captured (_lib : Lib) (id : Nat) : List Handle := cloHandles id
 
-/-- A program may name closure `id` only if all its captured handles are held, and the depth
-bound is not reached. -/
-def capOK (lib : Lib) (mem : Handle → Bool) (id : Nat) : Bool :=
-  match capturedD lib capDepth id with
-  | some hs => sub mem hs
-  | none => false
+/-- The id of a closure reference. -/
+def _root_.CatsEffectInLean.Model.Handle.fnId? : Handle → Option Nat
+  | .fn k => some k
+  | _ => none
+
+/-- **The structural rule of decision 58.** A handle is available to code with held handles `mem`
+if it is held, or if it is a reference to a user closure (even id) whose captured handles are all
+available: user code makes new closures only through its own even ids, which carry their own
+captured values. A library closure (odd id) or any other handle is available only if held. -/
+def availD (mem : Handle → Bool) : Nat → Handle → Bool
+  | 0, h => mem h
+  | d + 1, h =>
+    mem h ||
+      match h.fnId? with
+      | some k => k % 2 == 0 && (cloHandles k).all (availD mem d)
+      | none => false
+
+/-- `availD` with the depth bound. -/
+def avail (mem : Handle → Bool) (h : Handle) : Bool := availD mem capDepth h
+
+/-- All handles of `hs` are available. -/
+def subA (mem : Handle → Bool) (hs : List Handle) : Bool := hs.all (avail mem)
+
+/-- A program may name closure `id` only if all its captured handles are available. -/
+def capOK (lib : Lib) (mem : Handle → Bool) (id : Nat) : Bool := subA mem (captured lib id)
 
 /-- Clause 3 for runtime closures: only the ones that public operations build, with held
 handles. -/
@@ -170,19 +178,19 @@ def rtOK (mem : Handle → Bool) : RtFn → Bool
   -- `deferred.get` (`IODeferred.scala:71`, `Syntax.lean`, `IO.deferredGetOf`)
   | .deferredDefer d | .deferredFlatten d => mem (.deferred d)
   -- `deferred.complete(a)` (`IODeferred.scala:62-69`)
-  | .deferredComplete d v => mem (.deferred d) && sub mem v.handles
+  | .deferredComplete d v => mem (.deferred d) && subA mem v.handles
   -- `void` (`IO.scala:961-962`)
   | .voidK => true
   | _ => false
 
 /-- Clause 3: a function in a program that user code built. -/
 def fnOK (lib : Lib) (mem : Handle → Bool) : Fn → Bool
-  | .user id => (id % 2 == 0 || lib.ok id) && capOK lib mem id
+  | .user id => mem (.fn id) || ((id % 2 == 0 || lib.ok id) && capOK lib mem id)
   | .rt k => rtOK mem k
 
 /-- Clauses 1-3: a program that user code built, with held handles `mem`. -/
 def progOK (lib : Lib) (mem : Handle → Bool) : IO → Bool
-  | .pure v => sub mem v.handles
+  | .pure v => subA mem v.handles
   | .error _ | .realTime | .monotonic | .readEC | .canceled | .cede | .sleep _
   | .ioTrace | .readRT => true
   | .delay f | .uncancelable f | .ioCont f | .blocking _ f | .local f => fnOK lib mem f
@@ -219,6 +227,9 @@ open Classical in
 /-- A held-handle predicate as a `Bool` test (classical; only for statements). -/
 noncomputable def memOf (R : Handle → Prop) : Handle → Bool := fun h => decide (R h)
 
+/-- `avail` for a held-handle predicate (decision 58): held, or an own user closure. -/
+def AvailP (R : Handle → Prop) (h : Handle) : Prop := avail (memOf R) h = true
+
 /-- Clause 5 for the output. -/
 def OutOK (lib : Lib) (R : Handle → Prop) : UserOut → Prop
   | .ret x => ∀ h ∈ x.handles, R h
@@ -249,10 +260,11 @@ def ResultOK (lib : Lib) (R : Handle → Prop) (v : View) (r : UserResult) : Pro
   EffectsOK lib r.out R v.refs.length v.deferreds.length r.effects
 
 /-- Clauses 4 and 5 for the call of user function `id` on `arg` in view `v`. `H0`: the handles
-of the scope of the whole program. -/
+of the scope of the whole program. The held handles are the available ones (`AvailP`, decision 58):
+the reachable handles, and references to own user closures that capture only available handles. -/
 def CallOK (lib : Lib) (H0 : List Handle) (env : UserEnv) (id : Nat) (arg : Val)
     (v : View) : Prop :=
-  let R := Reach v (H0 ++ arg.handles ++ captured lib id)
+  let R := AvailP (Reach v (H0 ++ arg.handles ++ captured lib id))
   (∀ w, Agree R v w → env.callV id arg w = env.callV id arg v) ∧
   ResultOK lib R v (env.callV id arg v)
 
@@ -403,57 +415,238 @@ theorem cloOfId_userFn (c : Val) : cloOfId (2 * valToNat c) = some c := by
   simp only [cloOfId]
   rw [show (2 * valToNat c) / 2 = valToNat c by omega, natToVal_valToNat]
 
-/-- A library without function fields: the captured handles are the closure value's handles. -/
-theorem capturedD_coe (f : Nat → Bool) (d id : Nat) :
-    capturedD (f : Lib) (d + 1) id = some (match cloOfId id with | some c => c.handles | none => []) := by
-  simp only [capturedD]
-  split <;> rfl
+theorem captured_eq (lib : Lib) (id : Nat) : captured lib id = cloHandles id := rfl
 
-theorem captured_coe (f : Nat → Bool) (id : Nat) :
-    captured (f : Lib) id = (match cloOfId id with | some c => c.handles | none => []) := by
-  simp [captured, capDepth, capturedD_coe]
+theorem cloHandles_libFn (c : Val) : cloHandles (2 * valToNat c + 1) = c.handles := by
+  simp [cloHandles, cloOfId_libFn]
 
-theorem capOK_coe (f : Nat → Bool) (mem : Handle → Bool) (id : Nat) :
-    capOK (f : Lib) mem id = sub mem (match cloOfId id with | some c => c.handles | none => []) := by
-  simp [capOK, capDepth, capturedD_coe]
+theorem cloHandles_userFn (c : Val) : cloHandles (2 * valToNat c) = c.handles := by
+  simp [cloHandles, cloOfId_userFn]
 
 /-- A number that is not a closure code captures nothing. -/
+theorem cloHandles_of_none (id : Nat) (h : cloOfId id = none) : cloHandles id = [] := by
+  simp [cloHandles, h]
+
+theorem captured_of_none (lib : Lib) (id : Nat) (h : cloOfId id = none) : captured lib id = [] :=
+  cloHandles_of_none id h
+
 theorem capOK_of_none (lib : Lib) (mem : Handle → Bool) (id : Nat) (h : cloOfId id = none) :
     capOK lib mem id = true := by
-  unfold capOK; rw [show capDepth = 63 + 1 from rfl, capturedD, h]; rfl
+  simp [capOK, captured, cloHandles_of_none id h, subA]
 
-theorem captured_of_none (lib : Lib) (id : Nat) (h : cloOfId id = none) : captured lib id = [] := by
-  unfold captured; rw [show capDepth = 63 + 1 from rfl, capturedD, h]; rfl
+theorem captured_libFn (lib : Lib) (c : Val) : captured lib (2 * valToNat c + 1) = c.handles :=
+  cloHandles_libFn c
 
-/-- A closure value without function fields: its handles. -/
-theorem capOK_of_noFields (lib : Lib) (mem : Handle → Bool) (id : Nat) (c : Val) (h : cloOfId id = some c)
-    (hf : lib.fields c = []) : capOK lib mem id = sub mem c.handles := by
-  unfold capOK; rw [show capDepth = 63 + 1 from rfl, capturedD, h]; simp only [hf, List.foldr_nil]
+theorem captured_userFn (lib : Lib) (c : Val) : captured lib (2 * valToNat c) = c.handles :=
+  cloHandles_userFn c
 
-theorem captured_of_noFields (lib : Lib) (id : Nat) (c : Val) (h : cloOfId id = some c)
-    (hf : lib.fields c = []) : captured lib id = c.handles := by
-  unfold captured; rw [show capDepth = 63 + 1 from rfl, capturedD, h]; simp only [hf, List.foldr_nil, Option.getD_some]
+/-- A held handle is available. -/
+theorem avail_of_mem {mem : Handle → Bool} {h : Handle} (hm : mem h = true) : avail mem h = true := by
+  show availD mem (63 + 1) h = true
+  rw [availD, hm, Bool.true_or]
 
-/-- A closure without captured handles (library without function fields) passes `capOK`. -/
+/-- A handle that is not a closure reference is available only if held. -/
+theorem avail_iff_of_not_fn (mem : Handle → Bool) (h : Handle) (hh : ∀ k, h ≠ .fn k) :
+    avail mem h = mem h := by
+  show availD mem (63 + 1) h = mem h
+  rw [availD]
+  cases h with
+  | fn k => exact absurd rfl (hh k)
+  | _ => simp [Handle.fnId?]
+
+/-- A reference to a library closure (odd id) is available only if held: user code cannot make
+one (decision 58). -/
+theorem avail_fn_odd (mem : Handle → Bool) (k : Nat) (hk : k % 2 = 1) :
+    avail mem (.fn k) = mem (.fn k) := by
+  show availD mem (63 + 1) (.fn k) = mem (.fn k)
+  rw [availD]
+  simp [Handle.fnId?, hk]
+
+/-- An available reference to a user closure that is not held: every handle it captured is
+available (one level of the rule; the depth bound only makes it stricter). -/
+theorem avail_fn_even_captured (mem : Handle → Bool) (d k : Nat) (h : availD mem (d + 1) (.fn k) = true)
+    (hn : mem (.fn k) = false) : k % 2 = 0 ∧ ∀ h' ∈ cloHandles k, availD mem d h' = true := by
+  rw [availD] at h
+  simp only [hn, Bool.false_or, Handle.fnId?, Bool.and_eq_true, beq_iff_eq, List.all_eq_true] at h
+  exact h
+
+@[simp] theorem subA_nil (mem : Handle → Bool) : subA mem [] = true := rfl
+
+@[simp] theorem subA_cons (mem : Handle → Bool) (h : Handle) (hs : List Handle) :
+    subA mem (h :: hs) = (avail mem h && subA mem hs) := rfl
+
+theorem subA_append (mem : Handle → Bool) (a b : List Handle) :
+    subA mem (a ++ b) = (subA mem a && subA mem b) := by simp [subA, List.all_append]
+
+@[simp] theorem avail_ref (mem : Handle → Bool) (i : Nat) : avail mem (.ref i) = mem (.ref i) :=
+  avail_iff_of_not_fn mem _ (by intro k h; cases h)
+@[simp] theorem avail_fiber (mem : Handle → Bool) (i : Nat) : avail mem (.fiber i) = mem (.fiber i) :=
+  avail_iff_of_not_fn mem _ (by intro k h; cases h)
+@[simp] theorem avail_deferred (mem : Handle → Bool) (i : Nat) : avail mem (.deferred i) = mem (.deferred i) :=
+  avail_iff_of_not_fn mem _ (by intro k h; cases h)
+@[simp] theorem avail_poll (mem : Handle → Bool) (m i : Nat) : avail mem (.poll m i) = mem (.poll m i) :=
+  avail_iff_of_not_fn mem _ (by intro k h; cases h)
+@[simp] theorem avail_cont (mem : Handle → Bool) (i : Nat) : avail mem (.cont i) = mem (.cont i) :=
+  avail_iff_of_not_fn mem _ (by intro k h; cases h)
+
+/-- `capOK` unfolded (for a library given by `ok` only, as before decision 58). -/
+theorem capOK_coe (f : Nat → Bool) (mem : Handle → Bool) (id : Nat) :
+    capOK (f : Lib) mem id = subA mem (match cloOfId id with | some c => c.handles | none => []) := rfl
+
+theorem captured_coe (f : Nat → Bool) (id : Nat) :
+    captured (f : Lib) id = (match cloOfId id with | some c => c.handles | none => []) := rfl
+
+/-- A closure without captured handles passes `capOK`. -/
 theorem capOK_coe_of_nil (f : Nat → Bool) (mem : Handle → Bool) (id : Nat)
     (h : (match cloOfId id with | some c => c.handles | none => []) = []) : capOK (f : Lib) mem id = true := by
   rw [capOK_coe, h]; rfl
 
-theorem captured_libFn (f : Nat → Bool) (c : Val) : captured (f : Lib) (2 * valToNat c + 1) = c.handles := by
-  simp [captured_coe, cloOfId_libFn]
+/-- `subA` holds if all handles are held. -/
+theorem subA_of_sub {mem : Handle → Bool} {hs : List Handle} (h : sub mem hs = true) : subA mem hs = true := by
+  simp only [sub, subA, List.all_eq_true] at *
+  exact fun x hx => avail_of_mem (h x hx)
 
-theorem captured_userFn (f : Nat → Bool) (c : Val) : captured (f : Lib) (2 * valToNat c) = c.handles := by
-  simp [captured_coe, cloOfId_userFn]
+theorem availP_iff_of_not_fn (R : Handle → Prop) (h : Handle) (hh : ∀ k, h ≠ .fn k) :
+    AvailP R h ↔ R h := by
+  simp [AvailP, avail_iff_of_not_fn _ h hh]
 
-theorem fnOK_userFn (lib : Nat → Bool) (mem : Handle → Bool) (c : Val) :
-    fnOK (lib : Lib) mem (userFn c) = sub mem c.handles := by
-  simp [fnOK, userFn, capOK_coe, cloOfId_userFn]
+@[simp] theorem availP_ref (R : Handle → Prop) (i : Nat) : AvailP R (.ref i) ↔ R (.ref i) :=
+  availP_iff_of_not_fn R _ (by intro k h; cases h)
+@[simp] theorem availP_fiber (R : Handle → Prop) (i : Nat) : AvailP R (.fiber i) ↔ R (.fiber i) :=
+  availP_iff_of_not_fn R _ (by intro k h; cases h)
+@[simp] theorem availP_deferred (R : Handle → Prop) (i : Nat) : AvailP R (.deferred i) ↔ R (.deferred i) :=
+  availP_iff_of_not_fn R _ (by intro k h; cases h)
+@[simp] theorem availP_poll (R : Handle → Prop) (m i : Nat) : AvailP R (.poll m i) ↔ R (.poll m i) :=
+  availP_iff_of_not_fn R _ (by intro k h; cases h)
+@[simp] theorem availP_cont (R : Handle → Prop) (i : Nat) : AvailP R (.cont i) ↔ R (.cont i) :=
+  availP_iff_of_not_fn R _ (by intro k h; cases h)
+
+/-- `AvailP` holds for a held handle. -/
+theorem availP_of {R : Handle → Prop} {h : Handle} (hr : R h) : AvailP R h :=
+  avail_of_mem (by simpa [memOf] using hr)
+
+theorem capOK_of_sub (lib : Lib) (mem : Handle → Bool) (id : Nat) (h : sub mem (cloHandles id) = true) :
+    capOK lib mem id = true := subA_of_sub h
+
+theorem fnOK_userFn (lib : Lib) (mem : Handle → Bool) (c : Val) :
+    fnOK lib mem (userFn c) = (mem (.fn (2 * valToNat c)) || subA mem c.handles) := by
+  simp only [fnOK, userFn, capOK, captured, cloHandles_userFn]
+  rw [show 2 * valToNat c % 2 = 0 by omega]
+  simp
 
 theorem fnOK_libFn (lib : Nat → Bool) (mem : Handle → Bool) (c : Val) :
-    fnOK (lib : Lib) mem (libFn c) = (lib (2 * valToNat c + 1) && sub mem c.handles) := by
-  simp only [fnOK, libFn, capOK_coe, cloOfId_libFn]
+    fnOK (lib : Lib) mem (libFn c) =
+      (mem (.fn (2 * valToNat c + 1)) || (lib (2 * valToNat c + 1) && subA mem c.handles)) := by
+  simp only [fnOK, libFn, capOK, captured, cloHandles_libFn]
   rw [show (2 * valToNat c + 1) % 2 = 1 by omega]
   rfl
+
+/-- `fnOK` of a user closure whose captured handles are available (a conditional `simp` lemma). -/
+theorem fnOK_userFn_of (lib : Lib) (mem : Handle → Bool) (c : Val) (h : subA mem c.handles = true) :
+    fnOK lib mem (userFn c) = true := by
+  rw [fnOK_userFn, h, Bool.or_true]
+
+/-- `fnOK` of a library closure that `lib` allows, with available captured handles. -/
+theorem fnOK_libFn_of (lib : Nat → Bool) (mem : Handle → Bool) (c : Val)
+    (hl : lib (2 * valToNat c + 1) = true) (h : subA mem c.handles = true) :
+    fnOK (lib : Lib) mem (libFn c) = true := by
+  rw [fnOK_libFn, hl, h]; simp
+
+/-! ### Monotonicity: more held handles keep every clause -/
+
+theorem availD_mono {m1 m2 : Handle → Bool} (hm : ∀ h, m1 h = true → m2 h = true) :
+    ∀ d h, availD m1 d h = true → availD m2 d h = true
+  | 0, h, H => hm h H
+  | d + 1, h, H => by
+    rw [availD] at H ⊢
+    simp only [Bool.or_eq_true] at H ⊢
+    rcases H with H | H
+    · exact .inl (hm h H)
+    · right
+      revert H
+      cases h.fnId? with
+      | none => simp
+      | some k =>
+        simp only [Bool.and_eq_true, List.all_eq_true]
+        exact fun ⟨hk, hall⟩ => ⟨hk, fun x hx => availD_mono hm d x (hall x hx)⟩
+
+theorem avail_mono {m1 m2 : Handle → Bool} (hm : ∀ h, m1 h = true → m2 h = true) (h : Handle)
+    (H : avail m1 h = true) : avail m2 h = true := availD_mono hm _ h H
+
+theorem subA_mono {m1 m2 : Handle → Bool} (hm : ∀ h, m1 h = true → m2 h = true) (hs : List Handle)
+    (H : subA m1 hs = true) : subA m2 hs = true := by
+  simp only [subA, List.all_eq_true] at *
+  exact fun x hx => avail_mono hm x (H x hx)
+
+theorem fnOK_mono (lib : Lib) {m1 m2 : Handle → Bool} (hm : ∀ h, m1 h = true → m2 h = true) (f : Fn)
+    (H : fnOK lib m1 f = true) : fnOK lib m2 f = true := by
+  cases f with
+  | user id =>
+    simp only [fnOK, capOK, Bool.or_eq_true, Bool.and_eq_true] at H ⊢
+    rcases H with H | ⟨h1, h2⟩
+    · exact .inl (hm _ H)
+    · exact .inr ⟨h1, subA_mono hm _ h2⟩
+  | rt k =>
+    simp only [fnOK] at H ⊢
+    cases k <;> simp only [rtOK, Bool.and_eq_true] at H ⊢ <;>
+      first | exact hm _ H | exact ⟨hm _ H.1, subA_mono hm _ H.2⟩ | exact H
+
+theorem progOK_mono (lib : Lib) {m1 m2 : Handle → Bool} (hm : ∀ h, m1 h = true → m2 h = true) :
+    ∀ p : IO, progOK lib m1 p = true → progOK lib m2 p = true
+  | .pure v, H => subA_mono hm _ H
+  | .error _, _ | .realTime, _ | .monotonic, _ | .readEC, _ | .canceled, _ | .cede, _ | .sleep _, _
+  | .ioTrace, _ | .readRT, _ => rfl
+  | .delay f, H | .uncancelable f, H | .ioCont f, H | .blocking _ f, H | .local f, H =>
+    fnOK_mono lib hm f H
+  | .map p f, H | .flatMap p f, H | .handleErrorWith p f, H => by
+    simp only [progOK, Bool.and_eq_true] at H ⊢
+    exact ⟨progOK_mono lib hm p H.1, fnOK_mono lib hm f H.2⟩
+  | .attempt p, H | .start p, H | .evalOn p _, H => progOK_mono lib hm p H
+  | .onCancel p q, H | .racePair p q, H => by
+    simp only [progOK, Bool.and_eq_true] at H ⊢
+    exact ⟨progOK_mono lib hm p H.1, progOK_mono lib hm q H.2⟩
+  | .unmaskRunLoop p m s, H => by
+    simp only [progOK, Bool.and_eq_true] at H ⊢
+    exact ⟨⟨H.1.1, hm _ H.1.2⟩, progOK_mono lib hm p H.2⟩
+  | .contGet s, H => hm _ H
+  | .endFiber, H => H
+
+/-- `ResultOK` is monotone in the held handles. -/
+theorem effectsOK_mono (lib : Lib) (out : UserOut) :
+    ∀ (es : List UserEffect) (R1 R2 : Handle → Prop) (nr nd : Nat), (∀ h, R1 h → R2 h) →
+      EffectsOK lib out R1 nr nd es → EffectsOK lib out R2 nr nd es
+  | [], R1, R2, _, _, hR, H => by
+    cases out with
+    | ret x => exact fun h hh => hR h (H h hh)
+    | prog p => exact progOK_mono lib (fun h => by simpa [memOf] using hR h) p H
+    | throw _ => trivial
+  | e :: es, R1, R2, nr, nd, hR, H => by
+    cases e with
+    | writeRef i x => exact ⟨hR _ H.1, fun h hh => hR h (H.2.1 h hh), effectsOK_mono lib out es R1 R2 nr nd hR H.2.2⟩
+    | invokeCb s x => exact ⟨hR _ H.1, fun h hh => hR h (H.2.1 h hh), effectsOK_mono lib out es R1 R2 nr nd hR H.2.2⟩
+    | deferCb s x => exact ⟨hR _ H.1, fun h hh => hR h (H.2.1 h hh), effectsOK_mono lib out es R1 R2 nr nd hR H.2.2⟩
+    | emit x => exact ⟨fun h hh => hR h (H.1 h hh), effectsOK_mono lib out es R1 R2 nr nd hR H.2⟩
+    | allocRef x =>
+      exact ⟨fun h hh => hR h (H.1 h hh), effectsOK_mono lib out es _ _ (nr + 1) nd
+        (fun h hh => hh.elim (fun a => .inl (hR h a)) .inr) H.2⟩
+    | allocDeferred =>
+      exact effectsOK_mono lib out es _ _ nr (nd + 1) (fun h hh => hh.elim (fun a => .inl (hR h a)) .inr) H
+    | report _ => exact effectsOK_mono lib out es R1 R2 nr nd hR H
+
+theorem resultOK_mono (lib : Lib) {R1 R2 : Handle → Prop} (hR : ∀ h, R1 h → R2 h) (v : View)
+    (r : UserResult) (H : ResultOK lib R1 v r) : ResultOK lib R2 v r :=
+  effectsOK_mono lib r.out r.effects R1 R2 _ _ hR H
+
+theorem agree_availP (R : Handle → Prop) (v w : View) : Agree (AvailP R) v w ↔ Agree R v w := by
+  simp [Agree]
+
+/-- `CallOK` from the reachable handles only (no own closures): the form of the proofs before
+decision 58. -/
+theorem callOK_of_reach {lib : Lib} {H0 : List Handle} {env : UserEnv} {id : Nat} {arg : Val} {v : View}
+    (hag : ∀ w, Agree (Reach v (H0 ++ arg.handles ++ captured lib id)) v w → env.callV id arg w = env.callV id arg v)
+    (hres : ResultOK lib (Reach v (H0 ++ arg.handles ++ captured lib id)) v (env.callV id arg v)) :
+    CallOK lib H0 env id arg v :=
+  ⟨fun w hw => hag w ((agree_availP _ v w).1 hw), resultOK_mono lib (fun _ h => availP_of h) v _ hres⟩
 
 /-! ### Lemmas for clause 6 (`PollOpaque`) -/
 

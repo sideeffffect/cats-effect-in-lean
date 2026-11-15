@@ -90,7 +90,7 @@ theorem callV_even (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
 theorem userR_ok (n : Nat) (R : Handle → Prop) (v : View) :
     WF.ResultOK lib R v (userR n) := by
   match n with
-  | 0 | 1 | 2 | 3 | 4 | 5 => simp [userR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.sub, Val.handles]
+  | 0 | 1 | 2 | 3 | 4 | 5 => simp [userR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, Val.handles]
   | _ + 6 => simp [userR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
 
 theorem calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) : WF.CallOK lib [] env id arg v := by

@@ -33,7 +33,6 @@ open CatsEffectInLean.Model
 open CatsEffectInLean.Model.Resource
 open CatsEffectInLean.Model.ResourceUse
 open CatsEffectInLean.Props.Phase6.Resource
-open CatsEffectInLean.Props.Phase6.HarnessPrivacy
 open CatsEffectInLean.Proofs.Phase6.ResourceWitnessEnv
 open CatsEffectInLean.Proofs.Phase6.ResourceWitness (obs_of_run)
 
@@ -54,14 +53,14 @@ theorem run_witness :
   decide +kernel
 
 theorem both_private : Private WB [code 0, code 2] [code 1, code 3] [] [cA, cB] := by
-  refine ⟨userPrivate _ _ _, fun k a r _ hb => ?_, fun k hk => ?_, fun k a q hk hq => ?_, fun c r hc h => ?_⟩
+  refine ⟨fun k a r _ hb => ?_, fun k hk => ?_, fun k a q hk hq => ?_, fun c r hc h => ?_⟩
   · simp [WB, W, renv] at hb
   · have h0 : k ≠ code 0 := by simp at hk; exact hk.1
     have h2 : k ≠ code 2 := by simp at hk; exact hk.2
     simp only [WB, W, renv, beq_iff_eq, h0, h2, ite_false, Bool.true_and]; decide +kernel
   · have h1 : k ≠ code 1 := by simp at hk; exact hk.1
     have h3 : k ≠ code 3 := by simp at hk; exact hk.2
-    simp [WB, W, renv, h1, h3] at hq; subst hq; decide +kernel
+    simp [WB, W, renv, h1, h3] at hq; subst hq; rfl
   · have hA : c ≠ cA := by simp at hc; exact hc.1
     have hB : c ≠ cB := by simp at hc; exact hc.2
     simp [WB, W, hA, hB] at h

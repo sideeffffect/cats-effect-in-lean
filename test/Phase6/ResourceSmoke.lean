@@ -12,8 +12,8 @@ witness environment `ResourceWitnessEnv.W` (its hypotheses are proven in
 `Proofs/Phase6/ResourceWitness.lean` and `ResourceBoth.lean`) with more constant user functions;
 the extra user functions are checked here (part 0) where the hypothesis is decidable.
 
-0. Hypotheses: no user function of the smoke table names the token (`tokFreeR`), and its programs
-   pass `progOK` with the statement's `Lib`.
+0. Hypotheses: the programs of the smoke table pass `progOK` with the statement's `Lib` and no
+   held handle (decision 58: with `WellFormed` this is the whole user-code hypothesis).
 1. CE-0020: the 600 single-deviation schedules and 1,500 pseudo-random schedules with preemption of
    `Resource.both(A, B).use(f)`. v3.7.1 (`bothRes`) has a run where the release of `B` is not
    logged; the fixed twin (`fixedBothRes`, decision 39) has none.
@@ -31,7 +31,6 @@ open CatsEffectInLean.Model
 open CatsEffectInLean.Model.Resource
 open CatsEffectInLean.Model.ResourceUse
 open CatsEffectInLean.Props.Phase6.Resource
-open CatsEffectInLean.Props.Phase6.HarnessPrivacy
 open CatsEffectInLean.Proofs.Phase6.ResourceWitnessEnv
 
 def family : List (List PChoice) :=
@@ -64,7 +63,6 @@ def WS (qa : Nat) (two withBind : Bool) : UEnv :=
              else (W false two withBind).r.release k a }
     resOf := (W false two withBind).resOf }
 
-#guard (List.range 14).all fun n => tokFreeR toks (userS n)
 #guard (List.range 14).all fun n => match (userS n).out with
   | .prog p => WF.progOK libH (fun _ => false) p
   | _ => true

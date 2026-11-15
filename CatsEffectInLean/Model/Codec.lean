@@ -127,6 +127,7 @@ def encVal : Val → List Bool
   | .ec n => tag 18 ++ encNat n
   | .trace => tag 19
   | .runtime => tag 20
+  | .fn n => tag 21 ++ encNat n
 
 def decKind : List Bool → Option (ErrKind × List Bool)
   | false :: false :: r => some (.nonFatal, r)
@@ -193,6 +194,7 @@ def decVal : (fuel : Nat) → List Bool → Option (Val × List Bool)
       | 18 => mapFst .ec (decNat r)
       | 19 => some (.trace, r)
       | 20 => some (.runtime, r)
+      | 21 => mapFst .fn (decNat r)
       | _ => none
 
 /-- Bits to a number, with a sentinel one above the last bit. -/
@@ -269,9 +271,9 @@ theorem fixedBits_length (w n : Nat) : (fixedBits w n).length = w := by
   | zero => rfl
   | succ w ih => simp [fixedBits, ih]
 
-theorem valLE_fixedBits_tag : ∀ t, t < 21 → valLE (fixedBits 5 t) = t := by decide
+theorem valLE_fixedBits_tag : ∀ t, t < 22 → valLE (fixedBits 5 t) = t := by decide
 
-theorem readLE_tag (t : Nat) (ht : t < 21) (r : List Bool) : readLE 5 (tag t ++ r) = some (t, r) := by
+theorem readLE_tag (t : Nat) (ht : t < 22) (r : List Bool) : readLE 5 (tag t ++ r) = some (t, r) := by
   have := readLE_append (fixedBits 5 t) r
   rw [fixedBits_length, valLE_fixedBits_tag t ht] at this
   exact this

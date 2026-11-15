@@ -46,7 +46,7 @@ theorem henv_even (a0 : IO) (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
 
 theorem wR_ok (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK lib R v (wR n) := by
   match n with
-  | 0 | 1 | 2 => simp [wR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.sub, Val.handles]
+  | 0 | 1 | 2 => simp [wR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, Val.handles]
   | _ + 3 => simp [wR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
 
 theorem wf (a0 p : IO) (hp : WF.progOK lib (fun h => ([] : List Handle).contains h) p = true) :

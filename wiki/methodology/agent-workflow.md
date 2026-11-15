@@ -72,7 +72,7 @@ Three review rounds (batches 4–6) each found a new marker forgery. Patching ea
 
 ## Closure references (decision 58, added 2026-11-15)
 
-Review batch 8: hand-written lists of "id fields" failed again, because a plain number was both data and a closure name. The user chose a separate `Val` constructor for closure references. `WellFormed` then follows references structurally, and `Lib.fields` and the probes go away. The Phase 6 gate waits for this change. Source: [decision 58](../../raw/project-decisions/2026-11-15-decision-58-closure-refs.md).
+Review batch 8: hand-written lists of "id fields" failed again, because a plain number was both data and a closure name. The user chose a separate `Val` constructor for closure references. `WellFormed` then follows references structurally, and `Lib.fields` and the probes go away. The Phase 6 gate waits for this change. Source: [decision 58](../../raw/project-decisions/2026-11-15-decision-58-closure-refs.md). Implementation (track Res, core): `Val.fn`, `Handle.fn`, one structural rule `WF.avail` (held, or own user closure); see [decision 58 core notes](../../raw/cats-effect/2026-11-15-decision-58-core-notes.md).
 
 ## See Also
 

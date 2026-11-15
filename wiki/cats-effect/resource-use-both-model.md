@@ -1,7 +1,7 @@
 # Resource use, allocated, both, and CE-0020
 
 > Sources: Cats Effect v3.7.1 (`Resource.scala:156-314`, `:388-397`, `:464-552`, `:826-993`, `:1229-1234`; `IO.scala:961-962`, `:1822`, `:2062-2064`, `:2152`, `:2161`; `SyncRef.scala:30`, `:65-73`; `GenSpawn.scala:476-498`); upstream commit `3af09e6d56` (PR #4630); own Phase 6 track Res work and scala-cli runs, 2026-11-10
-> Raw: [Lib fields probe notes](../../raw/cats-effect/2026-11-14-lib-fields-probe-notes.md); [Review batch 6 notes](../../raw/project-decisions/2026-11-14-review-batch-6-notes.md); [Track Res notes](../../raw/cats-effect/2026-11-10-track-res-resource-notes.md); [Merge with track M](../../raw/cats-effect/2026-11-10-track-res-merge-m-notes.md); [Review batch 5 fixes](../../raw/cats-effect/2026-11-10-track-res-review5-fix-notes.md); [Harness privacy (decision 56)](../../raw/cats-effect/2026-11-14-harness-privacy-notes.md)
+> Raw: [Decision 58 core notes](../../raw/cats-effect/2026-11-15-decision-58-core-notes.md); [Lib fields probe notes](../../raw/cats-effect/2026-11-14-lib-fields-probe-notes.md); [Review batch 6 notes](../../raw/project-decisions/2026-11-14-review-batch-6-notes.md); [Track Res notes](../../raw/cats-effect/2026-11-10-track-res-resource-notes.md); [Merge with track M](../../raw/cats-effect/2026-11-10-track-res-merge-m-notes.md); [Review batch 5 fixes](../../raw/cats-effect/2026-11-10-track-res-review5-fix-notes.md); [Harness privacy (decision 56)](../../raw/cats-effect/2026-11-14-harness-privacy-notes.md)
 
 ## Overview
 
@@ -13,7 +13,7 @@ Phase 6, batch 6.2, track Res. The model mirrors `Resource#fold`/`use`/`use_`/`u
 |---|---|
 | `Model/ResourceUse.lean` | `ULam` (namespace 20), `USrc` codes, `UEnv` (`REnv` + `resOf`), `foldLoop`, `useIO`, `allocatedIO`, `applyRelX` (`rel2`), `bothRes`, fixed twin `fixedBothRes`, dispatch `UEnv.toEnv` |
 | `Model/ResourceUseExamples.lean` | 6 runs by `decide +kernel` (both, LIFO, allocated + release) |
-| `Props/Phase6/HarnessPrivacy.lean` | The shared harness-privacy module (decision 56): tokens, `tokFreeV`/`tokFreeIO`/`tokFreeR`, `UserPrivate` |
+| `Props/Phase6/HarnessPrivacy.lean` | (Not used by track Res since decision 58; kept until track G drops it.) The shared harness-privacy module (decision 56): tokens, `tokFreeV`/`tokFreeIO`/`tokFreeR`, `UserPrivate` |
 | `Props/Phase6/Resource.lean` | 4 statements; harness (`HLam`, log cell = token, `harness`, `envH`, `libH`), `MarkedMake`, `Private` |
 | `Proofs/Phase6/PrivacyExamples.lean` | Regression `example`s: the forgeries of review batches 4-6 are rejected |
 | `Proofs/Phase6/ResourceWitnessEnv.lean` | The witness environment `W` and its lemmas |
@@ -51,11 +51,11 @@ Phase 6, batch 6.2, track Res. The model mirrors `Resource#fold`/`use`/`use_`/`u
 
 Why open: a proof for all programs needs a state invariant over `Step`/`SchedP` (the same gap as track G's `core.IO.bracket.releaseOnce`).
 
-Test harness (decision 56, after review batches 4-6): privacy by construction (`HarnessPrivacy`).
-- The root is a harness: it first allocates the log cell (`Ref` 0, the token; no later cell can get id 0). Event closures (`markA`, `markT`) capture the token and append a tag to the log; they are in no `Lib`.
-- Harness codes (acquire, release, resource, `flatMap` codes) are token names (`tokFreeV` false).
-- `Private`: user results, user `Bind` results, other acquire/release programs and resources are token-free. No escape clause: a clock number that is a token name may not be output.
-- `WellFormed` with `libH` (deep `captured` along `Lib.fields`).
+Test harness (decision 58, 2026-11-15; before: decision 56 `HarnessPrivacy`).
+- The root is a harness: it first allocates the log cell (`Ref` 0, the token; no later cell can get id 0). Event closures (`markA`, `markT`) capture the token and append a tag to the log; they are not in `libH.ok`.
+- Closure references are `Val.fn`; `WellFormed libH` holds user code to the available handles (`WF.avail`). The resource codes hold the token, so user code cannot build them. S1 is gone: user code may pass any value through.
+- `Private` (review batch 8, S2): the Phase 5 `REnv.WellFormed` clauses for every non-harness `REnv` entry, and no such entry names a harness table entry (`Res.idx`).
+- `libH.ok` = `ResourceUse.publicLib` (Bracket, Race, Timeout) and the public harness closures; `ULam`, `Clo` are internal.
 - History: `UserMarkersOnly` (batch 5: forgery through `ULam.allocFn`), `NoForge` with an escape clause (batch 6: clock forgery) were HOLLOW. The forgeries are regression `example`s now.
 
 **Review batch 5 (2026-11-10):** `UserMarkersOnly` is forgeable. `usesId` does not look into library closure fields, so user code can run a marker through `ULam.allocFn (.user m)` and `WellFormed` accepts it. So `use.releaseOnce` and `flatMap.releaseOrder` are false for every implementation (HOLLOW), and CE-0020 is HOLLOW as registered (the bug and its witness are real; a correct `both` also refutes the statement). Fix: harness-only markers (decision 54). `eval.preservesCancelable` is FAITHFUL as a statement. See [review batch 5](../../review/2026-11-10-review-batch-5.md).
@@ -64,11 +64,11 @@ Test harness (decision 56, after review batches 4-6): privacy by construction (`
 
 Inventory: `both`, `use`, `fold`, `makeCase`, `evalMap` are `todo` until CE-0020 passes review (decision 56).
 
-**Fields probe check (2026-11-14):** `Proofs/Phase6/LibFieldsResourceUse.lean` checks `ResourceUse.lib` by running the real dispatcher on ~520 probe samples. It found two defects, both fixed: (1) `fnFields` missed the ids in `USrc` source codes of `Bracket` and `Race`/`Timeout` closures (fix: `srcCodeIds`); (2) `uDisp` sent `Timeout` closures (`IO.never` of `Race.constNever`) to user code (fix: `tlamOf?`). Limit: function ids in argument values (the `rel` of `(b, rel)`) are not followed by `WellFormed`. See [probe notes](../../raw/cats-effect/2026-11-14-lib-fields-probe-notes.md).
+**Fields probe check (2026-11-14; removed by decision 58):** `Proofs/Phase6/LibFieldsResourceUse.lean` checks `ResourceUse.lib` by running the real dispatcher on ~520 probe samples. It found two defects, both fixed: (1) `fnFields` missed the ids in `USrc` source codes of `Bracket` and `Race`/`Timeout` closures (fix: `srcCodeIds`); (2) `uDisp` sent `Timeout` closures (`IO.never` of `Race.constNever`) to user code (fix: `tlamOf?`). Limit: function ids in argument values (the `rel` of `(b, rel)`) are not followed by `WellFormed`. See [probe notes](../../raw/cats-effect/2026-11-14-lib-fields-probe-notes.md).
 
 ## Difftest (format v2)
 
-Ops `rUse`, `rAllocated`, `rBoth` ([format](../methodology/difftest-program-format.md)). Fixed cases `cases/resuse.jsonl` (228, all agree; case `res-both-relfail-sched5-1` shows CE-0020 on both sides). `opcount.py` seeds 21-23, 240,000 cases, all agree: rUse 87,130, rAllocated 51,777, rBoth 54,462 agreeing cases. After the merge with track M the default weights are `rUse` 0.5, `rAllocated` 0.4, `tpl_resBoth` 0.5, `res_both` 2.0 (so `race` keeps its 5 % selftest minimum).
+Ops `rUse`, `rAllocated`, `rBoth` ([format](../methodology/difftest-program-format.md)). Fixed cases `cases/resuse.jsonl` (228, all agree; case `res-both-relfail-sched5-1` shows CE-0020 on both sides). `opcount.py` seeds 21-23, 240,000 cases, all agree: rUse 87,130, rAllocated 51,777, rBoth 54,462 agreeing cases. Decision 58 (2026-11-15, `Val.fn`): seeds 51-53 (all ops) 60,000 cases and seeds 61-64 (Resource ops boosted) 195,000 cases, all agree; rUse 117,382, rAllocated 87,564, rBoth 52,386 agreeing cases. After the merge with track M the default weights are `rUse` 0.5, `rAllocated` 0.4, `tpl_resBoth` 0.5, `res_both` 2.0 (so `race` keeps its 5 % selftest minimum).
 
 ## See Also
 

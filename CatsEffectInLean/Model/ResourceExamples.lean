@@ -56,7 +56,7 @@ def user : UserEnv where
     | 4, .poll m s => { out := .prog (.flatMap (.unmaskRunLoop caseBEvalAlloc m s) (uid 6)) }
     | 5, .poll m s => { out := .prog (.flatMap (.unmaskRunLoop caseBMakeAlloc m s) (uid 6)) }
     | 6, _ => { effects := [.emit (.nat 7)], out := .prog (.pure .unit) }
-    | 7, _ => { out := .prog (.pure (.pair (.nat 9) (RelFn.user 8).toVal)) }
+    | 7, _ => { out := .prog (.pure (.pair (.nat 9) (RelFn.user 16).toVal)) }
     | 8, ec => { effects := [.emit ec], out := .prog (.pure .unit) }
     | 9, .poll m s => { out := .prog (.flatMap (.unmaskRunLoop faU m s) (cloFn (.evalK [] .unit))) }
     | 10, _ => { out := .prog fixedAlloc }
@@ -134,7 +134,7 @@ calls `rel(ExitCase.Canceled)` when it builds the `onCancel` (`Resource.scala:50
 argument), so `Canceled` is emitted first, although that finalizer never runs. Then the
 `onError` handler calls `rel(Errored(boom))` and runs it. -/
 theorem release_sees_exit_case :
-    run 60 (alloc ((Res.allocate (.user 7)).flatMap 0)) =
+    run 60 (alloc ((Res.allocate (.user 14)).flatMap 0)) =
       obs (.done (.errored boom)) [.ocErrored boom, .ocCanceled] := by
   decide +kernel
 

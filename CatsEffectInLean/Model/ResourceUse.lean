@@ -82,8 +82,9 @@ succeeds at once); `F.void(x)` = `x.void` = `x.map(_ => ())` (`IO.scala:2152`, `
   (`RelFn.user`) may read state; the rebuild runs the same pure Lean function on the same
   snapshot, so it gives the same program (the effects happened once, at the call).
 * New function values `ExitCase => F[Unit]` (`e => release(a, e)` of `makeCase`, the finalizers
-  of `both`) are `RelFn.user idx` with `idx` the id of a `ULam`. `UEnv.rx` (the `REnv` that the
-  Phase 5 interpreter gets) runs them; all other `idx` are user code (`REnv.user`).
+  of `both`) are `RelFn.user id` with `id` the id of a `ULam`. `UEnv.rx` (the `REnv` that the
+  Phase 5 interpreter gets) runs them (`fnIndex` passes an odd id on); all other ids are user code
+  (`REnv.user`, function `id / 2`).
 * The `evalMap` lambda of `both` is a `Bind` function id (a `ULam` id). `UEnv.rx.bind` runs it.
   Nested `both` (a side that is a `both`) is bounded by `bindDepth` (a model limit).
 
@@ -118,13 +119,13 @@ inductive OnOut where
   deriving DecidableEq, Repr
 
 def OnOut.toVal : OnOut → Val
-  | .user f => .pair (.nat 0) (.nat f)
+  | .user f => .pair (.nat 0) (.fn f)
   | .pure => .pair (.nat 1) .unit
   | .evalDesc => .pair (.nat 2) .unit
   | .unitFn => .pair (.nat 3) .unit
 
 def OnOut.ofVal : Val → Option OnOut
-  | .pair (.nat 0) (.nat f) => some (.user f)
+  | .pair (.nat 0) (.fn f) => some (.user f)
   | .pair (.nat 1) .unit => some .pure
   | .pair (.nat 2) .unit => some .evalDesc
   | .pair (.nat 3) .unit => some .unitFn
@@ -370,10 +371,10 @@ receiver), `release(ec)` later (by name). -/
 def applyRelX (r : REnv) (v : View) : RelFn → Val → List UserEffect × Except Err IO
   | .unit, _ => ([], .ok unitIO)
   | .const k a, _ => ([], r.release k a)
-  | .user idx, ec =>
-    match (ULam.ofId? idx).bind (libRelApp · ec) with
+  | .user id, ec =>
+    match (ULam.ofId? id).bind (libRelApp · ec) with
     | some p => ([], .ok p)
-    | none => progOf (r.user.callV idx ec v)
+    | none => progOf (r.user.callV (fnIndex id) ec v)
   | .guarantee rel release, ec =>
     let (es, p) := applyRelX r v rel ec
     (es, p.map fun _ =>
@@ -567,7 +568,7 @@ private def throwI : UserResult := { out := .throw illTyped }
 def callU (U : UEnv) (uc : Nat → Val → View → UserResult) (l : ULam) (arg : Val) (v : View) : UserResult :=
   match l with
   -- `resource(poll)`: the `Allocate` function (`F.bracketFull(resource)`, `Resource.scala:174`)
-  | .allocFn (.user idx) => U.rx.user.callV idx arg v
+  | .allocFn (.user id) => U.rx.user.callV (fnIndex id) arg v
   -- `make`: `_ => acquire.map(a => a -> release(a)).map { ... }` (`Resource.scala:826-902`)
   | .allocFn (.make acq rel) =>
     prog (.map (.map (U.r.acquire acq) (cloFn (.makePair rel))) (cloFn .applyPair))
@@ -770,69 +771,18 @@ def isLib (id : Nat) : Bool :=
   (ULam.ofId? id).isSome || (Race.ofId? id).isSome || (Bracket.BLam.ofId? id).isSome || Resource.isLib id ||
     (tlamOf? id).isSome
 
-/-! ## Function fields (decision 56, `Lib.fields`) -/
+/-- The library closures that public operations build in user programs: `Bracket`
+(`IO.bracket`, `guarantee`), `Race` (`race`, `both`), `Timeout` (`IO.never`, `timeout`). The
+`Resource` interpreter's own lambdas (`ULam`, Phase 5 `Clo`) are internal: user code gets one only
+as a value that the library gives it (a `Val.fn` it holds). -/
+def publicLib (id : Nat) : Bool :=
+  (Race.ofId? id).isSome || (Bracket.BLam.ofId? id).isSome || (tlamOf? id).isSome
 
-/-- The closure id that a `RelFn.user idx` or `AllocFn.user idx` names: a `ULam` id itself, else
-user function `idx` (program id `2 * idx`). -/
-def idxId (idx : Nat) : Nat := if (ULam.ofId? idx).isSome then idx else 2 * idx
+/-- The library of this mirror for `WellFormed` (decision 58: function values are `Val.fn` fields,
+which `WellFormed` follows structurally). -/
+def lib : Lib := { ok := isLib }
 
-/-- The closure ids in a release function value. -/
-def relIds : RelFn → List Nat
-  | .user idx => [idxId idx]
-  | .guarantee a b => relIds a ++ relIds b
-  | _ => []
-
-def relValIds (rv : Val) : List Nat := ((RelFn.ofVal rv).map relIds).getD []
-
-def ULam.fnIds : ULam → List Nat
-  | .allocFn (.user idx) => [idxId idx]
-  | .foldUse _ o _ | .foldEvalK _ o _ =>
-    match OnOut.ofVal o with
-    | some (.user f) => [f]
-    | _ => []
-  | .unitThenK rel _ | .updateThunk _ _ rel => relValIds rel
-  | .storedFin fin rel | .storedFinK fin rel _ => relValIds fin ++ relValIds rel
-  | _ => []
-
-/-- The Phase 5 closures (`Clo`) with `ULam`-aware release functions. -/
-def cloIds : Clo → List Nat
-  | .evalK _ r | .onErrorH r => relIds r
-  | .allocBody (.user k) _ r => idxId k :: relIds r
-  | .allocBody _ _ r | .allocK _ r _ => relIds r
-  | _ => []
-
-/-- The closure ids that a source code of this mirror names (`USrc`, rebuilt by `srcU` and
-`srcRel`): the release function of `relApp` and `unitThen`, the `onOutput` function of `fold`.
-(The `res` code of `fold` is a `UEnv.resOf` code, like an external `Bracket` source.) -/
-def usrcIds (c : Val) : List Nat :=
-  match USrc.ofVal c with
-  | some (.relApp rel _ _) | some (.unitThen rel _) => relValIds rel
-  | some (.fold _ o _) =>
-    match OnOut.ofVal o with
-    | some (.user f) => [f]
-    | _ => []
-  | _ => []
-
-/-- The closure ids of every source code inside a value, at any depth (structural). In this
-library `srcU` is the source builder of the `Bracket` closures (external sources `Src.ext s`) and
-of the `Race` closures (`RLam.body k a b`), and the mirror puts `USrc` codes there
-(`Race.bothIO (USrc.relApp finV ec _)`, `Bracket.guaranteeIO (.ext (USrc.relApp ...))`). So a
-`Bracket` or `Race` closure of this library names closures by number inside its source codes
-(found by the probe check `Proofs/Phase6/LibFieldsResourceUse.lean`). -/
-def srcCodeIds : Val → List Nat
-  | v@(.pair a b) => usrcIds v ++ srcCodeIds a ++ srcCodeIds b
-  | .left x | .right x | .some x | .ocSucceeded x => srcCodeIds x
-  | _ => []
-
-/-- The function fields of a closure value of this library: `ULam`, `Bracket`, `Clo` fields, and
-the closure ids in the source codes inside it (`srcCodeIds`; `Bracket` and `Race` closures). -/
-def fnFields (c : Val) : List Nat :=
-  (match ofCloVal c with
-   | some (k, tag, fs) => if k == ns then ((ULam.ofFields tag fs).map ULam.fnIds).getD [] else []
-   | none => []) ++
-  Bracket.fnFields c ++ ((Clo.ofVal c).map cloIds).getD [] ++ srcCodeIds c
-
-/-- The library of this mirror for `WellFormed` (decision 56). -/
-def lib : Lib := { ok := isLib, fields := fnFields }
+/-- Kept only so that other tracks still compile until they drop `Lib.fields` (ignored). -/
+def fnFields (_ : Val) : List Nat := []
 
 end CatsEffectInLean.Model.ResourceUse

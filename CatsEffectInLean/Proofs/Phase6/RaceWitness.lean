@@ -76,7 +76,7 @@ theorem call_ok (p : PLam) (arg : Val) (v : View) :
       refine ⟨fun w hw => by simp [PLam.call, hw.2.2.2.2 f hf], ?_⟩
       cases ho : v.outcome f <;>
         simp [PLam.call, ho, IO.cancelOf, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK,
-          WF.fnOK_userFn, fnOK_rt, WF.rtOK, WF.sub, PLam.fn, PLam.toVal, cloVal, listV,
+          WF.fnOK_userFn_of, fnOK_rt, WF.rtOK, WF.subA, PLam.fn, PLam.toVal, cloVal, listV,
           Val.handles, WF.memOf, hf]
     | _ =>
       exact ⟨fun _ _ => rfl, by simp [PLam.call, WF.ResultOK, WF.EffectsOK, WF.OutOK]⟩
@@ -89,15 +89,15 @@ theorem call_ok (p : PLam) (arg : Val) (v : View) :
       simp [PLam.call, ho, IO.joinOf, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK,
         WF.fnOK, WF.rtOK, WF.memOf, hf]
     | some oc =>
-      simp [PLam.call, ho, IO.joinOf, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.sub,
-        WF.memOf]
-      exact fun h hh => WF.Reach.fiber hf ho hh
+      simp [PLam.call, ho, IO.joinOf, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.subA]
+      exact fun h hh => WF.avail_of_mem ((WF.memOf_eq _ _).2 (WF.Reach.fiber hf ho hh))
 
 /-- Each user function (even id) of `env fa fb u0` passes `CallOK`. -/
 theorem env_calls (fa fb : IO) (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
     WF.CallOK raceLib [] (env fa fb u0) id arg v := by
   have hE : ∀ w, (env fa fb u0).callV id arg w = Props.Phase6.Race.dispatch fa fb u0 id arg w := fun _ => rfl
-  simp only [WF.CallOK, hE, dispatch_even fa fb id hid]
+  refine (fun (h : _ ∧ _) => WF.callOK_of_reach h.1 h.2) ?_
+  simp only [hE, dispatch_even fa fb id hid]
   cases hp : parentOf? id with
   | none =>
     exact ⟨fun _ _ => rfl, by simp [WF.ResultOK, WF.EffectsOK, WF.OutOK]⟩

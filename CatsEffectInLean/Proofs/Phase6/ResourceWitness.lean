@@ -21,7 +21,6 @@ open CatsEffectInLean.Model
 open CatsEffectInLean.Model.Resource
 open CatsEffectInLean.Model.ResourceUse
 open CatsEffectInLean.Props.Phase6.Resource
-open CatsEffectInLean.Props.Phase6.HarnessPrivacy
 open CatsEffectInLean.Proofs.Phase6.ResourceWitnessEnv
 
 /-- A run as an observation in `outcomesP`. -/
@@ -44,12 +43,12 @@ abbrev WU : UEnv := W false false false
 def bodyUse (viaParent : Bool) : IO := withParent viaParent (useOf WU 14 (Res.make (code 0) (code 1)))
 
 theorem use_private : Private WU [code 0] [code 1] [] [cA] := by
-  refine ⟨userPrivate _ _ _, fun k a r _ hb => ?_, fun k hk => ?_, fun k a q hk hq => ?_, fun c r hc h => ?_⟩
+  refine ⟨fun k a r _ hb => ?_, fun k hk => ?_, fun k a q hk hq => ?_, fun c r hc h => ?_⟩
   · simp [WU, W, renv] at hb
   · have h0 : k ≠ code 0 := by simpa using hk
     simp only [WU, W, renv, beq_iff_eq, h0, ite_false, Bool.false_and]; decide +kernel
   · have h1 : k ≠ code 1 := by simpa using hk
-    simp [WU, W, renv, h1] at hq; subst hq; decide +kernel
+    simp [WU, W, renv, h1] at hq; subst hq; rfl
   · have hA : c ≠ cA := by simpa using hc
     simp [WU, W, hA] at h
 
@@ -76,7 +75,7 @@ def bodyFlat (viaParent : Bool) : IO :=
   withParent viaParent (useOf WF2 14 ((Res.make (code 0) (code 1)).flatMap (code 4)))
 
 theorem flat_private : Private WF2 [code 0, code 2] [code 1, code 3] [code 4] [cA, cB] := by
-  refine ⟨userPrivate _ _ _, fun k a r hk hb => ?_, fun k hk => ?_, fun k a q hk hq => ?_, fun c r hc h => ?_⟩
+  refine ⟨fun k a r hk hb => ?_, fun k hk => ?_, fun k a q hk hq => ?_, fun c r hc h => ?_⟩
   · have h4 : k ≠ code 4 := by simpa using hk
     simp [WF2, W, renv, h4] at hb
   · have h0 : k ≠ code 0 := by simp at hk; exact hk.1
@@ -84,7 +83,7 @@ theorem flat_private : Private WF2 [code 0, code 2] [code 1, code 3] [code 4] [c
     simp only [WF2, W, renv, beq_iff_eq, h0, h2, ite_false, Bool.true_and]; decide +kernel
   · have h1 : k ≠ code 1 := by simp at hk; exact hk.1
     have h3 : k ≠ code 3 := by simp at hk; exact hk.2
-    simp [WF2, W, renv, h1, h3] at hq; subst hq; decide +kernel
+    simp [WF2, W, renv, h1, h3] at hq; subst hq; rfl
   · have hA : c ≠ cA := by simp at hc; exact hc.1
     have hB : c ≠ cB := by simp at hc; exact hc.2
     simp [WF2, W, hA, hB] at h
@@ -93,12 +92,11 @@ theorem flat_sat (viaParent : Bool) :
     MarkedMake WF2 cA (code 0) (code 1) (.pure .unit) tagA tagRA ∧
     MarkedMake WF2 cB (code 2) (code 3) (.pure .unit) tagB tagRB ∧
     (∀ x, WF2.r.bind (code 4) x = .ok (Res.make (code 2) (code 3))) ∧
-    tokFreeV toks (.nat (code 4)) = false ∧
     Private WF2 [code 0, code 2] [code 1, code 3] [code 4] [cA, cB] ∧
     WellFormed libH [] (envH WF2 (bodyFlat viaParent)) harness ∧
     ∃ o, outcomesP {} counterMaskModel (envH WF2 (bodyFlat viaParent)) harness o ∧
       (∃ oc, o.summary = .done oc) ∧ logOf o = [tagA, tagB, tagRB, tagRA] := by
-  refine ⟨markedA _ _ _, markedB _ _, fun _ => by simp [WF2, W, renv], codes_named.2.2.2.2.1,
+  refine ⟨markedA _ _ _, markedB _ _, fun _ => by simp [WF2, W, renv],
     flat_private, wellFormed _ _ _ _, ?_⟩
   cases viaParent
   · obtain ⟨o, ho, hs, hl⟩ := obs_of_run (env := envH WF2 (bodyFlat false)) (fuel := 8000) (cs := [])

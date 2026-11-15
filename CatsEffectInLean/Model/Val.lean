@@ -112,6 +112,11 @@ inductive Val where
   | trace
   /-- Opaque `IORuntime` value (`ReadRT`, `IOFiber.scala:1069-1070`). -/
   | runtime
+  /-- A closure reference (decision 58): the function value with closure id `id` (even: user code,
+  odd: a library closure; `Model/Codec.lean`). Separate from `nat`, so a data number never names
+  a closure. A reference is a capability: code holds it only by receiving it, or (for its own
+  user closures) by making it (`Model/WellFormed.lean`, `WF.avail`). -/
+  | fn (id : Nat)
   deriving DecidableEq, Repr
 
 /-- The final state of a fiber: `Outcome[IO, Throwable, Any]`

@@ -36,7 +36,7 @@ Facts about the pinned Cats Effect version, its code, semantics and bugs.
 | [parTraverseN model](cats-effect/partraverse-model.md) | Kernel default parTraverseN with IO ops (no twin), HashSet order as input, difftest op, 8 open properties (deep Lib, harness counter) with witnesses and smoke; Scala infix-precedence gotcha | 2026-11-14 |
 | [Queue and timeout model](cats-effect/queue-model.md) | UnboundedAsyncQueue + IO#timeout/timeoutTo/never mirror; takeTimeoutNoLostElement refuted by the FIFO schedule (CE-0003) | 2026-11-10 |
 | [memoize model and CE-0030](cats-effect/memoize-model.md) | IO#memoize = kernel GenConcurrent#memoize mirror (no twin); difftest ops memoize/memoGet; CE-0030 refuted (masked `canceled *> never` hangs a racing get), 2 open | 2026-11-10 |
-| [Resource use, allocated, both, and CE-0020](cats-effect/resource-use-both-model.md) | fold/use/allocated/rel2/both mirror (`ResourceUse`), difftest v2 rUse/rAllocated/rBoth (≥51k each), CE-0020 refuted (both skips a release), 3 open; harness privacy by construction (`HarnessPrivacy`, decision 56), satisfiability witnesses; Lib.fields probe check (2 defects fixed) | 2026-11-14 |
+| [Resource use, allocated, both, and CE-0020](cats-effect/resource-use-both-model.md) | fold/use/allocated/rel2/both mirror (`ResourceUse`), difftest v2 rUse/rAllocated/rBoth (≥51k each), CE-0020 refuted (both skips a release), 3 open; harness privacy by construction (`HarnessPrivacy`, decision 56), satisfiability witnesses; Lib.fields probe check (2 defects fixed); decision 58 harness (Val.fn, S1 gone, S2 clauses) | 2026-11-15 |
 | [race, both and fiber leaks](cats-effect/race-both-model.md) | Kernel-default mirror of race/raceOutcome/both/bothOutcome (no IO twin), leak observation liveRaceChildren, difftest v2 (≥50k per op), 5 open entries, smoke 0 violations | 2026-11-10 |
 
 ## semantics
@@ -47,7 +47,7 @@ Formal modeling approaches for effect systems and concurrency.
 |---------|---------|---------|
 | [Modeling approaches for CE3 in Lean](semantics/modeling-approaches.md) | Small-step + scheduler recommended; ITrees, dejafu, Marlow 2001 compared | 2026-11-10 |
 | [Fairness and liveness](semantics/fairness-and-liveness.md) | Schedule = Nat → Choice; Fair/Terminates definitions; CE 512/1024 thresholds; ranking, decide, lasso refutations | 2026-11-10 |
-| [Outcome sets, Eqv and the IO laws](semantics/outcome-equivalence.md) | outcomes/Eqv over pick schedules (trace, refs, reports); bounded enumerator + soundness; IO ops without a typed instance; 2 IO laws proven, 2 open; auto-yield finding; Lib.fields probe check | 2026-11-14 |
+| [Outcome sets, Eqv and the IO laws](semantics/outcome-equivalence.md) | outcomes/Eqv over pick schedules (trace, refs, reports); bounded enumerator + soundness; IO ops without a typed instance; 2 IO laws proven, 2 open; auto-yield finding; decision 58 `Val.fn` and `WF.avail` | 2026-11-15 |
 | [Race no-leak invariant and frame lemmas](semantics/race-invariant.md) | Invariant design for the 4 open race leak/winner entries (NL, S, F3, F4, P1/P2, H, C(r)); F1/F1b/F2 frame lemmas proven for all runs; law proven by certificate | 2026-11-10 |
 
 ## lean
