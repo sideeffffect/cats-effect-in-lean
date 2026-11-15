@@ -18,7 +18,7 @@ All statements quantify over all input lists (any length), all limits `n ≥ 1` 
 `GenConcurrent.scala:146`), all fuel values, all `PChoice` schedules (`outcomesP`, preemption
 at any run-loop iteration) and all `HashSet` iteration orders `ord` (the supervision `Set` is a
 `HashSet` from 5 elements; its order comes from identity hashes, so the model takes any
-permutation, `(ord xs).Perm xs`). Statements 1-7 state outcomes and result values only, so they
+permutation, `(ord all xs).Perm xs`; `all` is the ghost list of every element the `HashSet` held). Statements 1-7 state outcomes and result values only, so they
 need no test marker; statement 8 counts in a harness cell that user code cannot reach.
 Hypotheses:
 
@@ -143,7 +143,7 @@ def fstOf : Val → Val
 
 /-- Statement 1: the result holds one entry per input, in input order. -/
 def parTraverseNOrder : Prop :=
-  ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat),
+  ∀ (ord : List Val → List Val → List Val), (∀ all xs, (ord all xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat),
     1 ≤ n → f % 2 = 0 →
     WellFormed ptLibDeep [] (env ord (tagged u)) (orderRoot n as f) →
     ∀ o, outcomesP {} counterMaskModel (env ord (tagged u)) (orderRoot n as f) o →
@@ -151,7 +151,7 @@ def parTraverseNOrder : Prop :=
 
 /-- Statement 2: a pure `f` gives `Succeeded(as.map(g))` in every run that stops. -/
 def parTraverseNPureSucceeds : Prop :=
-  ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (g : Val → Val),
+  ∀ (ord : List Val → List Val → List Val), (∀ all xs, (ord all xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (g : Val → Val),
     1 ≤ n → f % 2 = 0 →
     (∀ a v, u.callV f a v = { out := .prog (.pure (g a)) }) →
     WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) →
@@ -160,7 +160,7 @@ def parTraverseNPureSucceeds : Prop :=
 
 /-- Statement 3: an error of one started action aborts the traversal with that error. -/
 def parTraverseNErrorAborts : Prop :=
-  ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val) (e : Err),
+  ∀ (ord : List Val → List Val → List Val), (∀ all xs, (ord all xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val) (e : Err),
     1 ≤ n → f % 2 = 0 → a0 ∈ as.take n → e.kind = .nonFatal →
     (∀ a v, u.callV f a v = { out := .prog (if a = a0 then .error e else Timeout.neverIO) }) →
     WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) →
@@ -169,7 +169,7 @@ def parTraverseNErrorAborts : Prop :=
 
 /-- Statement 4: a self-cancel of one started action aborts the traversal as `Canceled`. -/
 def parTraverseNCancelAborts : Prop :=
-  ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val),
+  ∀ (ord : List Val → List Val → List Val), (∀ all xs, (ord all xs).Perm xs) → ∀ (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val),
     1 ≤ n → f % 2 = 0 → a0 ∈ as.take n →
     (∀ a v, u.callV f a v = { out := .prog (if a = a0 then .canceled else Timeout.neverIO) }) →
     WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) →
@@ -240,7 +240,7 @@ def nevers (bh : Val → Nat × Base) (as : List Val) : Nat :=
 
 /-- Statement 5: if every action succeeds, the results come back in input order. -/
 def parTraverseNSucceedsGen : Prop :=
-  ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) →
+  ∀ (ord : List Val → List Val → List Val), (∀ all xs, (ord all xs).Perm xs) →
   ∀ (n : Nat) (as : List Val) (bh : Val → Nat × Base),
     1 ≤ n → (∀ a ∈ as, ∃ v, (bh a).2 = .ok v) →
     ∀ o, outcomesP {} counterMaskModel (env ord (behaved bh)) (parTraverseNIO n as BL.body.id) o →
@@ -249,7 +249,7 @@ def parTraverseNSucceedsGen : Prop :=
 /-- Statement 6: an error of an action that gets a permit aborts the traversal with an error
 that one of the actions raised. -/
 def parTraverseNErrorAbortsGen : Prop :=
-  ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) →
+  ∀ (ord : List Val → List Val → List Val), (∀ all xs, (ord all xs).Perm xs) →
   ∀ (n : Nat) (as : List Val) (bh : Val → Nat × Base),
     1 ≤ n → (∀ a ∈ as, (bh a).2 ≠ .canc) →
     (∀ a ∈ as, ∀ e, (bh a).2 = .err e → e.kind = .nonFatal) →
@@ -260,7 +260,7 @@ def parTraverseNErrorAbortsGen : Prop :=
 /-- Statement 7: a self-cancel of an action that gets a permit aborts the traversal as
 `Canceled`. -/
 def parTraverseNCancelAbortsGen : Prop :=
-  ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) →
+  ∀ (ord : List Val → List Val → List Val), (∀ all xs, (ord all xs).Perm xs) →
   ∀ (n : Nat) (as : List Val) (bh : Val → Nat × Base),
     1 ≤ n → (∀ a ∈ as, ∀ e, (bh a).2 ≠ .err e) →
     (∃ i, ∃ h : i < as.length, (bh as[i]).2 = .canc ∧ nevers bh (as.take i) < n) →
@@ -402,7 +402,7 @@ def highest (o : Obs) : Option Nat :=
 
 /-- Statement 8: at most `n` actions run at once. -/
 def parTraverseNAtMostN : Prop :=
-  ∀ (ord : List Val → List Val), (∀ xs, (ord xs).Perm xs) →
+  ∀ (ord : List Val → List Val → List Val), (∀ all xs, (ord all xs).Perm xs) →
   ∀ (u : UserEnv) (n : Nat) (as : List Val) (g : Nat),
     1 ≤ n → g % 2 = 0 →
     WellFormed limLib [] (env ord (limited u)) (limitRoot n as g) →

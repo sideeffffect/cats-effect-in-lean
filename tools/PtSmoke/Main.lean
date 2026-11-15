@@ -108,8 +108,8 @@ def lists : List (List Val) :=
    [.nat 1, .nat 2, .nat 3, .nat 4, .nat 5], [.nat 6, .nat 1, .nat 5, .nat 2, .nat 4, .nat 3]]
 
 /-- The `HashSet` orders: insertion order, reversed, rotated by one. -/
-def ords : List (String × (List Val → List Val)) :=
-  [("id", fun xs => xs), ("rev", List.reverse), ("rot", fun xs => xs.drop 1 ++ xs.take 1)]
+def ords : List (String × (List Val → List Val → List Val)) :=
+  [("id", fun _ xs => xs), ("rev", fun _ xs => xs.reverse), ("rot", fun _ xs => xs.drop 1 ++ xs.take 1)]
 
 /-- A behaviour table for inputs `1..len`. -/
 def bhOf (tbl : List (Nat × Base)) : Val → Nat × Base
@@ -267,7 +267,7 @@ def main (args : List String) : IO UInt32 := do
     IO.println "statement 8: done"
   IO.println s!"behaviour tables checked (statements 5, 6, 7): {genCases.1}, {genCases.2.1}, {genCases.2.2}"
   IO.println s!"stopped runs {stoppedTot}, violations {bad}"
-  let ord : List Val → List Val := List.reverse
+  let ord : List Val → List Val → List Val := fun _ xs => xs.reverse
   -- wrong functions
   let rev : UserEnv := { call := (env ord (tagged u)).call
                          callV := fun id a v => if id == 1000001 then { out := .ret (listV ((unlistV a).getD []).reverse) } else (env ord (tagged u)).callV id a v }

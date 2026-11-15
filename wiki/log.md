@@ -371,6 +371,11 @@
 - Raw: raw/project-decisions/2026-11-15-review-batch-11b-notes.md
 - Review: review/2026-11-15-review-batch-11b.md
 
+## [2026-11-15] update | parTraverseN difftest: rankOrder fix (track S case g61-9094)
+- Updated: parTraverseN model (HashSet ghost list `all`, order input `ho all xs`), Difftest program format (rankOrder by index in `all`)
+- Raw: raw/cats-effect/2026-11-15-partraverse-rankorder-fix.md
+- Hash cases (33, with `pth-regress-g61-9094`): agree in 3 runs. `opcount.py --seeds 61 62 63 --n 20000 --boost tpl_sem=20 tpl_mutex=0`: 60,000 cases, all agree (g61-9094 included); parTraverseN 4,240, semNew 54,499, semAcquireN 29,725, semReleaseN 42,346, semPermit 37,377.
+
 ## [2026-11-15] update | Track S: review batch 11b fixes (H1, W1, L2, L4)
 - Updated: Semaphore and Mutex model (noDeadlock statements restated: not blocked + join records; W1 wrong function; twin docstring; citation)
 - Raw: raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md
