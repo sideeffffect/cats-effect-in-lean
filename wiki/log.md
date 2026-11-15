@@ -309,3 +309,7 @@
 ## [2026-11-15] update | Twin matrix: combining-module rule, real-runner timings
 - Raw: raw/project-decisions/2026-11-14-decision-57-implementation-track-p.md (twin section: combining modules, CI run 43682566345, lean job without cache, paranoid all green)
 - Updated: Registry and audit (twin layout, critical path)
+
+## [2026-11-15] ingest | Branch protection on main (decision 57 step 4)
+- Updated: Registry and audit (required checks)
+- Raw: raw/project-decisions/2026-11-15-branch-protection-set.md
