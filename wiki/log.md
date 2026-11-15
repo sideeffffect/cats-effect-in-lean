@@ -436,3 +436,7 @@
 - Updated: Agent workflow and review protocol (review log), index
 - Raw: raw/project-decisions/2026-11-15-review-batch-14-notes.md
 - Review: review/2026-11-15-review-batch-14.md
+
+## [2026-11-15] ingest | Track Q: review batch 14 C1 (honest drops of tryOffer/tryTake on all classes)
+- Updated: Queue families model
+- Raw: raw/cats-effect/2026-11-15-queue-review14-honest-drops.md
