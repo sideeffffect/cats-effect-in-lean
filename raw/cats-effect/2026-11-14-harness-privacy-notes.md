@@ -36,3 +36,13 @@
 
 - `PT.k1 n as f` keeps the user function `f` as a number field; `parTraverseNOrder` uses `ptIsLib` (a `Lib` without fields), so a well-formed `f` that captured the element's result `Deferred` passes. With the deep `captured` and a `Lib` that declares the `PT`/`TL.tag` function fields (`PrivacyExamples.ptLibDeep`), the forgery is rejected (regression `example`s, kernel). Track G must switch the statement to such a `Lib` (its file; not edited here).
 - `ParTraverseWitness.neverCaptured` adapted to the new `WF.capOK`.
+
+## Follow-up: no silent fallback (coordinator, 2026-11-14)
+
+- `Lib.idFree ok` is the explicit library without function fields; the `Nat → Bool` coercion produces it.
+- Audit check `lib-fields`: a registered `prop` that uses `Lib.idFree` or a `{ ok := _ }` literal (in its value or any project definition it uses, worklist bound 200,000) needs `Entry.libNote`. Self-test: `fieldless_lib`, `fieldless_lib_lit`, `fieldless_lib_via` rejected; `fieldless_lib_noted` passes.
+- The first audit run flagged exactly 17 entries: 4 IO laws and syncStep (plain IO, no library closures), QueueTimeout, 4 Race, 3 Memoize (their closures hold no closure id in a number field; named libraries `queueLib`, `raceLib`, `memoLib` with the reason in their doc), and 4 ParTraverse (NOT id-free; libNote records the open gap until track G switches the statement).
+- CE-0030: the stronger hypothesis is the same `Lib` (`memoLib` = `Lib.idFree isLib`, exact for these closures), so the witness is unchanged.
+- Not turned into Lean lemmas (too hard for this round):
+  1. "The library never hands a token to user code": a run invariant over `Sched.tickP`/`Step` for all schedules (no fiber frame, argument or reachable cell holds the token except the harness closures and the log cell). Same missing invariant style as the open `releaseOnce` entries.
+  2. "Depth 64 is never reached": needs a codec lemma `cloOfId id = some c → j ∈ nats c → 2 ^ (bits j) ≤ ...` (each level at least squares the size), plus `lib.fields c ⊆ nats c` for each library. Without it the bound is conservative (rejects), never unsound.

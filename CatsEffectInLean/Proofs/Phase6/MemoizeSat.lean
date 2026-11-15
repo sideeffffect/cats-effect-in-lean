@@ -8,7 +8,7 @@ Decisions 53 and 54 (`wiki/methodology/agent-workflow.md`, "Satisfiable hypothes
 ## Decision 53: the hypotheses hold, and the interesting case happens
 
 The only hypothesis of `memoizeNoStuckGet`, `memoizeGetsAgree` and `memoizeAtMostOnce` is
-`WellFormed isLib [] (env fa u) fa`. The refutation witness of CE-0030 (`fa = IO.canceled`,
+`WellFormed memoLib [] (env fa u) fa`. The refutation witness of CE-0030 (`fa = IO.canceled`,
 `MemoizeStuck.fa_wf`) already satisfies it for `memoizeNoStuckGet`. Here, `fa = IO.cede` and no
 user code:
 
@@ -48,8 +48,8 @@ theorem callV_even (fa : IO) (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) 
   simp [CatsEffectInLean.Props.Phase6.Memoize.dispatch, CatsEffectInLean.Model.Memoize.MLam.ofId?,
     bracketLeaf?, Bracket.BLam.ofId?_even hid, timeoutOf?, TLam.ofId?, h1, u]
 
-theorem wellFormed (fa : IO) (hp : WF.progOK isLib (fun h => ([] : List Handle).contains h) fa = true) :
-    WellFormed isLib [] (env fa u) fa := by
+theorem wellFormed (fa : IO) (hp : WF.progOK memoLib (fun h => ([] : List Handle).contains h) fa = true) :
+    WellFormed memoLib [] (env fa u) fa := by
   refine ⟨hp, fun id hid arg v => ⟨fun w _ => ?_, ?_⟩, ?_⟩
   · rw [callV_even fa id hid, callV_even fa id hid]
   · rw [callV_even fa id hid]; simp [userR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
@@ -66,12 +66,12 @@ def subscribers2 {M : Type} (s : Sched M) (r : Nat) : Bool :=
   | .evaluating _ n => 2 ≤ n
   | _ => false
 
-theorem cede_wf : WellFormed isLib [] (env .cede u) .cede := wellFormed _ (by decide)
+theorem cede_wf : WellFormed memoLib [] (env .cede u) .cede := wellFormed _ (by decide)
 
 /-- `memoizeGetsAgree` is not vacuous: its hypothesis holds, two `get`s run at the same time, and
 the root completes with a pair. -/
 theorem getsAgree_sat :
-    WellFormed isLib [] (env .cede u) .cede ∧
+    WellFormed memoLib [] (env .cede u) .cede ∧
     subscribers2 (run .cede u 40 [] (twoGets 0)) 0 = true ∧
     (run .cede u 200 [] (twoGets 0)).halt =
       some (.done (.succeeded (.pair (.ocSucceeded .unit) (.ocSucceeded .unit)))) :=
@@ -80,7 +80,7 @@ theorem getsAgree_sat :
 /-- `memoizeAtMostOnce` is not vacuous: its hypothesis holds, a `get` comes during the
 evaluation, the root completes, and the counter is 1. -/
 theorem atMostOnce_sat :
-    WellFormed isLib [] (env .cede u) .cede ∧
+    WellFormed memoLib [] (env .cede u) .cede ∧
     subscribers2 (run .cede u 45 [] (countedTwoGets 0)) 1 = true ∧
     (run .cede u 200 [] (countedTwoGets 0)).halt =
       some (.done (.succeeded (.pair (.ocSucceeded .unit) (.ocSucceeded .unit)))) ∧
@@ -90,7 +90,7 @@ theorem atMostOnce_sat :
 /-! ### Decision 54: programs that name the observed cells are not well-formed -/
 
 /-- The program of a user `fa` with no handle in scope. -/
-def okFa (p : IO) : Bool := WF.progOK isLib (fun h => ([] : List Handle).contains h) p
+def okFa (p : IO) : Bool := WF.progOK memoLib (fun h => ([] : List Handle).contains h) p
 
 theorem forged_counter : okFa (.delay (TLam.incr 0).fn) = false := by decide +kernel
 theorem forged_tryComplete :

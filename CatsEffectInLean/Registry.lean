@@ -65,6 +65,9 @@ structure Entry where
   bug : Option String := none
   /-- Free text, for example why an `open` entry is hard. -/
   note : String := ""
+  /-- Decision 56: if `prop` uses a `WellFormed` library without function fields (`Lib.idFree`),
+  why that is right: its closures keep no closure id in a number field. The audit requires it. -/
+  libNote : String := ""
   deriving Repr, Inhabited
 
 /-- The registry. One entry per (law, instance) (decision 16). -/
@@ -72,6 +75,7 @@ def registry : List Entry := [
   { id := "laws.MonadCancelLaws.canceledAssociatesLeftOverFlatMap.IO"
     rows := ["laws.MonadCancelLaws.canceledAssociatesLeftOverFlatMap"]
     prop := ``Props.IO.MonadCancelLaws.canceledAssociatesLeftOverFlatMap
+    libNote := "Plain IO (WellFormedIO = WellFormed (Lib.idFree fun _ => false)): no library closure is allowed, so no closure keeps an id in a number field."
     status := .proven
     thm := ``Proofs.IO.MonadCancelLaws.canceledAssociatesLeftOverFlatMap_proven
     note := "IO, EqvP (all schedules, preemption at any run-loop iteration); fa never runs \
@@ -79,6 +83,7 @@ def registry : List Entry := [
   { id := "laws.MonadCancelLaws.forceRCanceledShortCircuits.IO"
     rows := ["laws.MonadCancelLaws.forceRCanceledShortCircuits"]
     prop := ``Props.IO.MonadCancelLaws.forceRCanceledShortCircuits
+    libNote := "Plain IO (WellFormedIO = WellFormed (Lib.idFree fun _ => false)): no library closure is allowed, so no closure keeps an id in a number field."
     status := .proven
     thm := ``Proofs.IO.MonadCancelLaws.forceRCanceledShortCircuits_proven
     note := "IO, EqvP; forceR = handleError(_ => ()).productR (IO.scala:452-454); fa never runs \
@@ -86,6 +91,7 @@ def registry : List Entry := [
   { id := "laws.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary.IO"
     rows := ["laws.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary"]
     prop := ``Props.IO.MonadCancelLaws.onCancelAssociatesOverUncancelableBoundary
+    libNote := "Plain IO (WellFormedIO = WellFormed (Lib.idFree fun _ => false)): no library closure is allowed, so no closure keeps an id in a number field."
     status := .«open»
     note := "Believed true: the NB comment (L/MonadCancelLaws.scala:47-60) is about the monad laws, \
       not this law. Bounded smoke tests (11 fa, picks and outside cancels) agree. Proof needs a \
@@ -94,6 +100,7 @@ def registry : List Entry := [
   { id := "laws.MonadCancelLaws.uncancelablePollIsIdentity.IO"
     rows := ["laws.MonadCancelLaws.uncancelablePollIsIdentity"]
     prop := ``Props.IO.MonadCancelLaws.uncancelablePollIsIdentity
+    libNote := "Plain IO (WellFormedIO = WellFormed (Lib.idFree fun _ => false)): no library closure is allowed, so no closure keeps an id in a number field."
     status := .«open»
     note := "Open, statement now with EqvP (decision 36). The replay-Eqv difference for \
       fa = start(emit 9) >> emit 1 >> n flatMaps >> emit 2 (n = 509 at default thresholds) is gone: \
@@ -104,6 +111,7 @@ def registry : List Entry := [
     rows := ["core.IO.syncStep#2", "core.IO.IOAsync.syncStep", "core.SyncStep.MaxSteps",
       "core.SyncStep.interpret#2", "core.SyncIO.unsafeRunSync"]
     prop := ``Props.Calibration.syncStepIdentitySyncIO
+    libNote := "Lib.idFree (fun _ => false): no library closure is allowed, so no closure keeps an id in a number field."
     status := .refuted
     thm := some ``Proofs.Calibration.syncStepIdentitySyncIO_refuted
     bug := some "bugs/CE-0001.yaml"
@@ -137,6 +145,7 @@ def registry : List Entry := [
       "core.IO.timeout", "core.IO.racePair",
       "core.IOFiber.runLoop.RacePair", "core.IO.asyncCheckAttempt"]
     prop := ``Props.Calibration.QueueTimeout.takeTimeoutNoLostElement
+    libNote := "queueLib = Lib.idFree isLib: Queue and Timeout closures keep no closure id in a number field (Props/Calibration/QueueTimeout.lean, doc of queueLib)."
     status := .refuted
     thm := some ``Proofs.Calibration.QueueTimeout.takeTimeoutNoLostElement_refuted
     bug := some "bugs/CE-0003.yaml"
@@ -173,6 +182,7 @@ def registry : List Entry := [
       "core.IO.bothOutcome", "core.IO.bothOutcome#2", "kernel.GenSpawn.race",
       "kernel.GenSpawn.raceOutcome", "kernel.GenSpawn.both", "kernel.GenSpawn.bothOutcome"]
     prop := ``Props.Phase6.Race.combNoLeak
+    libNote := "raceLib = Lib.idFree isLib: Race and Timeout closures keep no closure id in a number field (Props/Phase6/Race.lean, doc of raceLib)."
     status := .«open»
     note := "No leaked fiber: for the four kernel defaults (IO dispatches to them, no own body), \
       all WellFormed sides, all user code and all PChoice schedules, when the root (the \
@@ -189,6 +199,7 @@ def registry : List Entry := [
       "core.IO.bothOutcome", "core.IO.bothOutcome#2", "kernel.GenSpawn.race",
       "kernel.GenSpawn.raceOutcome", "kernel.GenSpawn.both", "kernel.GenSpawn.bothOutcome"]
     prop := ``Props.Phase6.Race.combCanceledNoLeak
+    libNote := "raceLib = Lib.idFree isLib: Race and Timeout closures keep no closure id in a number field (Props/Phase6/Race.lean, doc of raceLib)."
     status := .«open»
     note := "Decision 50 form of combNoLeak: a parent starts the combinator, cancels it and joins \
       it; at root completion fiber 1 has no live race child. Same smoke evidence; open for the \
@@ -199,6 +210,7 @@ def registry : List Entry := [
   { id := "core.IO.timeout.noLeak"
     rows := ["core.IO.timeout"]
     prop := ``Props.Phase6.Race.timeoutNoLeak
+    libNote := "raceLib = Lib.idFree isLib: Race and Timeout closures keep no closure id in a number field (Props/Phase6/Race.lean, doc of raceLib)."
     status := .«open»
     note := "fa.timeout(d), direct and canceled by a parent (decision 50): at root completion the \
       timeout's racePair (source and sleep) has no live child. Smoke as combNoLeak; open. Track P (2026-11-10): not settled. Proven so far: F1/F1b/F2 frame lemmas for all runs \
@@ -208,6 +220,7 @@ def registry : List Entry := [
   { id := "core.IO.raceOutcome.isWinnerOutcome"
     rows := ["core.IO.raceOutcome", "kernel.GenSpawn.raceOutcome"]
     prop := ``Props.Phase6.Race.raceOutcomeIsWinnerOutcome
+    libNote := "raceLib = Lib.idFree isLib: Race and Timeout closures keep no closure id in a number field (Props/Phase6/Race.lean, doc of raceLib)."
     status := .«open»
     note := "raceOutcome returns Left(oc) only if fiber 1 (fa) ended with oc, Right(oc) only if \
       fiber 2 (fb) did. Smoke: leaksmoke (0 violations). Open: same invariant argument (needs H, \
@@ -288,6 +301,7 @@ def registry : List Entry := [
   { id := "core.IO.memoize.noStuckGet"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeNoStuckGet
+    libNote := "memoLib = Lib.idFree isLib: Memoize closures, the listed Bracket leaves and Timeout closures keep no closure id in a number field (Props/Phase6/Memoize.lean, doc of memoLib). The CE-0030 witness meets this hypothesis unchanged (same Lib)."
     status := .refuted
     thm := some ``Proofs.Phase6.memoizeNoStuckGet_refuted
     bug := some "bugs/CE-0030.yaml"
@@ -304,6 +318,7 @@ def registry : List Entry := [
   { id := "core.IO.memoize.getsAgree"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeGetsAgree
+    libNote := "memoLib = Lib.idFree isLib: Memoize closures, the listed Bracket leaves and Timeout closures keep no closure id in a number field (Props/Phase6/Memoize.lean, doc of memoLib). The CE-0030 witness meets this hypothesis unchanged (same Lib)."
     status := .«open»
     note := "Two concurrent gets observe the same outcome when the root completes (all \
       WellFormed fa, all PChoice schedules). Smoke: 9 fa x 400 random schedules, 0 violations; a \
@@ -314,6 +329,7 @@ def registry : List Entry := [
   { id := "core.IO.memoize.atMostOnce"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
     prop := ``Props.Phase6.Memoize.memoizeAtMostOnce
+    libNote := "memoLib = Lib.idFree isLib: Memoize closures, the listed Bracket leaves and Timeout closures keep no closure id in a number field (Props/Phase6/Memoize.lean, doc of memoLib). The CE-0030 witness meets this hypothesis unchanged (same Lib)."
     status := .«open»
     note := "Without a cancel from the program, fa starts at most once (counter <= 1 in every \
       reachable state of countedTwoGets). Smoke: 9 fa x 400 random schedules, max 1; a memoize \

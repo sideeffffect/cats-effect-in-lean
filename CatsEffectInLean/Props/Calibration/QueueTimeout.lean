@@ -198,6 +198,12 @@ def isLib (id : Nat) : Bool :=
         (k == Timeout.ns && (Timeout.TLam.ofFields tag fs).isSome)
     | none => false
 
+/-- The `WellFormed` library of this statement (decision 56): `Queue` and `Timeout` closures.
+They keep no closure id in a number field: their fields are `Ref`/`ContState`/poll handles,
+offered values, taker cell numbers, source codes and durations (`Std/Queue.lean` `QLam.toVal`,
+`Model/Timeout.lean` `TLam.toVal`). So `Lib.idFree` is exact. -/
+@[reducible] def queueLib : Lib := Lib.idFree isLib
+
 /-- The user environment of program A. -/
 def env : UserEnv where
   call id arg refs := dispatch id arg { refs }
@@ -220,7 +226,7 @@ elements, timeouts, sleeps and schedules, a run of program A that ends `Succeede
 each offered element exactly once (to the consumer or to the drain). -/
 def takeTimeoutNoLostElement : Prop :=
   ∀ (xs : List Nat) (d s : Nat) (o : Obs),
-    WellFormed isLib [] env (progA xs d s) →
+    WellFormed queueLib [] env (progA xs d s) →
     outcomes {} counterMaskModel env (progA xs d s) o →
     ∀ v, o.summary = .done (.succeeded v) →
     (returned o.out).Perm xs
