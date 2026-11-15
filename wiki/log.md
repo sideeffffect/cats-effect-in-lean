@@ -393,3 +393,7 @@
 ## [2026-11-15] ingest | Decision 63: wrong-function battery per structure
 - Updated: Agent workflow (wrong-function battery section)
 - Raw: raw/project-decisions/2026-11-15-decision-63-wrong-function-battery.md
+
+## [2026-11-15] update | Track S: review batch 12 (H2, W2) and the decision-63 battery
+- Updated: Semaphore and Mutex model (noDeadlock: Succeeded or fatal; battery table, 38 kernel rows)
+- Raw: raw/cats-effect/2026-11-15-semaphore-mutex-review12-battery.md

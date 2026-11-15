@@ -95,3 +95,5 @@ import CatsEffectInLean.Std.CyclicBarrier
 import CatsEffectInLean.Props.Phase7.CountDownLatch
 import CatsEffectInLean.Props.Phase7.CyclicBarrier
 import CatsEffectInLean.Proofs.Phase7.LatchWitness
+import CatsEffectInLean.Proofs.Phase7.SemaphoreBatteryDefs
+import CatsEffectInLean.Proofs.Phase7.SemaphoreBattery
