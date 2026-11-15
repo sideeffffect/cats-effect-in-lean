@@ -115,11 +115,64 @@ jobs:
           python3 difftest/py/drive.py corpus --lean "lake exe cediff"
           python3 difftest/py/drive.py run --seeds 1 2 3 --n 2000 --modes replay --lean "lake exe cediff" --min-v1-agree 150
 
-  twin-checks:
-    # CE-0002 fixed-twin checks (lean_lib TwinChecks; decision 39). One `decide +kernel` needs up
-    # to 13 GB, so this job builds one module per Lean process and nothing else in parallel.
-    # It also checks the axioms of the three result theorems.
-    name: Fixed-twin checks (heavy, sequential)
+  # Fixed-twin checks and smoke tests (lean_lib TwinChecks; decisions 39, 45, 57). Same layout
+  # as the heavy proofs below: twin-plan derives the matrix from the lakefile roots (families of
+  # modules, at most 5 per entry); twin-module builds each entry in the bwrap sandbox (each
+  # build may change only its own artifacts) and uploads its artifacts; twin-aggregate installs
+  # them unchanged, builds the aggregating roots in the sandbox and checks the axioms of the
+  # result theorems; twin-checks is the stable required check.
+  twin-plan:
+    name: Twin checks plan
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      entries: ${{ steps.plan.outputs.entries }}
+      has_entries: ${{ steps.plan.outputs.has_entries }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: plan
+        run: |
+          entries=$(python3 scripts/heavy_closure.py --from-lakefile --lib TwinChecks --matrix --groups 5)
+          echo "$entries"
+          echo "entries=$entries" >> "$GITHUB_OUTPUT"
+          if [ "$entries" = "[]" ]; then echo "has_entries=false"; else echo "has_entries=true"; fi >> "$GITHUB_OUTPUT"
+
+  twin-module:
+    name: Twin module (${{ matrix.entry.name }})
+    needs: twin-plan
+    if: needs.twin-plan.outputs.has_entries == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        entry: ${{ fromJSON(needs.twin-plan.outputs.entries) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
+        with:
+          auto-config: "false"
+      - name: Allow bwrap user namespaces
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          sudo scripts/setup-bwrap-apparmor.sh
+      - name: Build in the sandbox
+        run: SKIP_REPLAY=1 HEAVY_ARTIFACT_OUT="$RUNNER_TEMP/twin-artifacts" scripts/check_heavy_module.sh --lib TwinChecks ${{ matrix.entry.modules }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: twin-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/twin-artifacts
+          if-no-files-found: error
+          retention-days: 3
+
+  twin-aggregate:
+    name: Twin checks aggregate (roots, axioms)
+    needs: [twin-plan, twin-module]
+    if: >-
+      always() && needs.twin-plan.result == 'success' &&
+      (needs.twin-module.result == 'success' ||
+       (needs.twin-module.result == 'skipped' && needs.twin-plan.outputs.has_entries == 'false'))
     runs-on: ubuntu-26.04
     timeout-minutes: 90
     steps:
@@ -127,8 +180,39 @@ jobs:
       - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
         with:
           auto-config: "false"
-      - name: Build twin checks one module at a time, check axioms
-        run: scripts/check_twin_checks.sh
+      - name: Allow bwrap user namespaces
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
+          sudo scripts/setup-bwrap-apparmor.sh
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.twin-plan.outputs.has_entries == 'true'
+        with:
+          pattern: twin-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/twin-artifacts
+      - name: Install module artifacts, build the aggregating roots, check axioms
+        run: TWIN_ARTIFACTS_IN="$RUNNER_TEMP/twin-artifacts" scripts/check_twin_checks.sh
+
+  twin-checks:
+    # Stable name for the required check (decision 57).
+    name: twin-checks
+    needs: [twin-plan, twin-module, twin-aggregate]
+    if: always()
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: All twin jobs succeeded
+        run: |
+          echo "plan=${{ needs.twin-plan.result }} module=${{ needs.twin-module.result }} aggregate=${{ needs.twin-aggregate.result }} has_entries=${{ needs.twin-plan.outputs.has_entries }}"
+          test "${{ needs.twin-plan.result }}" = success
+          test "${{ needs.twin-aggregate.result }}" = success
+          if [ "${{ needs.twin-plan.outputs.has_entries }}" = true ]; then
+            test "${{ needs.twin-module.result }}" = success
+          else
+            test "${{ needs.twin-plan.outputs.has_entries }}" = false
+            test "${{ needs.twin-module.result }}" = skipped
+          fi
 
   # Heavy proofs (decisions 55 and 57): lean_lib HeavyProofs, registry
   # CatsEffectInLean/RegistryHeavy.lean. Not in the default target, so the `lean` job (60 min)
@@ -161,7 +245,7 @@ jobs:
           if [ "$modules" = "[]" ]; then echo "has_modules=false"; else echo "has_modules=true"; fi >> "$GITHUB_OUTPUT"
 
   heavy-module:
-    name: Heavy module (${{ matrix.module }})
+    name: Heavy module (${{ matrix.entry.name }})
     needs: heavy-plan
     if: needs.heavy-plan.outputs.has_modules == 'true'
     runs-on: ubuntu-26.04
@@ -169,7 +253,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: ${{ fromJSON(needs.heavy-plan.outputs.modules) }}
+        entry: ${{ fromJSON(needs.heavy-plan.outputs.modules) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1.7.1
@@ -181,10 +265,10 @@ jobs:
           sudo apt-get install -y -qq bubblewrap
           sudo scripts/setup-bwrap-apparmor.sh
       - name: Build in the sandbox and replay
-        run: HEAVY_ARTIFACT_OUT="$RUNNER_TEMP/heavy-artifacts" scripts/check_heavy_module.sh "${{ matrix.module }}"
+        run: HEAVY_ARTIFACT_OUT="$RUNNER_TEMP/heavy-artifacts" scripts/check_heavy_module.sh ${{ matrix.entry.modules }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: heavy-${{ matrix.module }}
+          name: heavy-${{ strategy.job-index }}
           path: ${{ runner.temp }}/heavy-artifacts
           if-no-files-found: error
           retention-days: 3

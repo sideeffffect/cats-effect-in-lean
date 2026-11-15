@@ -55,37 +55,17 @@ mapfile -t mods < "$safe/mods.txt"
 [[ ${#mods[@]} -gt 0 ]] || { echo "FAIL: no heavy modules"; exit 1; }
 printf '%s\n' "${mods[@]}"
 if [[ -n "${HEAVY_MODULES_OUT:-}" ]]; then cp "$safe/mods.txt" "$HEAVY_MODULES_OUT"; fi
-is_root() { local r; for r in "${roots[@]}"; do [[ $r == "$1" ]] && return 0; done; return 1; }
-
 replay=("${mods[@]}")
 if [[ -n "$artifacts_in" ]]; then
   echo "== 2b. install the artifacts of the matrix jobs from $artifacts_in"
-  replay=("${roots[@]}")
-  for m in "${mods[@]}"; do
-    is_root "$m" && continue
-    [[ -f "$artifacts_in/$m.sha256" ]] || { echo "FAIL: no artifacts for $m (matrix job missing)"; exit 1; }
-    (cd "$artifacts_in" && sha256sum --quiet -c "$m.sha256") || { echo "FAIL: artifacts of $m corrupted"; exit 1; }
-  done
-  # install exactly the listed files (review batch 8): a file in the artifact directory that no
-  # list names, or a listed file that is missing, is an error
-  : > "$safe/installed.sha"
-  for m in "${mods[@]}"; do
-    is_root "$m" || cat "$artifacts_in/$m.sha256" >> "$safe/installed.sha"
-  done
-  mkdir -p "$artifacts_in"
-  sed -E 's/^[0-9a-f]+  //' "$safe/installed.sha" | sort > "$safe/listed.txt"
-  (cd "$artifacts_in" && find . -mindepth 1 -not -type d -not -name '*.sha256' -printf '%P\n' | sort) \
-    > "$safe/present.txt"
-  if ! cmp -s "$safe/listed.txt" "$safe/present.txt"; then
-    echo "FAIL: artifact files and sha256 lists differ:"
-    diff "$safe/listed.txt" "$safe/present.txt" | head -20 || true
-    exit 1
-  fi
-  while IFS= read -r rel; do
-    [[ -f "$artifacts_in/$rel" && ! -L "$artifacts_in/$rel" ]] || { echo "FAIL: $rel is not a regular file"; exit 1; }
-    mkdir -p ".lake/$(dirname "$rel")"
-    cp -p "$artifacts_in/$rel" ".lake/$rel"
-  done < "$safe/listed.txt"
+  # the aggregating roots are built and replayed here; every other module comes from a matrix job
+  python3 scripts/heavy_closure.py --aggregates "${roots[@]}" > "$safe/aggr.txt"
+  mapfile -t aggr < "$safe/aggr.txt"
+  is_aggr() { local r; for r in "${aggr[@]}"; do [[ $r == "$1" ]] && return 0; done; return 1; }
+  replay=("${aggr[@]}")
+  from_matrix=()
+  for m in "${mods[@]}"; do is_aggr "$m" || from_matrix+=("$m"); done
+  scripts/install_artifacts.sh "$artifacts_in" "$safe/installed.sha" "${from_matrix[@]}"
 fi
 
 echo "== 3. heavy modules, sandboxed, one at a time"
