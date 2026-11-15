@@ -14,6 +14,12 @@ done
 lake build --wfail CatsEffectInLean.Proofs.Phase6.BracketFullFixed
 lake build --wfail CatsEffectInLean.Proofs.Phase6.BracketSmoke
 lake build --wfail CatsEffectInLean.Proofs.Phase6.MemoizeFixed
+lake build --wfail CatsEffectInLean.Proofs.Phase6.ResourceBothFixedDefs
+for f in CatsEffectInLean/Proofs/Phase6/ResourceBothFixedParts/*.lean; do
+  m=${f%.lean}; m=${m//\//.}
+  echo "== $m"
+  lake build --wfail "$m"
+done
 lake build --wfail CatsEffectInLean.Proofs.Phase6.ResourceBothFixed
 lake build --wfail TwinChecks
 tmp=$(mktemp -d)

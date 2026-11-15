@@ -1,4 +1,17 @@
-import CatsEffectInLean.Proofs.Phase6.ResourceBoth
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedDefs
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_0
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_1
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_2
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_3
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_4
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_5
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_6
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_7
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_8
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_9
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_10
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Fixed_11
+import CatsEffectInLean.Proofs.Phase6.ResourceBothFixedParts.Old
 
 /-!
 # Fixed-twin check of CE-0020 (decision 39), kernel-checked
@@ -17,7 +30,8 @@ schedules are `#guard`ed in `test/Phase6/ResourceSmoke.lean`.)
 
 So the statement separates v3.7.1 from the fix on this domain. Not checked: all schedules (the
 exact `outcomesP` set of this program is too large for `outcomesPList`). In `lean_lib TwinChecks`
-(about 15 minutes), built by `scripts/check_twin_checks.sh`.
+built by `scripts/check_twin_checks.sh`. The 60 checks (one per `k`, 2 schedules each; 12 modules of 5) and the v3.7.1 run are
+one module each (`ResourceBothFixedParts/`), so each Lean process stays under 12 GB.
 -/
 
 namespace CatsEffectInLean.Proofs.Phase6.ResourceBothFixed
@@ -28,67 +42,39 @@ open CatsEffectInLean.Props.Phase6.Resource
 open CatsEffectInLean.Proofs.Phase6.ResourceWitnessEnv
 open CatsEffectInLean.Proofs.Phase6.ResourceBothWitness
 
-/-- Schedules `k ∈ [lo, lo + n)`. -/
-def family (lo n : Nat) : List (List PChoice) :=
-  (List.range n).flatMap fun i => [1, 2].map fun d => List.replicate (lo + i) (PChoice.pick 0) ++ [.pick d]
-
-/-- The conclusion of `bothReleasesBoth` on one run (runs without a root outcome are not counted). -/
-def concl (o : Obs) : Bool :=
-  match o.summary with
-  | .done _ => (logOf o).count tagRA == (logOf o).count tagA && (logOf o).count tagRB == (logOf o).count tagB
-  | _ => true
-
-/-- The run of the harness with test body `b` on schedule `cs` satisfies the conclusion. -/
-def okOn (b : IO) (cs : List PChoice) : Bool :=
-  match runObsP {} counterMaskModel (envH WB b) 8000 cs harness with
-  | some o => concl o
-  | none => true
-
-set_option maxHeartbeats 0 in
-theorem fixed_0 : (family 63 5).all (okOn fixedBody) = true := by decide +kernel
-set_option maxHeartbeats 0 in
-theorem fixed_1 : (family 68 5).all (okOn fixedBody) = true := by decide +kernel
-set_option maxHeartbeats 0 in
-theorem fixed_2 : (family 73 5).all (okOn fixedBody) = true := by decide +kernel
-set_option maxHeartbeats 0 in
-theorem fixed_3 : (family 78 5).all (okOn fixedBody) = true := by decide +kernel
-set_option maxHeartbeats 0 in
-theorem fixed_4 : (family 83 5).all (okOn fixedBody) = true := by decide +kernel
-set_option maxHeartbeats 0 in
-theorem fixed_5 : (family 88 5).all (okOn fixedBody) = true := by decide +kernel
-set_option maxHeartbeats 0 in
-theorem fixed_6 : (family 93 5).all (okOn fixedBody) = true := by decide +kernel
-set_option maxHeartbeats 0 in
-theorem fixed_7 : (family 98 5).all (okOn fixedBody) = true := by decide +kernel
-set_option maxHeartbeats 0 in
-theorem fixed_8 : (family 103 5).all (okOn fixedBody) = true := by decide +kernel
-set_option maxHeartbeats 0 in
-theorem fixed_9 : (family 108 5).all (okOn fixedBody) = true := by decide +kernel
-set_option maxHeartbeats 0 in
-theorem fixed_10 : (family 113 5).all (okOn fixedBody) = true := by decide +kernel
-set_option maxHeartbeats 0 in
-theorem fixed_11 : (family 118 5).all (okOn fixedBody) = true := by decide +kernel
-
 theorem fixed_satisfies : ∀ cs ∈ family 63 60, okOn fixedBody cs = true := by
-  have hall : ∀ n, n < 12 → (family (63 + 5 * n) 5).all (okOn fixedBody) = true := by
-    intro n hn
-    match n, hn with
-    | 0, _ => exact fixed_0 | 1, _ => exact fixed_1 | 2, _ => exact fixed_2 | 3, _ => exact fixed_3
-    | 4, _ => exact fixed_4 | 5, _ => exact fixed_5 | 6, _ => exact fixed_6 | 7, _ => exact fixed_7
-    | 8, _ => exact fixed_8 | 9, _ => exact fixed_9 | 10, _ => exact fixed_10 | 11, _ => exact fixed_11
+  have hall : ∀ i, i < 60 → (family (63 + i) 1).all (okOn fixedBody) = true := by
+    intro i hi
+    match i, hi with
+    | 0, _ => exact fixed_k63 | 1, _ => exact fixed_k64 | 2, _ => exact fixed_k65 | 3, _ => exact fixed_k66
+    | 4, _ => exact fixed_k67 | 5, _ => exact fixed_k68 | 6, _ => exact fixed_k69 | 7, _ => exact fixed_k70
+    | 8, _ => exact fixed_k71 | 9, _ => exact fixed_k72 | 10, _ => exact fixed_k73 | 11, _ => exact fixed_k74
+    | 12, _ => exact fixed_k75 | 13, _ => exact fixed_k76 | 14, _ => exact fixed_k77 | 15, _ => exact fixed_k78
+    | 16, _ => exact fixed_k79 | 17, _ => exact fixed_k80 | 18, _ => exact fixed_k81 | 19, _ => exact fixed_k82
+    | 20, _ => exact fixed_k83 | 21, _ => exact fixed_k84 | 22, _ => exact fixed_k85 | 23, _ => exact fixed_k86
+    | 24, _ => exact fixed_k87 | 25, _ => exact fixed_k88 | 26, _ => exact fixed_k89 | 27, _ => exact fixed_k90
+    | 28, _ => exact fixed_k91 | 29, _ => exact fixed_k92 | 30, _ => exact fixed_k93 | 31, _ => exact fixed_k94
+    | 32, _ => exact fixed_k95 | 33, _ => exact fixed_k96 | 34, _ => exact fixed_k97 | 35, _ => exact fixed_k98
+    | 36, _ => exact fixed_k99 | 37, _ => exact fixed_k100 | 38, _ => exact fixed_k101 | 39, _ => exact fixed_k102
+    | 40, _ => exact fixed_k103 | 41, _ => exact fixed_k104 | 42, _ => exact fixed_k105 | 43, _ => exact fixed_k106
+    | 44, _ => exact fixed_k107 | 45, _ => exact fixed_k108 | 46, _ => exact fixed_k109 | 47, _ => exact fixed_k110
+    | 48, _ => exact fixed_k111 | 49, _ => exact fixed_k112 | 50, _ => exact fixed_k113 | 51, _ => exact fixed_k114
+    | 52, _ => exact fixed_k115 | 53, _ => exact fixed_k116 | 54, _ => exact fixed_k117 | 55, _ => exact fixed_k118
+    | 56, _ => exact fixed_k119 | 57, _ => exact fixed_k120 | 58, _ => exact fixed_k121 | 59, _ => exact fixed_k122
+    | _ + 60, h => exact absurd h (by omega)
   intro cs hcs
   simp only [family, List.mem_flatMap, List.mem_range] at hcs
   obtain ⟨i, hi, hm⟩ := hcs
-  have h := hall (i / 5) (by omega)
+  have h := hall i hi
   rw [List.all_eq_true] at h
   apply h
   simp only [family, List.mem_flatMap, List.mem_range]
-  exact ⟨i % 5, Nat.mod_lt _ (by omega), by rw [show 63 + 5 * (i / 5) + i % 5 = 63 + i by omega]; exact hm⟩
+  exact ⟨0, by omega, by simpa using hm⟩
 
 theorem old_violates : ∃ cs ∈ family 63 60, okOn body cs = false :=
   ⟨sched, by
     simp only [family, List.mem_flatMap, List.mem_range]
-    exact ⟨29, by omega, by simp [sched]⟩, by decide +kernel⟩
+    exact ⟨29, by omega, by simp [sched]⟩, old_sched⟩
 
 /-- Everything of this module (for `#print axioms` in `scripts/check_twin_checks.sh`). -/
 theorem all_checks : (∀ cs ∈ family 63 60, okOn fixedBody cs = true) ∧
