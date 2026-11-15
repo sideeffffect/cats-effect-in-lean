@@ -1,7 +1,7 @@
 # Semaphore and Mutex model, CE-0060
 
 > Sources: Cats Effect v3.7.1 (`std/.../Semaphore.scala:28-298`, `std/.../Mutex.scala:24-112`, `std/.../LockQueue.scala:24-110`, `kernel/.../Resource.scala:156-208`, `:388-397`, `:879-880`, `:942-944`, `:1229-1234`, `kernel/jvm-native/.../SyncRef.scala:30-95`, `kernel/.../Ref.scala:123-124`, `:208-250`, `IO.scala:1715-1720`, `:1822-1830`, `:1996-2180`, `IODeferred.scala:62-79`, `docs/std/mutex.md:6-7`); cats-core 2.13.0 (`cats/instances/queue.scala:136-138`, `cats/Traverse.scala:299-309`, `cats/Foldable.scala:591-596`, `cats/instances/option.scala:145-149`); PR #4648; own Phase 7 track S work and scala-cli runs, 2026-11-15
-> Raw: [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md); [Review 11b fixes](../../raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md)
+> Raw: [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md); [Review 11b fixes](../../raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md)
 
 ## Overview
 
@@ -119,6 +119,13 @@ series/3.7.x.
 - The twin docstring sentence "the converse is the same claim ...; the smoke test samples both" is
   wrong: the smoke checks only mutex ⊆ semaphore.
 - Source: [review batch 11b](../../review/2026-11-15-review-batch-11b.md).
+
+## Review (batch 12, 2026-11-15)
+
+- H1 and W1 fixed; join records cannot be forged (only the non-public `HS.joinRec` emits tag 62; statements 2 and 5 have no user code); the other statements keep their meaning (CE-0060 input has no `join`; the twin gets stronger).
+- `std.Semaphore.noDeadlock` HOLLOW (H2): "not `blocked`" allows a root `Errored`. An `available` that always raises makes every root `Errored` and meets every `Semaphore` statement; the first form caught it. Fix: "`Succeeded …` or `fatal`".
+- `std.Mutex.lock.noDeadlock` FAITHFUL with the same weakness (the twin catches a raising `lock`).
+- Source: [review batch 12](../../review/2026-11-15-review-batch-12.md).
 
 ## See Also
 

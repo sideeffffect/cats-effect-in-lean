@@ -1,7 +1,7 @@
 # Queue families model (Phase 7, track Q)
 
 > Sources: Cats Effect v3.7.1 (`std/.../Queue.scala:31-1206`, `UnsafeUnbounded.scala:23-113`, `QueueSource.scala:23-80`, `kernel/jvm-native/.../SyncRef.scala`, `kernel/.../Ref.scala:123-124`, `IO.scala:1353-1431`, `:1548`, `:1996-2163`, `IOFiber.scala:225-260`, `:1210-1266`, `tests/.../QueueSuite.scala:787-890`); own Lean work, difftest and smoke runs, 2026-11-15
-> Raw: [Review 11a fixes](../../raw/cats-effect/2026-11-15-queue-review11a-fixes.md); [Review batch 11a notes](../../raw/project-decisions/2026-11-15-review-batch-11a-notes.md); [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
+> Raw: [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Review 11a fixes](../../raw/cats-effect/2026-11-15-queue-review11a-fixes.md); [Review batch 11a notes](../../raw/project-decisions/2026-11-15-review-batch-11a-notes.md); [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
 
 ## Overview
 
@@ -64,6 +64,8 @@ Fixes of review batch 11a (2026-11-15):
 - D3: the queue template has its own name base (40000; latch 20000, semaphore 30000). D4: `selftest.py` has a floor for the six queue ops. D5: livelock is not seen (registry notes and the statement doc).
 
 Open points: proofs need invariants over `SchedP` runs (as the Phase 6 entries). No linearizability statement yet (only the sequential twin and FIFO). `mapK` (`Q:51-58`, open issue #4483), `tryTakeN`/`tryOfferN`, `unsafeBounded`, `unsafeUnbounded` are not mirrored.
+
+Review batch 12 ([review](../../review/2026-11-15-review-batch-12.md)): both `fifo` entries FAITHFUL (per remover, per producer). The new events (script index, `offerStart` inside the mask) do not change the meaning of `noLoss`, `noDup`, `noDeadlock`, `twinSeq`. `Concurrent.takerLiveness` HOLLOW: the root ignores the join outcome of each consumer, so a `Synchronous#take` that always raises meets every `Concurrent` statement (`twinSeq` has no `synchronous` pair). `Async.takerLiveness` FAITHFUL with the same weakness (`twinSeq` catches it). Fix: record the join outcomes and claim `Succeeded` for the joined consumers that the plan does not cancel. Low: the two `FailureSignal` inventory rows keep "modelled as part of its public caller".
 
 ## Difftest (format v2)
 

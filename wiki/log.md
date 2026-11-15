@@ -383,3 +383,9 @@
 ## [2026-11-15] update | Track S: review batch 11b fixes (H1, W1, L2, L4)
 - Updated: Semaphore and Mutex model (noDeadlock statements restated: not blocked + join records; W1 wrong function; twin docstring; citation)
 - Raw: raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md
+
+## [2026-11-15] review | Review batch 12: re-review of the 11a/11b fixes and the parTraverseN rankOrder change
+- Created: review/2026-11-15-review-batch-12.md
+- Updated: Agent workflow and review protocol (review log, rule on join outcomes and "not blocked"); Queue families model; Semaphore and Mutex model; parTraverseN model
+- Raw: raw/project-decisions/2026-11-15-review-batch-12-notes.md
+- Result: 24 of 26 Phase 7 entries FAITHFUL; HOLLOW: std.Queue.Concurrent.takerLiveness (H3), std.Semaphore.noDeadlock (H2); 8 parTraverseN statements stay FAITHFUL
