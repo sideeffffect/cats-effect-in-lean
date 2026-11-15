@@ -116,7 +116,7 @@ theorem env_calls (fa fb : IO) (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : Vi
         · subst hk
           simp only [beq_self_eq_true, ite_true] at hp
           have hcv : c = p.toVal := (cloVal_of_ofCloVal ho).trans (plam_ofFields_inv hp)
-          have hcap : WF.captured id = p.toVal.handles := by simp [WF.captured, hc, hcv]
+          have hcap : WF.captured (isLib : Lib) id = p.toVal.handles := by simp [WF.captured_coe, hc, hcv]
           rw [hcap]
           exact call_ok p arg v
         · simp [hk] at hp

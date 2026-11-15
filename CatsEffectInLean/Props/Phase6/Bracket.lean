@@ -53,10 +53,10 @@ def guaranteeIsGuaranteeCase : Prop :=
   ∀ (env : UserEnv) (ioOf : Val → IO) (s f : Val) (k : Nat),
     LibEnv env ioOf →
     IOI.Lam.constProg env k (ioOf f) →
-    WellFormed isLib [] env (ioOf s) →
-    WellFormed isLib [] env (ioOf f) →
-    WellFormed isLib [] env (guaranteeIO (.ext s) (.ext f)) →
-    WellFormed isLib [] env (guaranteeCaseIO (.ext s) k) →
+    WellFormed lib [] env (ioOf s) →
+    WellFormed lib [] env (ioOf f) →
+    WellFormed lib [] env (guaranteeIO (.ext s) (.ext f)) →
+    WellFormed lib [] env (guaranteeCaseIO (.ext s) k) →
     IOEqv env (guaranteeIO (.ext s) (.ext f)) (guaranteeCaseIO (.ext s) k)
 
 /-- Twin: `IO.bracketFull(acquire)(use)(release)` (`IO.scala:1826-1830`) `<->` the kernel
@@ -65,8 +65,8 @@ user functions (`acq`, `use`, `rel`) are arbitrary well-formed user code. -/
 def bracketFullIsKernelDefault : Prop :=
   ∀ (env : UserEnv) (ioOf : Val → IO) (acq use rel : Nat),
     LibEnv env ioOf →
-    WellFormed isLib [] env (bracketFullIO acq use rel) →
-    WellFormed isLib [] env (defaultBracketFullIO acq use rel) →
+    WellFormed lib [] env (bracketFullIO acq use rel) →
+    WellFormed lib [] env (defaultBracketFullIO acq use rel) →
     IOEqv env (bracketFullIO acq use rel) (defaultBracketFullIO acq use rel)
 
 /-- `use` is a pure function: a call has no effect and does not throw. -/
@@ -78,8 +78,8 @@ def bracketFullIsKernelDefaultPureUse : Prop :=
   ∀ (env : UserEnv) (ioOf : Val → IO) (acq use rel : Nat),
     LibEnv env ioOf →
     PureFn env use →
-    WellFormed isLib [] env (bracketFullIO acq use rel) →
-    WellFormed isLib [] env (defaultBracketFullIO acq use rel) →
+    WellFormed lib [] env (bracketFullIO acq use rel) →
+    WellFormed lib [] env (defaultBracketFullIO acq use rel) →
     IOEqv env (bracketFullIO acq use rel) (defaultBracketFullIO acq use rel)
 
 /-! ## The test program of the invariants (decisions 50, 53, 54)
@@ -247,7 +247,7 @@ counter. -/
 def bracketReleaseOnce : Prop :=
   ∀ (u : UserEnv) (a0 : IO) (use rel : Nat),
     use % 2 = 0 → rel % 2 = 0 →
-    WellFormed isLib [] (henv a0 u) a0 →
+    WellFormed lib [] (henv a0 u) a0 →
     ∀ o, outcomesP {} counterMaskModel (henv a0 u) (harness 0 use rel) o →
       (∃ oc, o.summary = .done oc) → count o 1 = count o 0
 
@@ -257,7 +257,7 @@ user functions `k`, `q`. Same harness and quantifiers as `bracketReleaseOnce`. -
 def guaranteeFinalizerOnce : Prop :=
   ∀ (u : UserEnv) (k q : Nat),
     k % 2 = 0 → q % 2 = 0 →
-    WellFormed isLib [] (henv (.pure .unit) u) (.pure .unit) →
+    WellFormed lib [] (henv (.pure .unit) u) (.pure .unit) →
     ∀ o, outcomesP {} counterMaskModel (henv (.pure .unit) u) (harness 1 k q) o →
       (∃ oc, o.summary = .done oc) → count o 1 ≤ 1 ∧ count o 0 ≤ count o 1
 

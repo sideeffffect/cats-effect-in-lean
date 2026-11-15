@@ -83,24 +83,29 @@ theorem not_eqvP : ¬ EqvP {} counterMaskModel r.toEnv alloc (IOI.uncancelable (
 
 /-! ### The witness is well-formed -/
 
-theorem ids_ok : isLib 279459022985 = true ∧ WF.captured 279459022985 = [] ∧
-    WF.captured 0 = [] ∧ WF.captured 2 = [] := by
+theorem ids_ok : isLib 279459022985 = true ∧
+    WF.capturedD lib WF.capDepth 279459022985 = some [] ∧
+    Codec.cloOfId 0 = none ∧ Codec.cloOfId 2 = none := by
   decide +kernel
 
 /-- User code (even ids) of `r.toEnv` passes `CallOK`: it ignores the view, has no effects, and
 returns `IO.canceled`, `alloc` (only library closures without handles), or a throw. -/
 theorem r_calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
-    WF.CallOK isLib [] r.toEnv id arg v := by
+    WF.CallOK lib [] r.toEnv id arg v := by
   obtain ⟨hl, hc, hc0, _⟩ := ids_ok
   have he : ∀ w, r.toEnv.callV id arg w = user.call (id / 2) arg w.refs := by
     intro w; simp [REnv.toEnv, REnv.callV, hid, r]; rfl
   refine ⟨fun w _ => ?_, ?_⟩
   · rw [he, he]
     rcases id / 2 with _ | _ | k <;> rfl
-  · rw [he]
+  · have hX : ∀ mem, WF.capOK lib mem 279459022985 = true := fun mem => by
+      unfold WF.capOK; rw [hc]; rfl
+    have h0 : ∀ mem, WF.capOK lib mem 0 = true := fun mem => WF.capOK_of_none _ _ _ hc0
+    have hl' : lib.ok 279459022985 = true := hl
+    rw [he]
     rcases id / 2 with _ | _ | k <;>
-      simp [user, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK, WF.sub, alloc, fa,
-        IOI.uncancelable, uid, hl, hc, hc0]
+      simp [user, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK, alloc, fa,
+        IOI.uncancelable, uid, hl', hX, h0]
 
 theorem r_opaque : WF.PollOpaque r.toEnv := by
   obtain ⟨hl, hc, hc0, hc2⟩ := ids_ok
@@ -125,7 +130,7 @@ theorem r_opaque : WF.PollOpaque r.toEnv := by
         WF.rnFn_user_of_all σ 279459022985 (by decide +kernel),
         WF.rnFn_user_of_all σ 0 (by decide +kernel)]
 
-theorem r_wellFormed (p : IO) (hp : WF.progOK isLib (fun h => ([] : List Handle).contains h) p = true) :
+theorem r_wellFormed (p : IO) (hp : WF.progOK lib (fun h => ([] : List Handle).contains h) p = true) :
     r.WellFormed p := by
   refine ⟨⟨hp, fun id hid arg v => r_calls id hid arg v, r_opaque⟩, fun _ => rfl, ?_, ?_⟩
   · intro _ _ q h; cases h; rfl

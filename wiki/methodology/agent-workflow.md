@@ -67,7 +67,7 @@ A refutation is HOLLOW when a correct implementation also refutes the statement 
 
 ## Harness privacy (decision 56, added 2026-11-14)
 
-Three review rounds (batches 4–6) each found a new marker forgery. Patching each found forgery did not converge. Rule: harness tokens must be private by construction, or a kernel-checked lemma must show that user steps preserve privacy. No escape clauses; runtime numbers (clock) are user data. One shared module owns this for all tracks. Each known forgery becomes a Lean regression `example`. Source: [decision 56](../../raw/project-decisions/2026-11-14-decision-56-harness-privacy.md).
+Three review rounds (batches 4–6) each found a new marker forgery. Patching each found forgery did not converge. Rule: harness tokens must be private by construction, or a kernel-checked lemma must show that user steps preserve privacy. No escape clauses; runtime numbers (clock) are user data. One shared module owns this for all tracks. Each known forgery becomes a Lean regression `example`. Source: [decision 56](../../raw/project-decisions/2026-11-14-decision-56-harness-privacy.md). Implementation (track Res): `Props/Phase6/HarnessPrivacy.lean` (tokens = harness cells allocated first; events capture them; codes are token names; `UserPrivate`), `WellFormed` `Lib.fields` (deep `captured`), regressions in `Proofs/Phase6/PrivacyExamples.lean`; see [Resource use, allocated, both](../cats-effect/resource-use-both-model.md).
 
 ## See Also
 

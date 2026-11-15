@@ -2254,14 +2254,14 @@ kernel.RefSource.get,kernel,method,kernel/shared/src/main/scala/cats/effect/kern
 kernel.RefSource.catsFunctorForRefSource,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Ref.scala,500,todo,,
 kernel.RefSink.set,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Ref.scala,517,todo,,
 kernel.RefSink.catsContravariantForRefSink,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Ref.scala,521,todo,,
-kernel.Resource.fold,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,156,modelled,,kernel.Resource.both.releaseOnce
-kernel.Resource.use,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,207,modelled,,kernel.Resource.both.releaseOnce
+kernel.Resource.fold,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,156,todo,,
+kernel.Resource.use,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,207,todo,,
 kernel.Resource.useEval,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,215,todo,,
 kernel.Resource.useForever,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,224,todo,,
 kernel.Resource.use_,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,230,todo,,
 kernel.Resource.useKleisli,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,235,todo,,
 kernel.Resource.useKleisliK,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,243,todo,,
-kernel.Resource.both,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,286,modelled,,kernel.Resource.both.releaseOnce
+kernel.Resource.both,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,286,todo,,
 kernel.Resource.race,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,320,todo,,
 kernel.Resource.flatMap,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,388,todo,,
 kernel.Resource.map,kernel,method,kernel/shared/src/main/scala/cats/effect/kernel/Resource.scala,396,todo,,

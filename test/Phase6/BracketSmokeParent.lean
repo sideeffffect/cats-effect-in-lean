@@ -49,7 +49,7 @@ def finClaim (o : Obs) : Bool := !done o || (count o 1 ≤ 1 && count o 0 ≤ co
 
 /-- The decidable hypotheses: user functions even, `a0` with no handle. -/
 def hyps (a0 : IO) (x y : Nat) : Bool :=
-  x % 2 == 0 && y % 2 == 0 && WF.progOK isLib (fun h => ([] : List Handle).contains h) a0
+  x % 2 == 0 && y % 2 == 0 && WF.progOK lib (fun h => ([] : List Handle).contains h) a0
 
 def holds (a0 : IO) (g x y : Nat) (p : Obs → Bool) : Bool :=
   hyps a0 x y && (obsOf a0 g x y).any (·.all p)

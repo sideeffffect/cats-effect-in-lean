@@ -64,11 +64,12 @@ import CatsEffectInLean.Props.Phase6.Memoize
 import CatsEffectInLean.Proofs.Phase6.MemoizeStuck
 import CatsEffectInLean.Model.ResourceUse
 import CatsEffectInLean.Model.ResourceUseExamples
-import CatsEffectInLean.Props.Phase6.HarnessNames
+import CatsEffectInLean.Props.Phase6.HarnessPrivacy
 import CatsEffectInLean.Props.Phase6.Resource
 import CatsEffectInLean.Proofs.Phase6.ResourceWitnessEnv
 import CatsEffectInLean.Proofs.Phase6.ResourceWitness
 import CatsEffectInLean.Proofs.Phase6.ResourceBoth
+import CatsEffectInLean.Proofs.Phase6.PrivacyExamples
 import CatsEffectInLean.Proofs.Phase6.RaceWitness
 import CatsEffectInLean.Proofs.Phase6.MemoizeSat
 import CatsEffectInLean.Proofs.Lemmas.CertP

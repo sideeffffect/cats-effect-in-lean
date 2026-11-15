@@ -1,4 +1,5 @@
 import CatsEffectInLean.Model.Codec
+import CatsEffectInLean.Model.WellFormed
 
 /-!
 # `IO#guarantee`, `IO#guaranteeCase`, `IO#bracket*`, `IO.bracketFull` and the kernel twins (mirror)
@@ -503,6 +504,36 @@ def isLib (id : Nat) : Bool :=
   match BLam.ofId? id with
   | some l => l.good
   | none => false
+
+/-- The closure ids in a source code (`Src`): the `use` function of an internal source. An
+external source (`Src.ext s`) is a value; its handles are seen directly. -/
+def Src.fnIds (c : Val) : List Nat :=
+  match Src.ofVal c with
+  | some (.deferUse use _ _ _) | some (.pollUnitThen use _ _ _) | some (.pollDefer use _ _ _) => [use]
+  | _ => []
+
+/-- The function fields of a closure of this mirror (decision 56, `Lib.fields`): the user
+functions and leaves that it names by number. -/
+def BLam.fnIds : BLam → List Nat
+  | .gBody src fin => Src.fnIds src ++ Src.fnIds fin
+  | .gOnError fin | .gTap fin | .constFin fin => Src.fnIds fin
+  | .gcBody src k | .dgcBody src k => Src.fnIds src ++ [k]
+  | .gcOnError k | .gcTap k | .dgcOnError k | .dgcTap k => [k]
+  | .bfBody acq use rel | .dbfBody acq use rel | .fbfBody acq use rel => [acq, use, rel]
+  | .bfK use rel _ _ | .dbfK use rel _ _ | .fbfK use rel _ _ => [use, rel]
+  | .deferEv use _ _ _ | .thenUse use _ => [use]
+  | .relA rel _ | .dropOc rel => [rel]
+  | .constThis src => Src.fnIds src
+  | _ => []
+
+/-- `Lib.fields` of this mirror on a closure value. -/
+def fnFields (c : Val) : List Nat :=
+  match ofCloVal c with
+  | some (k, tag, fs) => if k == ns then ((BLam.ofFields tag fs).map BLam.fnIds).getD [] else []
+  | none => []
+
+/-- The library of this mirror for `WellFormed` (decision 56): `isLib` and the function fields. -/
+def lib : Lib := { ok := isLib, fields := fnFields }
 
 /-! ## Lemmas: an environment that runs the mirror
 

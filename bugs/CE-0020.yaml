@@ -1,6 +1,6 @@
 id: CE-0020
 title: "Resource#both: an error in the finalizers of one side can cancel the finalizers of the other side; that resource is never released"
-status: draft  # found in Phase 6 track Res (2026-11-10); review batch 5: bug real, statement fixed (harness names, NoForge); re-review
+status: draft  # found in Phase 6 track Res (2026-11-10); review batches 5-6: bug real, statement HOLLOW as registered; restated with harness privacy by construction (decision 56); re-review
 priority: medium
 kind: invariant-violation
 area: kernel
@@ -100,6 +100,6 @@ duplicates:
 lean:
   property: CatsEffectInLean.Props.Phase6.Resource.bothReleasesBoth
   theorem: CatsEffectInLean.Proofs.Phase6.bothReleasesBoth_refuted
-  fixed_twin: "CatsEffectInLean/Proofs/Phase6/ResourceBothFixed.lean (TwinChecks, kernel: ResourceUse.fixedBothRes satisfies the conclusion on the hypothesis-satisfying witness input for 120 schedules around the release phase; v3.7.1 violates it there); test/Phase6/ResourceSmoke.lean (#guard: 600 single-deviation + 1,500 random schedules)"
-  hypotheses: "Harness names are not forgeable (NoForge, Props/Phase6/HarnessNames.lean deep check of closure fields; review batch 5). All hypotheses are proven for the witness (Proofs/Phase6/ResourceBoth.lean), which is also the satisfiability witness (decision 53)."
+  fixed_twin: "CatsEffectInLean/Proofs/Phase6/ResourceBothFixed.lean (TwinChecks, kernel: ResourceUse.fixedBothRes satisfies the conclusion on the hypothesis-satisfying witness input for 120 schedules around the release phase, 63 <= k < 123; v3.7.1 violates it there, at k = 92); test/Phase6/ResourceSmoke.lean (#guard: 600 single-deviation + 1,500 random schedules)"
+  hypotheses: "Harness privacy by construction (decision 56, Props/Phase6/HarnessPrivacy.lean): the harness log cell (Ref 0) is allocated first; release/acquire events capture it; harness codes are token names; user code cannot name a token (Private, no escape clause); WellFormed with the deep Lib (WF.captured follows library function fields). All hypotheses are proven for the witness (Proofs/Phase6/ResourceBoth.lean), which is also the satisfiability witness (decision 53). Review batches 5 and 6 forgeries are regression examples (Proofs/Phase6/PrivacyExamples.lean)."
   ordinary_inputs: "The witness is ordinary: two Resource.make, a release that raises, use_ (no exotic input)."

@@ -44,13 +44,13 @@ theorem henv_even (a0 : IO) (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
   show hdispatch a0 wu id a v = _
   simp [hdispatch, h1, BLam.ofId?_even hid]; rfl
 
-theorem wR_ok (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK isLib R v (wR n) := by
+theorem wR_ok (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK lib R v (wR n) := by
   match n with
   | 0 | 1 | 2 => simp [wR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.sub, Val.handles]
   | _ + 3 => simp [wR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
 
-theorem wf (a0 p : IO) (hp : WF.progOK isLib (fun h => ([] : List Handle).contains h) p = true) :
-    WellFormed isLib [] (henv a0 wu) p := by
+theorem wf (a0 p : IO) (hp : WF.progOK lib (fun h => ([] : List Handle).contains h) p = true) :
+    WellFormed lib [] (henv a0 wu) p := by
   refine ⟨hp, fun id hid arg v => ⟨fun w _ => ?_, ?_⟩, ?_⟩
   · rw [henv_even a0 id hid, henv_even a0 id hid]
   · rw [henv_even a0 id hid]; exact wR_ok _ _ _
@@ -97,7 +97,7 @@ theorem exists_of_map {o? : Option Obs} {p : Obs → Bool} (h : o?.map p = some 
 case (acquire completed, release run, child canceled by the parent). -/
 theorem bracketReleaseOnce_satisfiable :
     ∃ (u : UserEnv) (a0 : IO) (use rel : Nat),
-      use % 2 = 0 ∧ rel % 2 = 0 ∧ WellFormed isLib [] (henv a0 u) a0 ∧
+      use % 2 = 0 ∧ rel % 2 = 0 ∧ WellFormed lib [] (henv a0 u) a0 ∧
       ∃ o, outcomesP {} counterMaskModel (henv a0 u) (harness 0 use rel) o ∧
         o.summary = .done (.succeeded .ocCanceled) ∧ count o 0 = 1 ∧ count o 1 = 1 := by
   obtain ⟨o, ho, hp⟩ := exists_of_map relRun
@@ -109,7 +109,7 @@ theorem bracketReleaseOnce_satisfiable :
 case (`fa` started, the finalizer run, child canceled by the parent). -/
 theorem guaranteeFinalizerOnce_satisfiable :
     ∃ (u : UserEnv) (k q : Nat),
-      k % 2 = 0 ∧ q % 2 = 0 ∧ WellFormed isLib [] (henv (.pure .unit) u) (.pure .unit) ∧
+      k % 2 = 0 ∧ q % 2 = 0 ∧ WellFormed lib [] (henv (.pure .unit) u) (.pure .unit) ∧
       ∃ o, outcomesP {} counterMaskModel (henv (.pure .unit) u) (harness 1 k q) o ∧
         o.summary = .done (.succeeded .ocCanceled) ∧ count o 0 = 1 ∧ count o 1 = 1 := by
   obtain ⟨o, ho, hp⟩ := exists_of_map finRun
@@ -126,8 +126,8 @@ acquire). -/
 theorem bracketFullIsKernelDefaultPureUse_satisfiable :
     ∃ (env : UserEnv) (ioOf : Val → IO) (acq use rel : Nat),
       LibEnv env ioOf ∧ PureFn env use ∧
-      WellFormed isLib [] env (bracketFullIO acq use rel) ∧
-      WellFormed isLib [] env (defaultBracketFullIO acq use rel) ∧
+      WellFormed lib [] env (bracketFullIO acq use rel) ∧
+      WellFormed lib [] env (defaultBracketFullIO acq use rel) ∧
       outcomesP {} counterMaskModel env (bracketFullIO acq use rel) canceledObs := by
   have hl : outcomesPList {} counterMaskModel env 200 (bracketFullIO 0 4 4) = some [canceledObs] := by
     decide +kernel
@@ -163,16 +163,17 @@ theorem gEnv_even (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) : gEnv.call
   show gDisp id a v = _
   simp [gDisp, BLam.ofId?_even hid, gUser]
 
-theorem captured2 : WF.captured 2 = [] := by decide +kernel
+theorem captured2 (mem : Handle → Bool) : WF.capOK lib mem 2 = true :=
+  WF.capOK_of_none _ _ _ (by decide)
 
-theorem gR_ok (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK isLib R v (gR n) := by
+theorem gR_ok (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK lib R v (gR n) := by
   match n with
-  | 0 | 1 | 2 => simp [gR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK, WF.sub, Val.handles,
+  | 0 | 1 | 2 => simp [gR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK, Val.handles,
       captured2]
   | _ + 3 => simp [gR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
 
-theorem gWf (p : IO) (hp : WF.progOK isLib (fun h => ([] : List Handle).contains h) p = true) :
-    WellFormed isLib [] gEnv p := by
+theorem gWf (p : IO) (hp : WF.progOK lib (fun h => ([] : List Handle).contains h) p = true) :
+    WellFormed lib [] gEnv p := by
   refine ⟨hp, fun id hid arg v => ⟨fun w _ => ?_, ?_⟩, ?_⟩
   · rw [gEnv_even id hid, gEnv_even id hid]
   · rw [gEnv_even id hid]; exact gR_ok _ _ _
@@ -197,9 +198,9 @@ def gObs : Obs := { summary := .done (.errored { code := 2 }), out := [.nat 3], 
 theorem guaranteeIsGuaranteeCase_satisfiable :
     ∃ (env : UserEnv) (ioOf : Val → IO) (s f : Val) (k : Nat),
       LibEnv env ioOf ∧ IOI.Lam.constProg env k (ioOf f) ∧
-      WellFormed isLib [] env (ioOf s) ∧ WellFormed isLib [] env (ioOf f) ∧
-      WellFormed isLib [] env (guaranteeIO (.ext s) (.ext f)) ∧
-      WellFormed isLib [] env (guaranteeCaseIO (.ext s) k) ∧
+      WellFormed lib [] env (ioOf s) ∧ WellFormed lib [] env (ioOf f) ∧
+      WellFormed lib [] env (guaranteeIO (.ext s) (.ext f)) ∧
+      WellFormed lib [] env (guaranteeCaseIO (.ext s) k) ∧
       outcomesP {} counterMaskModel env (guaranteeIO (.ext s) (.ext f)) gObs := by
   have hl : outcomesPList {} counterMaskModel gEnv 200 (guaranteeIO (.ext (.nat 0)) (.ext (.nat 1)))
       = some [gObs] := by decide +kernel

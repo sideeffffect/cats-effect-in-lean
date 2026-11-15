@@ -242,6 +242,18 @@
 - Updated: Registry and audit (heavy proofs section)
 - Raw: raw/project-decisions/2026-11-14-decision-57-required-heavy-checks.md
 
+## [2026-11-14] ingest | Track Res: harness privacy by construction (decision 56)
+- Updated: Resource use, allocated, both (harness, files, inventory), guarantee and bracket model (deep captured), Outcome sets (WellFormed Lib), Agent workflow (implementation of decision 56), index
+- Raw: raw/cats-effect/2026-11-14-harness-privacy-notes.md
+
+## [2026-11-14] ingest | Track Res: review batch 7 defect D regression (parTraverseN)
+- Updated: raw harness privacy note (parTraverseN user function as number field; deep Lib rejects it)
+- Raw: raw/cats-effect/2026-11-14-harness-privacy-notes.md
+
+## [2026-11-14] update | parTraverseN: deep Lib and statement 8
+- Updated: parTraverseN model (ptLibDeep with ParTraverse.fnFields incl. srcAction codes; defect D closed; statement 8 atMostN with HarnessPrivacy; witness and kernel-checked wrong function), index
+- Raw: raw/cats-effect/2026-11-14-partraverse-deep-lib.md
+
 ## [2026-11-14] ingest | Review batch 7 fixes for decision 55 (sandbox, derived lists, export scope)
 - Raw: raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md (section "Review batch 7 fixes")
 - Updated: Registry and audit (heavy job steps, export scope, leanexport gotcha)

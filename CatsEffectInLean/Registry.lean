@@ -264,7 +264,11 @@ def registry : List Entry := [
       child canceled). Smoke by #guard with the hypotheses checked \
       (test/Phase6/BracketSmokeParent.lean: 18 inputs; a bracket without release breaks it). \
       Open: a universal proof needs an invariant on scheduler states (the onCancel release is on \
-      the finalizer stack iff counter 0 > counter 1)." },
+      the finalizer stack iff counter 0 > counter 1). Review batch 6 (decision 56): a Bracket leaf that captured a counter handle could be \
+      named by number in BLam.thenUse; WellFormed now takes Bracket.lib, whose captured \
+      handles follow the function fields of library closures (deep WF.captured), so the \
+      forgery is rejected (Proofs/Phase6/PrivacyExamples.lean). Construction: the counters are \
+      the first cells of the run, never given to user code; events capture them." },
   { id := "core.IO.guarantee.finalizerOnce"
     rows := ["core.IO.guarantee"]
     prop := ``Props.Phase6.Bracket.guaranteeFinalizerOnce
@@ -275,7 +279,11 @@ def registry : List Entry := [
       kernel.MonadCancel.guarantee removed (not mirrored here). Satisfiable: \
       Proofs.Phase6.BracketWitness.guaranteeFinalizerOnce_satisfiable. Smoke by #guard with the \
       hypotheses checked (12 inputs; a guarantee without finalizer breaks it). Open: same \
-      missing state invariant as core.IO.bracket.releaseOnce." },
+      missing state invariant as core.IO.bracket.releaseOnce. Review batch 6 (decision 56): a Bracket leaf that captured a counter handle could be \
+      named by number in BLam.thenUse; WellFormed now takes Bracket.lib, whose captured \
+      handles follow the function fields of library closures (deep WF.captured), so the \
+      forgery is rejected (Proofs/Phase6/PrivacyExamples.lean). Construction: the counters are \
+      the first cells of the run, never given to user code; events capture them." },
   -- Phase 6, track M (memoize)
   { id := "core.IO.memoize.noStuckGet"
     rows := ["core.IO.memoize", "kernel.GenConcurrent.memoize"]
@@ -315,42 +323,43 @@ def registry : List Entry := [
       core.IO.memoize.getsAgree (at most one Evaluating transition while no get is canceled)." },
   -- Phase 6, track Res (Resource use/allocated/both)
   { id := "kernel.Resource.both.releaseOnce"
-    rows := ["kernel.Resource.both", "kernel.Resource.use", "kernel.Resource.fold",
-      "kernel.Resource.makeCase", "kernel.Resource.evalMap"]
+    rows := ["kernel.Resource.both", "kernel.Resource.use", "kernel.Resource.fold"]
     prop := ``Props.Phase6.Resource.bothReleasesBoth
     status := .refuted
     thm := some ``Proofs.Phase6.bothReleasesBoth_refuted
     bug := some "bugs/CE-0020.yaml"
     note := "Invariant: Resource.both(A, B).use(f) (Resource.scala:286-314, use = fold with \
-      IO.bracketFull), sides are marked make, harness names not forgeable (NoForge, \
-      Props/Phase6/HarnessNames.lean; review batch 5 fix); every run that ends: each release runs \
-      as often as its acquire completed. Counterexample: A's release raises; F.both in the makeCase \
-      release cancels the fiber of B's finalizer chain before it starts (one schedule, decide \
-      +kernel); all hypotheses proven (also the satisfiability witness, decision 53). Fixed twin \
-      (attempt both chains) satisfies the conclusion on the same input for 120 schedules \
-      (Proofs/Phase6/ResourceBothFixed.lean, TwinChecks, kernel) and 600 + 1,500 schedules \
-      (smoke); v3.7.1 violates it there. Reproducer: REPRODUCED on 3.7.1, series/3.x, series/3.7.x \
-      (fixed copy misses no release)." },
+      IO.bracketFull), sides are marked make in a harness with a log cell (the token, Ref 0, \
+      allocated first); every run that ends: each release tag is logged as often as its acquire \
+      tag. Restated after review batch 6 (decision 56): harness privacy by construction \
+      (Props/Phase6/HarnessPrivacy.lean): events capture the token, codes are token names, user \
+      code cannot name a token (Private, no escape clause), WellFormed with the deep Lib. \
+      Counterexample: A's release raises; F.both in the makeCase release cancels the fiber of B's \
+      finalizer chain before it starts (one schedule, decide +kernel); all hypotheses proven \
+      (also the satisfiability witness). Fixed twin (attempt both chains) satisfies the \
+      conclusion on the same input for 120 schedules (Proofs/Phase6/ResourceBothFixed.lean, \
+      TwinChecks, kernel) and 600 + 1,500 schedules (smoke); v3.7.1 violates it there. \
+      Reproducer: REPRODUCED on 3.7.1, series/3.x, series/3.7.x (fixed copy misses no release)." },
   { id := "kernel.Resource.use.releaseOnce"
     rows := ["kernel.Resource.use", "kernel.Resource.fold", "kernel.Resource.make"]
     prop := ``Props.Phase6.Resource.useReleaseOnce
     status := .«open»
-    note := "Invariant (decision 50): make(acq)(rel).use(f), directly or under the harness \
-      parent (HLam) that cancels and joins; release runs exactly once iff acquire completed; \
-      harness names not forgeable (NoForge). Satisfiability witnesses with and without the parent \
-      (Proofs/Phase6/ResourceWitness.lean, use_sat). Smoke: hypotheses evaluated, 3 releases x 4 \
-      bodies x parent/no parent x 900 schedules (test/Phase6/ResourceSmoke.lean). Open: needs the \
-      bracket state invariant of core.IO.bracket.releaseOnce (fold puts make under \
-      IO.bracketFull)." },
+    note := "Invariant (decision 50): make(acq)(rel).use(f) in the harness, directly or under the \
+      harness parent that cancels and joins; release tag logged exactly as often as the acquire \
+      tag. Harness privacy by construction (decision 56, HarnessPrivacy; Private, deep Lib). \
+      Satisfiability witnesses with and without the parent (Proofs/Phase6/ResourceWitness.lean, \
+      use_sat). Smoke: hypotheses evaluated, 3 releases x 4 bodies x parent/no parent x 900 \
+      schedules (test/Phase6/ResourceSmoke.lean). Open: needs the bracket state invariant of \
+      core.IO.bracket.releaseOnce (fold puts make under IO.bracketFull)." },
   { id := "kernel.Resource.flatMap.releaseOrder"
     rows := ["kernel.Resource.flatMap", "kernel.Resource.use", "kernel.Resource.fold"]
     prop := ``Props.Phase6.Resource.flatMapReleaseOrder
     status := .«open»
-    note := "Invariant: make(A).flatMap(_ => make(B)).use(f): each release iff its acquire, and B \
-      is released before A (LIFO; fold nests bracketFull); harness names not forgeable \
-      (NoForge). Satisfiability witnesses with and without the parent (ResourceWitness.lean, \
-      flat_sat). Smoke: hypotheses evaluated, 24 configurations x 900 schedules. Open: same \
-      missing state invariant, for two nested brackets." },
+    note := "Invariant: make(A).flatMap(_ => make(B)).use(f) in the harness: each release tag iff its \
+      acquire tag, and RB is logged before RA (LIFO; fold nests bracketFull). Harness privacy by \
+      construction (decision 56; the flatMap code is a token name). Satisfiability witnesses with \
+      and without the parent (ResourceWitness.lean, flat_sat). Smoke: hypotheses evaluated, 24 \
+      configurations x 900 schedules. Open: same missing state invariant, for two nested brackets." },
   { id := "kernel.Resource.eval.preservesCancelable"
     rows := ["kernel.Resource.eval", "kernel.Resource.allocatedCase"]
     prop := ``Props.Phase6.Resource.resourceEvalPreservesCancelable
@@ -371,10 +380,11 @@ def registry : List Entry := [
       reordered entry). All user code. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
       HashSet from 5 elements; any permutation, review 7). Satisfiable: \
       Proofs.Phase6.ParTraverseWitness.parTraverseNOrder_satisfiable. Smoke: lake exe ptsmoke \
-      (a reversed result breaks it). Review 7: believed FALSE as stated: WellFormed lets f \
-      capture the per-input result Deferred through a number field of its closure id and \
-      complete it with a wrong value. Not fixed here: it depends on track Res's WellFormed \
-      deep-capture and privacy fix (decision 56); re-check this row when that lands. Open." },
+      (a reversed result breaks it). Review 7 defect D (f captures the per-input result \
+      Deferred via a number field of its closure id) is closed: the statement now uses \
+      ptLibDeep (decision 56 deep captured; function fields of PT, srcAction codes, Bracket, \
+      TL.tag). PrivacyExamples: the forgery (also hidden in a Bracket or Race source) passes \
+      ptIsLib and fails ptLibDeep; ptsmoke: it breaks the claim when run. Plausible. Open." },
   { id := "core.IO.parTraverseN.pureSucceeds"
     rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
     prop := ``Props.Phase6.ParTraverse.parTraverseNPureSucceeds
@@ -429,8 +439,18 @@ def registry : List Entry := [
     note := "The same with IO.canceled in place of the error and no error: every run that stops ends \
       Canceled. All n >= 1, all input lengths, all schedules, all HashSet orders (the supervision Set is a \
       HashSet from 5 elements; any permutation, review 7). Satisfiable (parTraverseNCancelAbortsGen_satisfiable). Smoke: \
-      ptsmoke. Open. Not stated yet: at most n actions at once (needs the decision-56 privacy \
-      module); ptsmoke checks it, and 1000 permits break it." }
+      ptsmoke. Open." },
+  { id := "core.IO.parTraverseN.atMostN"
+    rows := ["core.IO.parTraverseN", "kernel.GenConcurrent.parTraverseN", "kernel.MiniSemaphore.apply", "kernel.MiniSemaphore.acquire", "kernel.MiniSemaphore.release"]
+    prop := ``Props.Phase6.ParTraverse.parTraverseNAtMostN
+    status := .«open»
+    note := "At most n actions run at once (Scaladoc K/GC:132-133): the harness (HarnessPrivacy, \
+      decision 56; token = counter Ref 0) counts the running g(a) inside \
+      uncancelable(poll => enter *> poll(g(a)).attempt.onCancel(exit) ...); in every run \
+      that stops the highest count is <= n. All user code (UserPrivate, WellFormed limLib), \
+      n >= 1, all inputs, schedules and HashSet orders. Satisfiable \
+      (Limit.parTraverseNAtMostN_satisfiable: n = 1 reached). Wrong function: 1000 permits \
+      reaches 2 > 1 (Limit.wideRun_breaks, kernel-checked; ptsmoke). Open." }
 ]
 
 end CatsEffectInLean

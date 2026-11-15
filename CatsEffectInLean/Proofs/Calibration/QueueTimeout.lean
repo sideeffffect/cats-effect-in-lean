@@ -228,7 +228,7 @@ theorem env_calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
   cases hc : cloOfId id with
   | none => exact bad _ (fun w => by simp [Props.Calibration.QueueTimeout.dispatch, hc])
   | some c =>
-    have hcap : WF.captured id = c.handles := by simp [WF.captured, hc]
+    have hcap : WF.captured (isLib : Lib) id = c.handles := by simp [WF.captured_coe, hc]
     rw [hcap]
     cases ho : ofCloVal c with
     | none => exact bad _ (fun w => by simp [Props.Calibration.QueueTimeout.dispatch, hc, ho])

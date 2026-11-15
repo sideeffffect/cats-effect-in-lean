@@ -88,12 +88,12 @@ theorem callV_even (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
   simp [disp, BLam.ofId?_even hid, user]
 
 theorem userR_ok (n : Nat) (R : Handle → Prop) (v : View) :
-    WF.ResultOK isLib R v (userR n) := by
+    WF.ResultOK lib R v (userR n) := by
   match n with
   | 0 | 1 | 2 | 3 | 4 | 5 => simp [userR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.sub, Val.handles]
   | _ + 6 => simp [userR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
 
-theorem calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) : WF.CallOK isLib [] env id arg v := by
+theorem calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) : WF.CallOK lib [] env id arg v := by
   refine ⟨fun w _ => ?_, ?_⟩
   · rw [callV_even id hid, callV_even id hid]
   · rw [callV_even id hid]; exact userR_ok _ _ _
@@ -112,12 +112,12 @@ theorem env_opaque : WF.PollOpaque env := by
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
     rcases hk with rfl | rfl | rfl | rfl | rfl | rfl <;> rfl
 
-theorem wellFormed (p : IO) (hp : WF.progOK isLib (fun h => ([] : List Handle).contains h) p = true) :
-    WellFormed isLib [] env p :=
+theorem wellFormed (p : IO) (hp : WF.progOK lib (fun h => ([] : List Handle).contains h) p = true) :
+    WellFormed lib [] env p :=
   ⟨hp, fun id hid arg v => calls id hid arg v, env_opaque⟩
 
-theorem lhs_wf : WellFormed isLib [] env lhs := wellFormed _ (by decide +kernel)
-theorem rhs_wf : WellFormed isLib [] env rhs := wellFormed _ (by decide +kernel)
+theorem lhs_wf : WellFormed lib [] env lhs := wellFormed _ (by decide +kernel)
+theorem rhs_wf : WellFormed lib [] env rhs := wellFormed _ (by decide +kernel)
 
 end BracketFullWitness
 
