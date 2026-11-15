@@ -36,6 +36,9 @@ inductive OpK where
 
 inductive Var where
   | raises | hangs | drops | doubles
+  /-- The honest drop (review batch 14 C1): `tryOffer` answers `false`, `tryTake` answers `None`,
+  with no effect (a full or empty queue would give the same answer). Other operations: as `drops`. -/
+  | dropsHonest
   deriving DecidableEq, Repr
 
 def OpK.code : OpK → Nat
@@ -69,6 +72,11 @@ def wrongIO (op : OpK) (var : Var) (o : Nat) (x : Val) : IO :=
   | .drops, .take => .pure (.nat 0)
   | .drops, .tryTake => .pure .none
   | .drops, .size => realIO .size o x
+  | .dropsHonest, .tryOffer => .pure (.bool false)
+  | .dropsHonest, .tryTake => .pure .none
+  | .dropsHonest, .offer => .pure .unit
+  | .dropsHonest, .take => .pure (.nat 0)
+  | .dropsHonest, .size => realIO .size o x
   | .doubles, .offer | .doubles, .tryOffer => .flatMap (realIO op o x) (.user (wId 1 [.nat op.code, .fn o, x]))
   | .doubles, .take | .doubles, .tryTake => .flatMap (realIO op o x) (.user (wId 2 [.nat op.code, .fn o, x]))
   | .doubles, .size => realIO .size o x

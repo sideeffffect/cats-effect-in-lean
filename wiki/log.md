@@ -437,6 +437,10 @@
 - Raw: raw/project-decisions/2026-11-15-review-batch-14-notes.md
 - Review: review/2026-11-15-review-batch-14.md
 
+## [2026-11-15] ingest | Track Q: review batch 14 C1 (honest drops of tryOffer/tryTake on all classes)
+- Updated: Queue families model
+- Raw: raw/cats-effect/2026-11-15-queue-review14-honest-drops.md
+
 ## [2026-11-15] update | Track S: batch 7.1 gate review items (B1 sequential specs, C3-C5)
 - Updated: Semaphore and Mutex model (statements 9, 10; honest-drop battery rows; CE-0060 re-run)
 - Raw: raw/cats-effect/2026-11-15-semaphore-mutex-review14.md
