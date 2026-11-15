@@ -430,3 +430,9 @@
 ## [2026-11-15] update | Track L: review batch 13 fixes (H4, L4)
 - Updated: CountDownLatch and CyclicBarrier model (apply battery rows, restated awaitCompletes, noDeadlock claims, v3.7.1 runs on battery inputs)
 - Raw: raw/cats-effect/2026-11-15-track-l-review13-fix.md
+
+## [2026-11-15] review | Review batch 14: batch 7.1 fixes after batch 13, Phase 7 batch 7.1 gate
+- Created: Phase 7 batch 7.1 gate report (draft; gate FAIL, blocker B1: Semaphore try-operation honest drop)
+- Updated: Agent workflow and review protocol (review log), index
+- Raw: raw/project-decisions/2026-11-15-review-batch-14-notes.md
+- Review: review/2026-11-15-review-batch-14.md

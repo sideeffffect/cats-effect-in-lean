@@ -94,6 +94,7 @@ The reproducers are re-run by another agent at this gate; this report judges the
 ## See Also
 
 - [Phase 5 gate report](phase5-gate-report.md)
+- [Phase 7 batch 7.1 gate report](phase7-batch1-gate-report.md)
 - [Project plan](project-plan.md)
 - [Agent workflow and review protocol](agent-workflow.md)
 - [Differential testing](differential-testing.md)
