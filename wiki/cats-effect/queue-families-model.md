@@ -50,6 +50,8 @@ Harness: `rootIO k scripts plan mode`. Fibers run scripts of `offer`, `tryOffer`
 
 Each entry: witness (`QueueWitness`), wrong function (`QueueWrongFunction`, kernel-checked; `qsmoke wrong`), smoke (`qsmoke`).
 
+Scope of the quantification: the queue state is private (the object reference), and a queue never calls user code, so a user program acts on a queue only through method calls in fibers, canceled at any point; the harness quantifies over exactly these (all scripts, plans, schedules). Each call runs in the atomic pattern that the CE test suite checks (`QueueSuite.scala:793-850`); a plain `take` that is canceled after it returned loses its value by definition, and a `take` inside `timeout` or `race` is the CE-0003 shape (#4571), so these are not in the statements. The atomicity of `take` under cancel is not in the Scaladoc; its source is that test (an undisputed invariant).
+
 Open points: proofs need invariants over `SchedP` runs (as the Phase 6 entries). No linearizability statement yet (only the sequential twin and FIFO). `mapK` (`Q:51-58`, open issue #4483), `tryTakeN`/`tryOfferN`, `unsafeBounded`, `unsafeUnbounded` are not mirrored.
 
 ## Difftest (format v2)
