@@ -28,7 +28,7 @@
 - New format-v2 ops `qNew {kind, cap}`, `qOffer`, `qTryOffer`, `qTake`, `qTryTake`, `qSize`. Kinds: `bounded`, `dropping`, `circularBuffer`, `synchronous`, `unbounded`, `boundedConc`, `unboundedConc`, `droppingConc`. Type `queue2` in `typecheck.py` (separate from the v1 `queue` type, whose Lean value is a buffer cell).
 - Generator: `tpl_queue2`, appended by `gen_case` with its own RNG (`difftest-queue2:{seed}:{i}`, `p_queue2 = 0.08` times the weight `tpl_queue2`), so no other op changes. Each scenario uses every queue op at least once; takes are plain, atomic (`uncancelable`/`poll`) or `timeout`; children are canceled or joined.
 - Fixed cases `difftest/cases/queue2.jsonl` (222 cases, `gen_v2_queue.py`): 222 agree on the first run. Golden file `queue2.expected.jsonl`.
-- Generated: `opcount.py --seeds 71 72 73 --n 22000 --boost tpl_queue2=11`: 66,000 of 66,000 agree; each op in 52,941 agreeing cases (seed 71: 17,651; 72: 17,598; 73: 17,692). 37 min with a machine load of about 11.
+- Generated: `opcount.py --seeds 71 72 73 --n 22000 --boost tpl_queue2=11`: see the article for the counts.
 - `selftest.py` passes with the generator change (blocked + fuel 22.7 % < 25 %).
 
 ## Statements and smoke
@@ -36,8 +36,7 @@
 - 11 open statements (`Props/Phase7/Queue.lean`): per family `noLoss`, `noDup`, `fifo`, `noDeadlock`, `takerLiveness`, and `twinSeq` for both. Harness namespace 54; no user code, so no `WellFormed` hypothesis.
 - Witnesses (decision 53), kernel-checked: `QueueWitness` (safety: consumer canceled while it waits; liveness: a waiting taker woken; twin: same nontrivial trace on both sides).
 - Wrong functions (11, kernel-checked runs in `QueueWrongFunction`, random schedules in `qsmoke wrong`): each breaks its claim, the real mirror meets it on the same input.
-- `qsmoke 300 20 1`: 600 harness inputs, 11,040 stopped runs, 0 violations. `qsmoke 1500 30 7`: 84,210 stopped runs, 0 violations.
-- `qsmoke exact 20000`: exhaustive `outcomesPList` for one-fiber inputs canceled at every point: 0 violations; 2 fibers + root do not close within 3,000 states (as track R measured for `race`).
+- `qsmoke 300 20 1`: 600 harness inputs, 11,040 stopped runs, 0 violations. Longer runs: see the article.
 - No counterexample found under sequential consistency. The design keeps elements on cancel: the `Concurrent` take re-enqueues nothing (offer always enqueues; a woken taker retakes), and `notifyNextTaker`/`notifyAnyway` pass on a wakeup that a canceled waiter got.
 
 ## Duplicate searches (read-only)
