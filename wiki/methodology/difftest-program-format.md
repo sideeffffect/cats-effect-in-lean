@@ -164,6 +164,18 @@ New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decod
 - `Prog.eagerReads`: `rUse`/`rAllocated` build `res` at once; `rBoth` builds both sides.
 - Fixed cases `cases/resuse.jsonl` (`cases/gen_res.py`). Generator: `rUse`, `rAllocated`, `res_both`, `tpl_resBoth` (a `both` whose one release raises: CE-0020). See [Resource use, allocated, both](../cats-effect/resource-use-both-model.md).
 
+### Format v2 ops of track Q (Phase 7; same version, same `checkNoV2` gate)
+| op | fields | term |
+|----|--------|------|
+| `qNew` | `kind`, `cap` | `Queue.<kind>[IO, Val]` applied to `cap`, then `.map(q => VQueue(h.newQueue(q)))`; kinds `bounded`, `dropping`, `circularBuffer`, `synchronous`, `unbounded`, and the private `Concurrent` factories `boundedConc`, `unboundedConc`, `droppingConc` (`Queue.scala:93-110`); `cap` 0..2^31-1, at least 1 for `dropping`, `circularBuffer`, `boundedConc`, `droppingConc` |
+| `qOffer` | `q`, `v` | `queueOf(q).offer(v).as(VUnit)` |
+| `qTryOffer` | `q`, `v` | `queueOf(q).tryOffer(v).map(VBool(_))` |
+| `qTake` | `q` | `queueOf(q).take` |
+| `qTryTake` | `q` | `queueOf(q).tryTake.map { case Some(v) => VRight(v); case None => VLeft(VUnit) }` |
+| `qSize` | `q` | `queueOf(q).size.map(n => VNat(n))` |
+- Lean side: `Std/QueueFactory.lean` (`newIO`, `offerIO`, ...); a `qNew` queue is the object reference `Val.fn o`, printed as a queue handle through the `queueH o` event; lambdas `qHandle`, `qBool`, `qNat`. `typecheck.py` type `queue2` (the v1 ops take the v1 `queue`, whose Lean value is a buffer cell).
+- Fixed cases `cases/queue2.jsonl` (`cases/gen_v2_queue.py`). Generator: `tpl_queue2`, appended with its own RNG (`p_queue2`). See [Queue families model](../cats-effect/queue-families-model.md).
+
 ## User function table
 
 `call(fn, v)` first emits `{"ev":"call","fn":fn,"arg":v}`, then applies the function. Lean must implement the same table.

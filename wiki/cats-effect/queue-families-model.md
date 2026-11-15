@@ -1,0 +1,69 @@
+# Queue families model (Phase 7, track Q)
+
+> Sources: Cats Effect v3.7.1 (`std/.../Queue.scala:31-1206`, `UnsafeUnbounded.scala:23-113`, `QueueSource.scala:23-80`, `kernel/jvm-native/.../SyncRef.scala`, `kernel/.../Ref.scala:123-124`, `IO.scala:1353-1431`, `:1548`, `:1996-2163`, `IOFiber.scala:225-260`, `:1210-1266`, `tests/.../QueueSuite.scala:787-890`); own Lean work, difftest and smoke runs, 2026-11-15
+> Raw: [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
+
+## Overview
+
+Phase 7, track Q (decisions 59-62). `std/Queue.scala` has two implementation families, mirrored side by side as twins:
+
+- `Concurrent` (needs only `GenConcurrent`): `AbstractQueue` with `BoundedQueue`, `DroppingQueue`, `CircularBufferQueue` (state in one `Ref`, waiters as `Deferred`s), and `Synchronous` (two-phase commit with latches).
+- `Async` (lock-free): `BaseBoundedAsyncQueue` with `BoundedAsyncQueue`, `DroppingAsyncQueue` (buffer `UnsafeBounded`, waiter lists `UnsafeUnbounded` of callbacks), and `UnboundedAsyncQueue`.
+
+For `IO` the factories pick the family by the capacity: `bounded(n)` is `BoundedAsyncQueue` for `1 < n < 65534`, `BoundedQueue` for `n = 1` or `n >= 65534`, `synchronous` for `n = 0`; `dropping(n)` likewise; `circularBuffer` is always `Concurrent`; `unbounded` is `UnboundedAsyncQueue`.
+
+Result: mirrors of both families, difftest agreement, 11 open statements with kernel-checked witnesses and wrong-function tests, and random-schedule smoke with 0 violations. No bug found under sequential consistency.
+
+## Files
+
+| File | Content |
+|---|---|
+| `Std/QueueConcurrent.lean` | `AbstractQueue` (offer, tryOffer, take, tryTake, size, cleanups, `notifyNextTaker`), the three subclasses (`onOfferNoCapacity`, `onTryOfferNoCapacity`), `Synchronous`; closures `QC` (namespace 50) |
+| `Std/QueueAsync.lean` | `BaseBoundedAsyncQueue` (take, tryTake, size), `BoundedAsyncQueue` (offer, tryOffer), `DroppingAsyncQueue`, `UnboundedAsyncQueue`; closures `QA` (namespace 52); sequential-consistency note |
+| `Std/QueueFactory.lean` | Factories for `F = IO` (`newIO`), one op interface over both families, `env`, `isPublic` |
+| `Props/Phase7/Queue.lean` | Harness (namespace 54), trace readers, 11 statements |
+| `Proofs/Phase7/QueueWitness.lean` | Satisfiability witnesses (decision 53), kernel-checked runs |
+| `Proofs/Phase7/QueueWrongFunction.lean` | 10 wrong functions, kernel-checked runs that break each claim (and the mirror meets it) |
+| `tools/QSmoke/Main.lean` | `lake exe qsmoke [cases] [runs] [seed]`, `qsmoke wrong`, `qsmoke demo` |
+
+## Mirror rules
+
+- The queue object is a closure reference `Val.fn o` whose value holds the class, the capacity and the state cells. Every method lambda captures `this` as `Val.fn o`. User code that holds the queue cannot read or write the state cells (decision 58, `WF.avail`). Calling the object as a function is a non-fatal model error (no Scala analogue). The older v1 mirror `Std/Queue.lean` gives user code the buffer `Ref` itself; it stays for CE-0003 and the v1 ops only.
+- `modify` returns `F[F[...]]`; the inner `F` is a descriptor value, and `flattenK` builds its term. The strict argument of `*>` is rebuilt by `thenD`.
+- `SyncRef.modify`/`update`/`get` are one `Delay` thunk (atomic CAS). `flatModify` = `uncancelable(_ => flatten(modify(f)))`.
+- All `Deferred.get` terms in the queues are built on a fresh `Deferred`, so they read `initial`.
+- `UnsafeBounded` and `UnsafeUnbounded` under **sequential consistency**: each thunk is one atomic step. This is a model simplification (plan Phase 7 item 3): races inside a thunk on the JVM are out of scope until a weak-memory model exists (Phase 9).
+- Capacities are `Nat`; `dropping(0)` and `circularBuffer(0)` throw before an `IO` exists, so they are outside the model.
+
+## Statements (all open)
+
+Harness: `rootIO k scripts plan mode`. Fibers run scripts of `offer`, `tryOffer`, `take`, `tryTake`, `size`, `cede`; each op runs as `uncancelable(poll => poll(op).map(record))`, the atomic pattern of QueueSuite "not lose data on canceled take". The plan cancels fibers after some `cede`s. Mode `cancelAll` cancels every fiber, mode `join js` joins some first; then the root drains with `tryTake`. All inputs are data, all `PChoice` schedules (preemption at any run-loop iteration). No user code, so no `WellFormed` hypothesis.
+
+| Entry | Claim |
+|---|---|
+| `std.Queue.Concurrent.noLoss` / `Async.noLoss` | a run that ends `Succeeded` removes every recorded offered element (kinds that never drop) |
+| `...noDup` | removed elements are a sub-multiset of offered elements (all kinds) |
+| `...fifo` | with at most one taking script, each script's elements leave in offer order (Scaladoc `Q:31-33`) |
+| `...noDeadlock` | mode `cancelAll`: every run that stops ends `Succeeded` |
+| `...takerLiveness` | producers and consumers only, takes <= offers, consumers joined: every run that stops ends `Succeeded` (no lost wakeup) |
+| `std.Queue.twinSeq` | `(boundedForConcurrent(cap), bounded(cap))`, `(droppingForConcurrent(cap), dropping(cap))`, `(unboundedForConcurrent, unbounded)` give the same (summary, trace) results for one fiber |
+
+Each entry: witness (`QueueWitness`), wrong function (`QueueWrongFunction`, kernel-checked; `qsmoke wrong`), smoke (`qsmoke`).
+
+Open points: proofs need invariants over `SchedP` runs (as the Phase 6 entries). No linearizability statement yet (only the sequential twin and FIFO). `mapK` (`Q:51-58`, open issue #4483), `tryTakeN`/`tryOfferN`, `unsafeBounded`, `unsafeUnbounded` are not mirrored.
+
+## Difftest (format v2)
+
+Ops `qNew {kind, cap}`, `qOffer`, `qTryOffer`, `qTake`, `qTryTake`, `qSize` ([format](../methodology/difftest-program-format.md)). Fixed cases `queue2.jsonl` (222, every kind, cancels at several points, atomic takes, small runtime thresholds, external cancel): all agree on the first run. Generated (`opcount.py --seeds 71 72 73 --n 22000 --boost tpl_queue2=11`, own RNG stream): see the results line in the log of this article's update; target >= 50,000 agreeing cases per op.
+
+## Smoke
+
+`qsmoke 300 20 1`: 600 harness inputs (safety and liveness), 11,040 stopped runs, 0 violations; twin loop added later. All 11 wrong-function checks break their claims; the mirror meets them.
+
+## See Also
+
+- [Queue and timeout model (CE-0003)](queue-model.md)
+- [parTraverseN model](partraverse-model.md)
+- [Differential testing](../methodology/differential-testing.md)
+- [Agent workflow and review protocol](../methodology/agent-workflow.md)
+- [Bug history](bug-history.md)
