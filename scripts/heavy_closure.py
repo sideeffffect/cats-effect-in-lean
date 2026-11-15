@@ -16,9 +16,9 @@ Usage (from the repository root):
   scripts/heavy_closure.py --from-lakefile           same, roots from lakefile.lean
   scripts/heavy_closure.py --from-lakefile --matrix [--groups G]  JSON array of CI matrix
                                                      entries {name, modules} (decision 57):
-                                                     every module except the aggregating roots,
-                                                     per family, at most G modules per entry
-  scripts/heavy_closure.py --from-lakefile --aggregates  the aggregating roots: roots that import
+                                                     every module except the combining ones,
+                                                     at most G modules per entry
+  scripts/heavy_closure.py --from-lakefile --aggregates  the combining modules: roots that import
                                                      another module of the library (built and
                                                      replayed in the aggregate job, from the
                                                      matrix artifacts)
@@ -138,27 +138,31 @@ def main() -> int:
         for e in errors:
             print(f"error: {e}", file=sys.stderr)
         return 1
-    aggr = [r for r in roots if any(d != r and d not in default for d in closure([r], errors))]
+    # Combining modules, built in the aggregate job from the matrix artifacts: a root that imports
+    # a module of the library, or any module that imports two or more modules of the library
+    # directly (it combines parts; a part imports at most one shared definitions module).
+    lib_set = set(heavy)
+
+    def lib_imports(m: str) -> list[str]:
+        return [i for i in imports(m) if i in lib_set]
+
+    aggr = [m for m in heavy
+            if (m in roots and lib_imports(m)) or len(lib_imports(m)) >= 2]
     if deps_of is not None:
         need = closure(deps_of, errors)
         print("light " + " ".join(m for m in need if m in default))
         print("heavy " + " ".join(m for m in need if m not in default))
     elif matrix:
-        # Matrix entries: the modules except the aggregating roots, in families (the set of
-        # aggregating roots that import the module; a module that none imports is its own
-        # family), each family cut into groups of at most --groups modules, imports first.
-        families: dict[tuple[str, ...], list[str]] = {}
-        for m in heavy:
-            if m in aggr:
-                continue
-            key = tuple(sorted(r for r in aggr if m in closure([r], errors))) or (m,)
-            families.setdefault(key, []).append(m)
+        # Matrix entries: the modules except the combining ones, imports first, cut into groups
+        # of at most --groups modules. A part's library dependencies are at most one shared
+        # definitions module (else it would be combining), so a group rebuilds little that it
+        # does not own.
+        leaves = [m for m in heavy if m not in aggr]
         entries = []
-        for mods in families.values():
-            for k in range(0, len(mods), group_size):
-                part = mods[k:k + group_size]
-                label = part[0].split(".")[-1] + (f" (+{len(part) - 1})" if len(part) > 1 else "")
-                entries.append({"name": label, "modules": " ".join(part)})
+        for k in range(0, len(leaves), group_size):
+            part = leaves[k:k + group_size]
+            label = part[0].split(".")[-1] + (f" (+{len(part) - 1})" if len(part) > 1 else "")
+            entries.append({"name": label, "modules": " ".join(part)})
         print(json.dumps(entries))
     elif want_aggr:
         for r in aggr:
