@@ -1,7 +1,7 @@
 # Semaphore and Mutex model, CE-0060
 
 > Sources: Cats Effect v3.7.1 (`std/.../Semaphore.scala:28-298`, `std/.../Mutex.scala:24-112`, `std/.../LockQueue.scala:24-110`, `kernel/.../Resource.scala:156-208`, `:388-397`, `:879-880`, `:942-944`, `:1229-1234`, `kernel/jvm-native/.../SyncRef.scala:30-95`, `kernel/.../Ref.scala:123-124`, `:208-250`, `IO.scala:1715-1720`, `:1822-1830`, `:1996-2180`, `IODeferred.scala:62-79`, `docs/std/mutex.md:6-7`); cats-core 2.13.0 (`cats/instances/queue.scala:136-138`, `cats/Traverse.scala:299-309`, `cats/Foldable.scala:591-596`, `cats/instances/option.scala:145-149`); PR #4648; own Phase 7 track S work and scala-cli runs, 2026-11-15
-> Raw: [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md); [Review 11b fixes](../../raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md); [Review 12 and battery](../../raw/cats-effect/2026-11-15-semaphore-mutex-review12-battery.md)
+> Raw: [Review batch 13 notes](../../raw/project-decisions/2026-11-15-review-batch-13-notes.md); [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md); [Review 11b fixes](../../raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md); [Review 12 and battery](../../raw/cats-effect/2026-11-15-semaphore-mutex-review12-battery.md)
 
 ## Overview
 
@@ -142,6 +142,10 @@ series/3.7.x.
 - `std.Semaphore.noDeadlock` HOLLOW (H2): "not `blocked`" allows a root `Errored`. An `available` that always raises makes every root `Errored` and meets every `Semaphore` statement; the first form caught it. Fix: "`Succeeded …` or `fatal`".
 - `std.Mutex.lock.noDeadlock` FAITHFUL with the same weakness (the twin catches a raising `lock`).
 - Source: [review batch 12](../../review/2026-11-15-review-batch-12.md).
+
+## Review (batch 13, 2026-11-15)
+
+[Review](../../review/2026-11-15-review-batch-13.md). FAITHFUL: `noDeadlock` and `lock.noDeadlock` ("`Succeeded …` or `fatal`"; H2/W2 closed). The 38 battery rows are correct; "wrong value" (+1) for reads is fair for constant offsets. Observation O1: no statement reads `available` while a fiber waits, so an `available` that is wrong only under contention passes statements 1-7 by reading.
 
 ## See Also
 

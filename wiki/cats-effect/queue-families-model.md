@@ -1,7 +1,7 @@
 # Queue families model (Phase 7, track Q)
 
 > Sources: Cats Effect v3.7.1 (`std/.../Queue.scala:31-1206`, `UnsafeUnbounded.scala:23-113`, `QueueSource.scala:23-80`, `kernel/jvm-native/.../SyncRef.scala`, `kernel/.../Ref.scala:123-124`, `IO.scala:1353-1431`, `:1548`, `:1996-2163`, `IOFiber.scala:225-260`, `:1210-1266`, `tests/.../QueueSuite.scala:787-890`); own Lean work, difftest and smoke runs, 2026-11-15
-> Raw: [Review 13 battery](../../raw/cats-effect/2026-11-15-queue-review13-battery.md); [Synchronous tryTake handoff](../../raw/cats-effect/2026-11-15-queue-sync-trytake-handoff.md); [Review 12 fixes and battery](../../raw/cats-effect/2026-11-15-queue-review12-battery.md); [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Review 11a fixes](../../raw/cats-effect/2026-11-15-queue-review11a-fixes.md); [Review batch 11a notes](../../raw/project-decisions/2026-11-15-review-batch-11a-notes.md); [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
+> Raw: [Review 13 battery](../../raw/cats-effect/2026-11-15-queue-review13-battery.md); [Synchronous tryTake handoff](../../raw/cats-effect/2026-11-15-queue-sync-trytake-handoff.md); [Review 12 fixes and battery](../../raw/cats-effect/2026-11-15-queue-review12-battery.md); [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Review 11a fixes](../../raw/cats-effect/2026-11-15-queue-review11a-fixes.md); [Review batch 11a notes](../../raw/project-decisions/2026-11-15-review-batch-11a-notes.md); [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md); [Review batch 13 notes](../../raw/project-decisions/2026-11-15-review-batch-13-notes.md)
 
 ## Overview
 
@@ -90,6 +90,10 @@ Ops `qNew {kind, cap}`, `qOffer`, `qTryOffer`, `qTake`, `qTryTake`, `qSize` ([fo
 - `qsmoke 300 20 1`: 600 harness inputs (safety and liveness), 11,040 stopped runs, 0 violations. `qsmoke 1500 30 7`: 3,000 inputs, 84,210 stopped runs, 0 violations. The twin loop (statement 6) was added after these runs: `qsmoke 40 8 3`, 0 violations.
 - `qsmoke exact [bound]`: exhaustive over every `PChoice` schedule (`outcomesPList`, sound by `outcomesPList_sound`) for one-fiber inputs that the root cancels at every point (`[take]`, `[offer 1, offer 2]`, `[offer 1, take]`): 0 violations for every kind checked (8 to 11 observations each, 4-55 s each). Inputs with two fibers (three with the root) do not close within 3,000 states.
 - `qsmoke wrong`: all 11 wrong-function checks break their claims; the mirror meets them.
+
+## Review (batch 13, 2026-11-15)
+
+[Review](../../review/2026-11-15-review-batch-13.md). FAITHFUL: both `takerLiveness` (H3/W3 closed; only `QH.joinRec` emits tag 7), both `seqSpec` (Scaladoc capacity rules; one fiber), the other 9 entries (meaning unchanged). The battery (53 kernel rows, mirror runs on the same inputs) is correct. Gap G1 is wider than recorded: an honest `Synchronous#tryOffer` drop (always `false`) also passes every statement; the battery row used a dishonest drop (`true`). Low: the battery runs on one class per family; factories have no row.
 
 ## See Also
 

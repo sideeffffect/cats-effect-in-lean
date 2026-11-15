@@ -1,7 +1,7 @@
 # CountDownLatch and CyclicBarrier model
 
 > Sources: Cats Effect v3.7.1 (`std/.../CountDownLatch.scala`, `std/.../CyclicBarrier.scala`, `kernel/.../Ref.scala:123-141`, `kernel/jvm-native/.../SyncRef.scala`, `core/.../IODeferred.scala:55-79`, `core/.../IO.scala:1822-1824`, `:2008-2163`); read-only `gh` history and issue search; own Lean, scala-cli and difftest runs, 2026-11-15
-> Raw: [Track L notes](../../raw/cats-effect/2026-11-15-track-l-latch-barrier-notes.md); [Decision 63 battery](../../raw/cats-effect/2026-11-15-track-l-decision63-battery.md)
+> Raw: [Review batch 13 notes](../../raw/project-decisions/2026-11-15-review-batch-13-notes.md); [Track L notes](../../raw/cats-effect/2026-11-15-track-l-latch-barrier-notes.md); [Decision 63 battery](../../raw/cats-effect/2026-11-15-track-l-decision63-battery.md)
 
 ## Overview
 
@@ -64,6 +64,10 @@ Harness: awaiters `user.attempt *> uncancelable(poll => mark 1 *> poll(await).on
 - The CDL witness `nv` (a program that waits forever) uses `CountDownLatch` closures; `cbLib` does not list them, so the barrier smoke has no `nv` (first run: 80 hypothesis failures, fixed).
 - Review batch 11b (2026-11-15, [review](../../review/2026-11-15-review-batch-11b.md)): all 7 entries FAITHFUL as statements; mirrors faithful. "Without cancels" in `noEarlyTrip`/`exactGenerations` is needed (race 1 makes both false for every correct barrier); `cancelNoHang` and `cancelRemoved` cover the cancel case. `as.length < cap` shapes the test, keeps the interesting case. No forgery: the harness closures `mark`/`incr` write cells by data number and are safe only while no `HLam` is in `cdlLib`/`cbLib`. Low: no recorded difftest run after the merge fix `1e84acb`.
 - No proof yet: a proof needs a state invariant over `Step`/`SchedP` (as the Phase 6 open entries).
+
+## Review (batch 13, 2026-11-15)
+
+[Review](../../review/2026-11-15-review-batch-13.md). The mirror is unchanged for `v = 0`; `X ↔ XV 0` holds by `Iff.rfl`; each battery break is a `¬ XV v` theorem. **HOLLOW (H4):** `cdlAwaitCompletes` and `cbAwaitCompletes` say "if the root is done", and a root `Errored` is done. An `apply` that always raises stops every run before any fiber starts and meets every latch statement; the battery has no `apply` row. Fix: claim a `Succeeded(())` root for `n ≥ 1` (`cap ≥ 1`), add the `apply` row. Low: 6 of 11 rows have no kernel mirror run on the same input. The other 7 entries stay FAITHFUL.
 
 ## See Also
 
