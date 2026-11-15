@@ -1,7 +1,7 @@
 # Registry and audit
 
 > Sources: own work: `CatsEffectInLean/Registry.lean`, `tools/Audit/Core.lean`, `scripts/test_audit.sh`, Lean v4.35.0 (2026-11-10)
-> Raw: [Decision 57](../../raw/project-decisions/2026-11-14-decision-57-required-heavy-checks.md); [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [Decision 55: heavy proofs](../../raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md); [Registry and audit notes](../../raw/project-decisions/2026-11-10-registry-audit-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
+> Raw: [Branch protection note](../../raw/project-decisions/2026-11-15-branch-protection-set.md); [Decision 57](../../raw/project-decisions/2026-11-14-decision-57-required-heavy-checks.md); [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [Decision 55: heavy proofs](../../raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md); [Registry and audit notes](../../raw/project-decisions/2026-11-10-registry-audit-notes.md); [Review 1 fixes notes](../../raw/project-decisions/2026-11-10-review1-fixes-notes.md)
 
 ## Overview
 
@@ -75,6 +75,8 @@ Proofs that take more than about 5 minutes are in lean_lib `HeavyProofs` (not a 
 - Today: one heavy entry, `laws.GenSpawnLaws.uncancelableRaceNotInherited.IO` (49-chunk certificate check, [Certificate checks](../lean/certificate-checker.md)).
 
 Decision 57 (2026-11-14, user answer to Q4): `heavy-proofs` is a required check on `main`. The heavy work runs as parallel matrix jobs, and an aggregate job `heavy-proofs` is the stable required name. The paranoid replay is split by kernel. Source: [decision 57](../../raw/project-decisions/2026-11-14-decision-57-required-heavy-checks.md).
+
+Branch protection on `main` (set 2026-11-15): required checks are "Lean build and proof checks", "Difftest runner (Scala)", "Forbidden proof escapes", "Inventory check", "Wiki lint", `heavy-proofs` and `twin-checks`. Admins can still push directly. If a required job is renamed, update the protection in the same change. Source: [branch protection note](../../raw/project-decisions/2026-11-15-branch-protection-set.md).
 
 ## Self-test
 

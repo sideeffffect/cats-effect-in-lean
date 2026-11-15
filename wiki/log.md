@@ -317,3 +317,7 @@
 ## [2026-11-15] update | Race and Memoize source codes as references
 - Updated: race-both model, memoize model (decision 58 source references; regressions), registry notes
 - Raw: raw/cats-effect/2026-11-15-race-memoize-source-refs.md
+
+## [2026-11-15] ingest | Branch protection on main (decision 57 step 4)
+- Updated: Registry and audit (required checks)
+- Raw: raw/project-decisions/2026-11-15-branch-protection-set.md
