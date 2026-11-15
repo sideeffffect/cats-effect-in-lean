@@ -613,7 +613,9 @@ def registry : List Entry := [
       can land between any two run-loop iterations). No user code, so no WellFormed hypothesis. \
       Satisfiable (QueueWitness.conc_live_satisfiable: the pass-on run and a QuietBlock run). Wrong \
       functions: wNoWake_breaks; wNoPassOn_breaks (no cleanup/notifyNextTaker pass-on, \
-      [[take],[take],[offer 1]]). Smoke: qsmoke. Open." },
+      [[take],[take],[offer 1]]); wSyncTakeRaises_breaks (review batch 12 H3: the root records each join \
+      outcome; every joined consumer that the plan does not cancel must end Succeeded, JoinsSucceeded). \
+      Decision 63 battery: QueueBatteryConc, QueueBatterySync. Smoke: qsmoke. Open." },
   { id := "std.Queue.Async.takerLiveness"
     rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.take"]
     prop := ``Props.Phase7.Queue.asyncTakerLiveness
@@ -626,7 +628,8 @@ def registry : List Entry := [
       plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
       iterations). No user code, so no WellFormed hypothesis. Satisfiable \
       (QueueWitness.async_live_satisfiable). Wrong functions: wNoNotify_breaks; wNoAnywayU_breaks (no \
-      notifyAnyway). Smoke: qsmoke. Open." },
+      notifyAnyway); the join outcomes are recorded and every joined, not canceled consumer must end \
+      Succeeded (review batch 12 W3). Decision 63 battery: QueueBatteryAsync. Smoke: qsmoke. Open." },
   { id := "std.Queue.twinSeq"
     rows := ["std.Queue.bounded", "std.Queue.dropping", "std.Queue.unbounded", "std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.AbstractQueue.size", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BaseBoundedAsyncQueue.size", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnboundedAsyncQueue.size"]
     prop := ``Props.Phase7.Queue.twinSeq
@@ -798,7 +801,28 @@ def registry : List Entry := [
       cancel returned), passed <= cap * ((entered - canceledIn) / cap) in every state: a canceled \
       await does not count for a trip. The hypothesis restricts the test program (a cancel that \
       loses the race with a trip is covered by cancelNoHang). Satisfiable (cancelRemoved_sat). \
-      Wrong function: variant 2 does not re-increment (cancelRemoved_wrong; smoke 3 of 1500 random, 20 of 800 removal shape). Smoke: 0. Open." }
+      Wrong function: variant 2 does not re-increment (cancelRemoved_wrong; smoke 3 of 1500 random, 20 of 800 removal shape). Smoke: 0. Open." },
+  { id := "std.Queue.Concurrent.seqSpec"
+    rows := ["std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.AbstractQueue.size", "std.Queue.synchronous", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.tryOffer", "std.Queue.Synchronous.take", "std.Queue.Synchronous.tryTake", "std.Queue.Synchronous.size", "std.Queue.circularBuffer"]
+    prop := ``Props.Phase7.Queue.concSeqSpec
+    status := .«open»
+    note := "Sequential specification (decision 63, review batch 12): one fiber runs any script of \
+      offer/tryOffer/take/tryTake/size/cede, the root joins it, cancels it and drains; the trace and the \
+      summary equal specRun, a FIFO queue with the factory's capacity rule (block, drop, circular, \
+      unbounded, synchronous). All schedules. Checks every public operation, so an operation that raises, \
+      hangs, drops or doubles its effect breaks it. All Concurrent kinds. Satisfiable (QueueWitness.seqSpec_satisfiable). Battery: \
+      QueueBatteryConc (AbstractQueue, 18 rows), QueueBatterySync. Smoke: qsmoke (every kind). Open." },
+  { id := "std.Queue.Async.seqSpec"
+    rows := ["std.Queue.bounded", "std.Queue.dropping", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BaseBoundedAsyncQueue.size", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnboundedAsyncQueue.size"]
+    prop := ``Props.Phase7.Queue.asyncSeqSpec
+    status := .«open»
+    note := "Sequential specification (decision 63, review batch 12): one fiber runs any script of \
+      offer/tryOffer/take/tryTake/size/cede, the root joins it, cancels it and drains; the trace and the \
+      summary equal specRun, a FIFO queue with the factory's capacity rule (block, drop, circular, \
+      unbounded, synchronous). All schedules. Checks every public operation, so an operation that raises, \
+      hangs, drops or doubles its effect breaks it. All Async kinds, under sequential consistency. Satisfiable \
+      (QueueWitness.seqSpec_satisfiable). Battery: QueueBatteryAsync (BoundedAsyncQueue, 18 rows). Smoke: \
+      qsmoke (every kind). Open." }
 ]
 
 end CatsEffectInLean

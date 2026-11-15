@@ -53,6 +53,15 @@ def fifoC (scripts : List (List Op)) (o : Obs) : Bool :=
   ((List.range scripts.length).map some ++ [none]).all fun c =>
     scripts.all fun s => isSublist ((removedBy o.out c).filter (· ∈ offersOf s)) (offersOf s)
 def doneC (o : Obs) : Bool := o.summary == .done (.succeeded .unit)
+/-- Statement 7 (`SeqSpec`) for one fiber running `s` on kind `k`. -/
+def specC (k : QKind) (s : List Op) (o : Obs) : Bool :=
+  let t := specRun (ruleOf k) [] s
+  events o.out == t.1 && o.summary == (if t.2 then .blocked else .done (.succeeded .unit))
+/-- Statement 5 with the join outcomes (review batch 12 H3). -/
+def liveC (scripts : List (List Op)) (plan : List (Nat × Nat)) (o : Obs) : Bool :=
+  (doneC o && (takers scripts).all fun i => plan.any (·.2 == i) ||
+    (events o.out).any fun e => e.1 == evJoined && e.2.1 == i && (match e.2.2 with | .ocSucceeded _ => true | _ => false)) ||
+  (o.summary == .blocked && subMulti (offeredOf o.out) (removedOf o.out) && subMulti (startedOf o.out) (offeredOf o.out))
 
 def keepKinds : List QKind := [.boundedConc 1, .boundedConc 2, .unboundedConc, .synchronous, .bounded 2, .bounded 3, .unbounded]
 def anyKinds : List QKind := keepKinds ++ [.droppingConc 1, .droppingConc 2, .circular 1, .circular 2, .dropping 2]
@@ -193,12 +202,13 @@ def main (args : List String) : IO UInt32 := do
       ("wLifo (asyncFifo)", wLifo, rootIO (.bounded 3) fifoIn [] (.join [0]), fifoC fifoIn),
       ("wLastIfWaiters (concFifo)", wLastIfWaiters, rootIO (.boundedConc 2) fifoMulti [(1, 1)] .cancelAll, fifoC fifoMulti),
       ("wLastIfWaitersAsync (asyncFifo)", wLastIfWaitersAsync, rootIO (.bounded 3) fifoMulti [(1, 1)] .cancelAll, fifoC fifoMulti),
-      ("wNoPassOn (concTakerLiveness)", wNoPassOn, rootIO (.boundedConc 2) passOnIn [(1, 0)] (.join [0, 1]), liveOKB),
-      ("wNoAnywayU (asyncTakerLiveness)", wNoAnywayU, rootIO .unbounded passOnIn [(1, 0)] (.join [0, 1]), liveOKB),
+      ("wNoPassOn (concTakerLiveness)", wNoPassOn, rootIO (.boundedConc 2) passOnIn [(1, 0)] (.join [0, 1]), liveC passOnIn [(1, 0)]),
+      ("wNoAnywayU (asyncTakerLiveness)", wNoAnywayU, rootIO .unbounded passOnIn [(1, 0)] (.join [0, 1]), liveC passOnIn [(1, 0)]),
       ("wHangConc (concNoDeadlock)", wHangConc, rootIO (.boundedConc 1) hangIn [(1, 0)] .cancelAll, doneC),
       ("wHangAsync (asyncNoDeadlock)", wHangAsync, rootIO .unbounded hangIn [(1, 0)] .cancelAll, doneC),
-      ("wNoWake (concTakerLiveness)", wNoWake, rootIO (.boundedConc 2) lossIn [] (.join [0]), liveOKB),
-      ("wNoNotify (asyncTakerLiveness)", wNoNotify, rootIO .unbounded lossIn [] (.join [0]), liveOKB),
+      ("wNoWake (concTakerLiveness)", wNoWake, rootIO (.boundedConc 2) lossIn [] (.join [0]), liveC lossIn []),
+      ("wNoNotify (asyncTakerLiveness)", wNoNotify, rootIO .unbounded lossIn [] (.join [0]), liveC lossIn []),
+      ("wSyncTakeRaises (concTakerLiveness, review 12 H3)", wSyncTakeRaises, rootIO .synchronous lossIn [] (.join [0]), liveC lossIn []),
       ("wLifo (twinSeq: Async side)", wLifo, rootIO (.bounded 3) fifoIn [] (.join [0]), fun o =>
         some (events o.out) == (runWith henv (.boundedConc 3) fifoIn [] (.join [0])).map (fun o => events o.out))]
     let mut failed := 0
@@ -246,12 +256,24 @@ def main (args : List String) : IO UInt32 := do
     if true then
       let js := (List.range c2.scripts.length).filter fun i => match c2.scripts[i]? with | some s => takes s | none => false
       let io2 := rootIO c2.k c2.scripts plan2 (.join js)
-      let (d2, f2) := randCheck henv io2 runs seed liveOKB
+      let (d2, f2) := randCheck henv io2 runs seed (liveC c2.scripts plan2)
       seed := seed + 1; stopped := stopped + d2
       match f2 with
       | some (cs, o) =>
         bad := bad + 1
         IO.println s!"VIOLATION liveness case {i}: {repr c2} plan={repr plan2} summary={repr o.summary} events={evStr o.out} choices={repr (cs.take 120)}"
+      | none => pure ()
+    -- statement 7 (seqSpec): one fiber, every kind
+    let (len7, g8) := randNat g 1 7
+    let (s7, _, g9) := randScript g8 1 len7 false false
+    g := g9
+    for k in anyKinds do
+      let (d7, f7) := randCheck henv (rootIO k [s7] [] (.join [0])) (max 2 (runs / 4)) seed (specC k s7)
+      stopped := stopped + d7
+      match f7 with
+      | some (_, o) =>
+        bad := bad + 1
+        IO.println s!"VIOLATION seqSpec case {i}: {repr k} {repr s7}: got {repr o.summary} {evStr o.out}, spec {repr (specRun (ruleOf k) [] s7)}"
       | none => pure ()
     -- statement 6 (twinSeq): one fiber, both sides, every stopped run gives the same result
     let (len, g4) := randNat g 1 7

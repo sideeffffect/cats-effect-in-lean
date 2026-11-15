@@ -1,7 +1,7 @@
 # Queue families model (Phase 7, track Q)
 
 > Sources: Cats Effect v3.7.1 (`std/.../Queue.scala:31-1206`, `UnsafeUnbounded.scala:23-113`, `QueueSource.scala:23-80`, `kernel/jvm-native/.../SyncRef.scala`, `kernel/.../Ref.scala:123-124`, `IO.scala:1353-1431`, `:1548`, `:1996-2163`, `IOFiber.scala:225-260`, `:1210-1266`, `tests/.../QueueSuite.scala:787-890`); own Lean work, difftest and smoke runs, 2026-11-15
-> Raw: [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Review 11a fixes](../../raw/cats-effect/2026-11-15-queue-review11a-fixes.md); [Review batch 11a notes](../../raw/project-decisions/2026-11-15-review-batch-11a-notes.md); [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
+> Raw: [Review 12 fixes and battery](../../raw/cats-effect/2026-11-15-queue-review12-battery.md); [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Review 11a fixes](../../raw/cats-effect/2026-11-15-queue-review11a-fixes.md); [Review batch 11a notes](../../raw/project-decisions/2026-11-15-review-batch-11a-notes.md); [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
 
 ## Overview
 
@@ -46,6 +46,7 @@ Harness: `rootIO k scripts plan mode`. Fibers run scripts of `offer`, `tryOffer`
 | `...fifo` | every remover (each script, the drain) removes each producer's elements in offer order (Scaladoc `Q:31-33`); events carry the script index |
 | `...noDeadlock` | mode `cancelAll`: every run that stops ends `Succeeded` |
 | `...takerLiveness` | producers and consumers only, consumers joined: every run that stops ends `Succeeded`, or `blocked` with nothing to give (`QuietBlock`: every recorded offer removed, every started offer returned) |
+| `std.Queue.Concurrent.seqSpec` / `Async.seqSpec` | one fiber, any script: trace and summary equal the sequential FIFO specification of the factory (decision 63) |
 | `std.Queue.twinSeq` | `(boundedForConcurrent(cap), bounded(cap))`, `(droppingForConcurrent(cap), dropping(cap))`, `(unboundedForConcurrent, unbounded)` give the same (summary, trace) results for one fiber |
 
 Each entry: witness (`QueueWitness`), wrong function (`QueueWrongFunction`, kernel-checked; `qsmoke wrong`), smoke (`qsmoke`).
@@ -62,6 +63,13 @@ Fixes of review batch 11a (2026-11-15):
 - D2: the `UnsafeBounded`/`UnsafeUnbounded` `put`/`take`/`size` rows are out of the track Q entries (the model is a sequentially consistent list, a specification, not a mirror of the CAS code); the excluded helper rows (`buffer`, `sequenceBuffer`, `head`, `tail`, `LookAheadStep`, `project`, `first`, `last`) now have the reason `deferred: phase 9 (weak memory model)`. `std.UnsafeUnbounded.put`/`take` stay `modelled` through the older CE-0003 entry.
 - Re-run on the merged generator (seeds 81-83 × 22,000): 66,000 agree, 52,838 agreeing cases per queue op; `qsmoke 600 20 11`: 27,600 stopped runs, 0 violations; all 15 wrong functions break their claims.
 - D3: the queue template has its own name base (40000; latch 20000, semaphore 30000). D4: `selftest.py` has a floor for the six queue ops. D5: livelock is not seen (registry notes and the statement doc).
+
+Fixes of review batch 12 (2026-11-15):
+
+- H3/W3: the harness records each join outcome (event 7); `TakerLiveness` (both families) also claims `JoinsSucceeded`: every joined consumer that the plan does not cancel ends `Succeeded`. `wSyncTakeRaises` (a `Synchronous#take` that raises) breaks it (kernel-checked).
+- New statements `std.Queue.Concurrent.seqSpec`, `std.Queue.Async.seqSpec` (`SeqSpec`): one fiber, any script; trace and summary equal a sequential FIFO specification with the factory's capacity rule (`specRun`). This is the success claim of decision 63 item 3 for all five operations.
+- Decision 63 battery: for `offer`, `tryOffer`, `take`, `tryTake`, `size` × raises, hangs, drops, doubles, a kernel-checked break in each family (`QueueBatteryConc`: `BoundedQueue`; `QueueBatteryAsync`: `BoundedAsyncQueue`; `QueueBatterySync`: `Synchronous`). `size` drops/doubles are meaningless (read only). One gap: `Synchronous#tryTake` "drops" (None while an offerer waits) breaks no statement; it needs a linearizability statement. Table: [raw note](../../raw/cats-effect/2026-11-15-queue-review12-battery.md).
+- The two `FailureSignal` rows: `deferred: phase 9 (weak memory model)`.
 
 Open points: proofs need invariants over `SchedP` runs (as the Phase 6 entries). No linearizability statement yet (only the sequential twin and FIFO). `mapK` (`Q:51-58`, open issue #4483), `tryTakeN`/`tryOfferN`, `unsafeBounded`, `unsafeUnbounded` are not mirrored.
 

@@ -44,9 +44,10 @@ def concEvents : List (Nat × Nat × Val) :=
 def asyncEvents : List (Nat × Nat × Val) :=
   [(6, 1, .nat 1), (0, 1, .nat 1), (6, 1, .nat 2), (0, 1, .nat 2), (1, 0, .nat 1), (1, 0, .nat 2)]
 /-- Consumer 0 is canceled after the wakeup; consumer 1 takes 1. -/
-def passOnEvents : List (Nat × Nat × Val) := [(6, 2, .nat 1), (0, 2, .nat 1), (1, 1, .nat 1)]
+def passOnEvents : List (Nat × Nat × Val) :=
+  [(6, 2, .nat 1), (0, 2, .nat 1), (1, 1, .nat 1), (7, 0, .ocCanceled), (7, 1, .ocSucceeded .unit)]
 /-- Consumer 0 takes 1; consumer 1 waits on an empty queue. -/
-def quietEvents : List (Nat × Nat × Val) := [(6, 2, .nat 1), (0, 2, .nat 1), (1, 0, .nat 1)]
+def quietEvents : List (Nat × Nat × Val) := [(6, 2, .nat 1), (0, 2, .nat 1), (1, 0, .nat 1), (7, 0, .ocSucceeded .unit)]
 
 def concScripts : List (List Op) := [[.take, .take], [.offer (.nat 1), .offer (.nat 2)]]
 def asyncScripts : List (List Op) := [[.take, .take, .take], [.offer (.nat 1), .offer (.nat 2)]]
@@ -106,7 +107,7 @@ def LivenessWitness (fam : QKind → Prop) : Prop :=
     (List.range liveScripts.length).filter (fun i =>
         match liveScripts[i]? with | some s => takes s | none => false) = [0, 1] ∧
     (∃ o, runs k liveScripts plan (.join [0, 1]) o ∧ o.summary = .done (.succeeded .unit) ∧
-      events o.out = passOnEvents) ∧
+      JoinsSucceeded o.out [0, 1] plan ∧ events o.out = passOnEvents) ∧
     (∃ o, runs k liveScripts [] (.join [0, 1]) o ∧ QuietBlock o ∧ events o.out = quietEvents)
 
 theorem conc_satisfiable : SafetyWitness ConcKeep concEvents := by
@@ -147,6 +148,14 @@ theorem livePlan_consumer : ∀ p ∈ [(1, 0)], ∀ s, liveScripts[p.2]? = some 
   subst hs
   intro op h; simpa using h
 
+/-- The pass-on run has the `Succeeded` join of consumer 1 (consumer 0 is canceled by the plan). -/
+theorem joins_of_events {o : Obs} (he : events o.out = passOnEvents) : JoinsSucceeded o.out [0, 1] [(1, 0)] := by
+  intro i hi hp
+  simp only [List.mem_cons, List.mem_nil_iff, or_false] at hi
+  rcases hi with rfl | rfl
+  · exact absurd rfl (hp (1, 0) (by simp))
+  · exact ⟨.unit, by simp [he, passOnEvents, evJoined]⟩
+
 /-- The `QuietBlock` of a run with these events: offered `[1]`, removed `[1]`, started `[1]`. -/
 theorem quiet_of_events {o : Obs} (hb : o.summary = .blocked) (he : events o.out = quietEvents) :
     QuietBlock o := by
@@ -161,14 +170,14 @@ theorem conc_live_satisfiable : LivenessWitness ConcKeep := by
   obtain ⟨o', ho', hp'⟩ := exists_of_map concQuiet_ok
   simp only [Bool.and_eq_true, beq_iff_eq] at hp hp'
   exact ⟨_, [(1, 0)], concKeep_bounded2, liveScripts_shape, livePlan_consumer, by decide,
-    ⟨o, ⟨3000, [], ho⟩, hp.1, hp.2⟩, ⟨o', ⟨3000, [], ho'⟩, quiet_of_events hp'.1 hp'.2, hp'.2⟩⟩
+    ⟨o, ⟨3000, [], ho⟩, hp.1, joins_of_events hp.2, hp.2⟩, ⟨o', ⟨3000, [], ho'⟩, quiet_of_events hp'.1 hp'.2, hp'.2⟩⟩
 
 theorem async_live_satisfiable : LivenessWitness AsyncKeep := by
   obtain ⟨o, ho, hp⟩ := exists_of_map asyncPassOn_ok
   obtain ⟨o', ho', hp'⟩ := exists_of_map asyncQuiet_ok
   simp only [Bool.and_eq_true, beq_iff_eq] at hp hp'
   exact ⟨_, [(1, 0)], asyncKeep_unbounded, liveScripts_shape, livePlan_consumer, by decide,
-    ⟨o, ⟨3000, [], ho⟩, hp.1, hp.2⟩, ⟨o', ⟨3000, [], ho'⟩, quiet_of_events hp'.1 hp'.2, hp'.2⟩⟩
+    ⟨o, ⟨3000, [], ho⟩, hp.1, joins_of_events hp.2, hp.2⟩, ⟨o', ⟨3000, [], ho'⟩, quiet_of_events hp'.1 hp'.2, hp'.2⟩⟩
 
 /-! ## Statement 6 (`twinSeq`): both sides give the same nontrivial trace -/
 
@@ -180,7 +189,7 @@ def twinScript : List Op :=
 def twinEvents : List (Nat × Nat × Val) :=
   [(6, 0, .nat 1), (0, 0, .nat 1), (6, 0, .nat 2), (0, 0, .nat 2), (3, 0, .pair (.nat 3) (.bool false)),
    (2, 0, .some (.nat 1)), (5, 0, .nat 1), (1, 0, .nat 2), (3, 0, .pair (.nat 4) (.bool true)),
-   (2, 0, .some (.nat 4))]
+   (2, 0, .some (.nat 4)), (7, 0, .ocSucceeded .unit)]
 
 def twinRun (k : QKind) : Option Obs := runObsP {} counterMaskModel henv 3000 [] (rootIO k [twinScript] [] (.join [0]))
 
@@ -203,5 +212,29 @@ theorem twinSeq_satisfiable :
   simp only [Bool.and_eq_true, beq_iff_eq] at hp hp'
   exact ⟨2, by decide, by decide, _, List.mem_cons_self .., o, o', ⟨3000, [], ho⟩, ⟨3000, [], ho'⟩,
     hp.1.trans hp'.1.symm, hp.2, hp'.2⟩
+
+/-! ## Statement 7 (`SeqSpec`): the twin script meets the specification on both families
+
+`twinEvents` is the specification (`specRun`) of `twinScript` for capacity 2 (kernel-checked); the
+runs above give exactly these events and `Succeeded`. -/
+
+theorem twinEvents_spec : (specRun (ruleOf (.boundedConc 2)) [] twinScript).1 = twinEvents ∧
+    (specRun (ruleOf (.boundedConc 2)) [] twinScript).2 = false ∧
+    (specRun (ruleOf (.bounded 2)) [] twinScript).1 = twinEvents ∧
+    (specRun (ruleOf (.bounded 2)) [] twinScript).2 = false := by
+  decide +kernel
+
+/-- `SeqSpec` hypotheses hold and both runs reach the specified nontrivial trace. -/
+theorem seqSpec_satisfiable :
+    (∃ o, ConcAny (.boundedConc 2) ∧ runs (.boundedConc 2) [twinScript] [] (.join [0]) o ∧
+      events o.out = (specRun (ruleOf (.boundedConc 2)) [] twinScript).1 ∧ o.summary = .done (.succeeded .unit)) ∧
+    (∃ o, AsyncAny (.bounded 2) ∧ runs (.bounded 2) [twinScript] [] (.join [0]) o ∧
+      events o.out = (specRun (ruleOf (.bounded 2)) [] twinScript).1 ∧ o.summary = .done (.succeeded .unit)) := by
+  obtain ⟨o, ho, hp⟩ := exists_of_map twinRun_conc_ok
+  obtain ⟨o', ho', hp'⟩ := exists_of_map twinRun_async_ok
+  simp only [Bool.and_eq_true, beq_iff_eq] at hp hp'
+  obtain ⟨h1, -, h3, -⟩ := twinEvents_spec
+  exact ⟨⟨o, concAny_of_keep concKeep_bounded2, ⟨3000, [], ho⟩, hp.2.trans h1.symm, hp.1⟩,
+    ⟨o', asyncAny_of_keep asyncKeep_bounded2, ⟨3000, [], ho'⟩, hp'.2.trans h3.symm, hp'.1⟩⟩
 
 end CatsEffectInLean.Proofs.Phase7.QueueWitness

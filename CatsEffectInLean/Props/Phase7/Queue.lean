@@ -140,6 +140,8 @@ def evDrained : Nat := 4
 def evSize : Nat := 5
 /-- An `offer` started (recorded inside the masked region, before `poll(offer)`). -/
 def evOfferStart : Nat := 6
+/-- The root joined script `i`; the value is the outcome (review batch 12 H3). -/
+def evJoined : Nat := 7
 
 /-! ## Closures (namespace `hns`) -/
 
@@ -154,6 +156,8 @@ inductive QH where
   | planNext (o : Nat) (fs plan mode : Val)
   /-- `_ => join the next fiber of `js``. -/
   | joinNext (o : Nat) (fs js : Val)
+  /-- `oc => record (joined, j, oc); (join the next fiber of `js`)` (review batch 12 H3). -/
+  | joinRec (o : Nat) (fs : Val) (j : Nat) (js : Val)
   /-- `_ => cancel the next fiber`. -/
   | cancelNext (o : Nat) (todo : Val)
   /-- `r => r match { Some(x) => record drained x; tryTake again; None => () }`. -/
@@ -182,6 +186,7 @@ def QH.toVal : QH → Val
   | .planCancel o fs i p m => cloVal hns 2 [.fn o, fs, .nat i, p, m]
   | .planNext o fs p m => cloVal hns 3 [.fn o, fs, p, m]
   | .joinNext o fs js => cloVal hns 4 [.fn o, fs, js]
+  | .joinRec o fs j js => cloVal hns 15 [.fn o, fs, .nat j, js]
   | .cancelNext o t => cloVal hns 5 [.fn o, t]
   | .drainK o => cloVal hns 6 [.fn o]
   | .drainAgain o => cloVal hns 7 [.fn o]
@@ -199,6 +204,7 @@ def QH.ofFields : Nat → List Val → Option QH
   | 2, [.fn o, fs, .nat i, p, m] => some (.planCancel o fs i p m)
   | 3, [.fn o, fs, p, m] => some (.planNext o fs p m)
   | 4, [.fn o, fs, js] => some (.joinNext o fs js)
+  | 15, [.fn o, fs, .nat j, js] => some (.joinRec o fs j js)
   | 5, [.fn o, t] => some (.cancelNext o t)
   | 6, [.fn o] => some (.drainK o)
   | 7, [.fn o] => some (.drainAgain o)
@@ -307,9 +313,10 @@ def QH.call (l : QH) (arg : Val) (v : View) : UserResult :=
     match unlistV js with
     | some (.nat j :: rest) =>
       match ((unlistV fs).getD [])[j]? with
-      | some (.fiber f) => prog (.flatMap (IO.joinOf f (v.outcome f)) (QH.joinNext o fs (listV rest)).fn)
+      | some (.fiber f) => prog (.flatMap (IO.joinOf f (v.outcome f)) (QH.joinRec o fs j (listV rest)).fn)
       | _ => prog (.flatMap (.pure .unit) (QH.joinNext o fs (listV rest)).fn)
     | _ => prog (cancelAllIO v o ((unlistV fs).getD []))
+  | .joinRec o fs j js => { effects := [.emit (ev evJoined j arg)], out := .prog (.flatMap (.pure .unit) (QH.joinNext o fs js).fn) }
   | .cancelNext o t => prog (cancelAllIO v o ((unlistV t).getD []))
   | .drainK o =>
     match arg with
@@ -455,14 +462,97 @@ offered element was removed, and every started `offer` returned. -/
 def QuietBlock (o : Obs) : Prop :=
   o.summary = .blocked ∧ SubMulti (offeredOf o.out) (removedOf o.out) ∧ SubMulti (startedOf o.out) (offeredOf o.out)
 
+/-- The indices of the scripts that take (the consumers that the root joins). -/
+def takers (scripts : List (List Op)) : List Nat :=
+  (List.range scripts.length).filter fun i => match scripts[i]? with | some s => takes s | none => false
+
+/-- Every joined script that the plan does not cancel ended `Succeeded` (review batch 12 H3,
+decision 63 item 3): the trace holds its `joined` event with a `Succeeded` outcome. -/
+def JoinsSucceeded (out : List Val) (js : List Nat) (plan : List (Nat × Nat)) : Prop :=
+  ∀ i ∈ js, (∀ p ∈ plan, p.2 ≠ i) → ∃ v, (evJoined, i, Val.ocSucceeded v) ∈ events out
+
 /-- Statement 5: a waiting taker is woken when an element is there (no lost wakeup). -/
 def TakerLiveness (fam : QKind → Prop) : Prop :=
   ∀ k scripts plan, fam k →
     (∀ s ∈ scripts, producer s ∨ consumer s) →
     (∀ p ∈ plan, ∀ s, scripts[p.2]? = some s → consumer s) →
-    ∀ o, runs k scripts plan (.join ((List.range scripts.length).filter fun i =>
-        match scripts[i]? with | some s => takes s | none => false)) o →
-      o.summary = .done (.succeeded .unit) ∨ QuietBlock o
+    ∀ o, runs k scripts plan (.join (takers scripts)) o →
+      (o.summary = .done (.succeeded .unit) ∧ JoinsSucceeded o.out (takers scripts) plan) ∨ QuietBlock o
+
+/-! ## Statement 7: sequential specification (decision 63)
+
+One fiber runs a script; the root joins it, cancels it, and drains. The trace and the summary must
+be those of a sequential FIFO queue with the capacity rule of the factory (Scaladoc `Q:31-228`):
+`bounded` blocks `offer` when full, `dropping` discards the new element, `circularBuffer` discards
+the oldest, `unbounded` never blocks, `synchronous` has no buffer (an `offer` or `take` alone
+blocks, `tryOffer` is `false`, `tryTake` is `None`, `size` is 0). A `take` on an empty queue
+blocks. Every public operation (`offer`, `tryOffer`, `take`, `tryTake`, `size`) is checked, so an
+operation that raises, hangs, drops its effect or applies it twice breaks this statement. -/
+
+/-- The capacity rule of a factory. -/
+inductive Rule where
+  | block (cap : Nat)
+  | unbounded
+  | drop (cap : Nat)
+  | circular (cap : Nat)
+  | sync
+  deriving DecidableEq, Repr
+
+def ruleOf : QKind → Rule
+  | .bounded cap => if cap = 0 then .sync else .block cap
+  | .dropping cap => .drop cap
+  | .circular cap => .circular cap
+  | .synchronous => .sync
+  | .unbounded => .unbounded
+  | .boundedConc cap => .block cap
+  | .unboundedConc => .block intMax
+  | .droppingConc cap => .drop cap
+
+/-- The specification of one operation: `none` = it blocks forever; else the events and the new
+buffer. -/
+def specOp (r : Rule) (q : List Val) : Op → Option (List (Nat × Nat × Val) × List Val)
+  | .offer x =>
+    match r with
+    | .block c => if q.length < c then some ([(6, 0, x), (0, 0, x)], q ++ [x]) else none
+    | .unbounded => some ([(6, 0, x), (0, 0, x)], q ++ [x])
+    | .drop c => some ([(6, 0, x), (0, 0, x)], if q.length < c then q ++ [x] else q)
+    | .circular c => some ([(6, 0, x), (0, 0, x)], if q.length < c then q ++ [x] else q.tail ++ [x])
+    | .sync => none
+  | .tryOffer x =>
+    let (b, q') : Bool × List Val :=
+      match r with
+      | .block c | .drop c => if q.length < c then (true, q ++ [x]) else (false, q)
+      | .unbounded => (true, q ++ [x])
+      | .circular c => (true, if q.length < c then q ++ [x] else q.tail ++ [x])
+      | .sync => (false, q)
+    some ([(3, 0, .pair x (.bool b))], q')
+  | .take =>
+    match q with
+    | a :: rest => some ([(1, 0, a)], rest)
+    | [] => none
+  | .tryTake =>
+    match q with
+    | a :: rest => some ([(2, 0, .some a)], rest)
+    | [] => some ([(2, 0, .none)], [])
+  | .size => some ([(5, 0, .nat q.length)], q)
+  | .cede => some ([], q)
+
+/-- The specification of a script: events, and `true` if the run blocks. After the script: the
+`joined` event, then the drain of the buffer. -/
+def specRun (r : Rule) : List Val → List Op → List (Nat × Nat × Val) × Bool
+  | q, [] => ((7, 0, .ocSucceeded .unit) :: q.map fun a => (4, 0, a), false)
+  | q, op :: rest =>
+    match specOp r q op with
+    | some (es, q') => let t := specRun r q' rest; (es ++ t.1, t.2)
+    | none =>
+      -- an `offer` that blocks has recorded its start
+      ((match op with | .offer x => [(6, 0, x)] | _ => []), true)
+
+/-- Statement 7: a single fiber sees a sequential FIFO queue with the factory's capacity rule. -/
+def SeqSpec (fam : QKind → Prop) : Prop :=
+  ∀ k s, fam k → ∀ o, runs k [s] [] (.join [0]) o →
+    events o.out = (specRun (ruleOf k) [] s).1 ∧
+      o.summary = (if (specRun (ruleOf k) [] s).2 then .blocked else .done (.succeeded .unit))
 
 /-- The registered statements. -/
 def concNoLoss : Prop := NoLoss ConcKeep
@@ -489,5 +579,8 @@ use (one fiber, all scripts, all schedules). -/
 def twinSeq : Prop :=
   ∀ cap, 2 ≤ cap → cap < asyncLimit → ∀ p ∈ twinPairs cap, ∀ s,
     SameResults p.1 p.2 s ∧ SameResults p.2 p.1 s
+
+def concSeqSpec : Prop := SeqSpec ConcAny
+def asyncSeqSpec : Prop := SeqSpec AsyncAny
 
 end CatsEffectInLean.Props.Phase7.Queue

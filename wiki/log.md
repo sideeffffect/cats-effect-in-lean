@@ -393,3 +393,7 @@
 ## [2026-11-15] ingest | Decision 63: wrong-function battery per structure
 - Updated: Agent workflow (wrong-function battery section)
 - Raw: raw/project-decisions/2026-11-15-decision-63-wrong-function-battery.md
+
+## [2026-11-15] ingest | Track Q: review batch 12 H3 fix, SeqSpec, decision 63 battery
+- Updated: Queue families model (join outcomes in TakerLiveness, SeqSpec entries, battery, FailureSignal rows)
+- Raw: raw/cats-effect/2026-11-15-queue-review12-battery.md

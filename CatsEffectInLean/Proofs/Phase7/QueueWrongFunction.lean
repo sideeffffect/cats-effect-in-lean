@@ -313,18 +313,20 @@ theorem hangAsync_mirror_ok : (runWith henv .unbounded hangIn [(1, 0)] .cancelAl
 
 /-! ## `TakerLiveness` -/
 
-/-- The `TakerLiveness` claim as a `Bool`: `Succeeded`, or `blocked` with nothing to give. -/
-def liveOKB (o : Obs) : Bool :=
-  o.summary == .done (.succeeded .unit) ||
+/-- The `TakerLiveness` claim as a `Bool` for scripts `sc` and plan `plan`: `Succeeded` with every
+joined, not canceled consumer `Succeeded` (review batch 12 H3), or `blocked` with nothing to give. -/
+def liveOKB' (sc : List (List Op)) (plan : List (Nat × Nat)) (o : Obs) : Bool :=
+  (o.summary == .done (.succeeded .unit) && (takers sc).all fun i => plan.any (·.2 == i) ||
+    (events o.out).any fun e => e.1 == evJoined && e.2.1 == i && (match e.2.2 with | .ocSucceeded _ => true | _ => false)) ||
     (o.summary == .blocked && subMultiB (offeredOf o.out) (removedOf o.out) &&
       subMultiB (startedOf o.out) (offeredOf o.out))
 
 theorem wNoWake_breaks : (runWith wNoWake (.boundedConc 2) lossIn [] (.join [0])).map (fun o =>
-    !liveOKB o) = some true := by
+    !liveOKB' lossIn [] o) = some true := by
   decide +kernel
 
 theorem wNoNotify_breaks : (runWith wNoNotify .unbounded lossIn [] (.join [0])).map (fun o =>
-    !liveOKB o) = some true := by
+    !liveOKB' lossIn [] o) = some true := by
   decide +kernel
 
 /-- Review batch 11a L1: the canonical lost wakeup. Two consumers wait, one offer wakes consumer 0,
@@ -333,25 +335,42 @@ element 1 is in the queue. Takes (2) exceed offers (1): the old count hypothesis
 def passOnIn : List (List Op) := [[.take], [.take], [.offer (.nat 1)]]
 
 theorem wNoPassOn_breaks : (runWith wNoPassOn (.boundedConc 2) passOnIn [(1, 0)] (.join [0, 1])).map (fun o =>
-    !liveOKB o) = some true := by
+    !liveOKB' passOnIn [(1, 0)] o) = some true := by
   decide +kernel
 
 theorem passOn_mirror_ok : (runWith henv (.boundedConc 2) passOnIn [(1, 0)] (.join [0, 1])).map (fun o =>
-    liveOKB o) = some true := by
+    liveOKB' passOnIn [(1, 0)] o) = some true := by
   decide +kernel
 
 theorem wNoAnywayU_breaks : (runWith wNoAnywayU .unbounded passOnIn [(1, 0)] (.join [0, 1])).map (fun o =>
-    !liveOKB o) = some true := by
+    !liveOKB' passOnIn [(1, 0)] o) = some true := by
   decide +kernel
 
 theorem passOnAsync_mirror_ok : (runWith henv .unbounded passOnIn [(1, 0)] (.join [0, 1])).map (fun o =>
-    liveOKB o) = some true := by
+    liveOKB' passOnIn [(1, 0)] o) = some true := by
   decide +kernel
 
 /-! ## `twinSeq`: a broken `Async` side gives a trace that the `Concurrent` side never gives -/
 
 theorem wLifo_twin_breaks : (runWith henv (.boundedConc 3) fifoIn [] (.join [0])).map (fun o => events o.out) ≠
     (runWith wLifo (.bounded 3) fifoIn [] (.join [0])).map (fun o => events o.out) := by
+  decide +kernel
+
+/-! ## Review batch 12 H3: a `Synchronous#take` that always raises -/
+
+open QueueConcurrent in
+/-- `Synchronous#take` raises (`latch => ...` throws a non-fatal error). -/
+def wSyncTakeRaises : UserEnv := wrap fun id _ _ =>
+  match QC.ofId? id with
+  | some (.sTakeK _) => some { out := .throw { code := 77 } }
+  | _ => none
+
+theorem wSyncTakeRaises_breaks : (runWith wSyncTakeRaises .synchronous lossIn [] (.join [0])).map (fun o =>
+    !liveOKB' lossIn [] o) = some true := by
+  decide +kernel
+
+theorem syncTake_mirror_ok : (runWith henv .synchronous lossIn [] (.join [0])).map (fun o =>
+    liveOKB' lossIn [] o) = some true := by
   decide +kernel
 
 end CatsEffectInLean.Proofs.Phase7.QueueWrongFunction
