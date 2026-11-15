@@ -262,3 +262,7 @@
 - Updated: Resource use/both (probe check, 2 defects fixed), Outcome sets (Lib fields check), index
 - Raw: raw/cats-effect/2026-11-14-lib-fields-probe-notes.md
 
+
+## [2026-11-15] update | parTraverseN: decision 58 closure references, HashSet difftest
+- Updated: parTraverseN model (Val.fn fields, TL.start root, statement 8 without UserPrivate, F2/F3 closed, ParTraversePrivacy), Difftest program format (alternatives for the HashSet branch), index
+- Raw: raw/cats-effect/2026-11-15-partraverse-decision58.md
