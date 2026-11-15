@@ -195,11 +195,18 @@ def compare(case, s, l):
             fields = ['outcome', 'trace'] + [f for f in l['compare'] if f not in ('outcome', 'trace')]
         else:
             fields = ['outcome', 'trace'] + (['schedule'] if 'schedule' in l else [])
-        for field in fields:
-            if dumps(s.get(field)) != dumps(l.get(field)):
-                kb = known_model_bug(case)
-                return ('known-model-bug', f"{kb}:{field}") if kb else ('mismatch', field)
-        return 'agree', ''
+        # `parTraverseN` with >= 5 inputs (review 8): the supervision set is a `HashSet` whose
+        # order Lean cannot know; Lean lists the results of every order (`alternatives`), and the
+        # case agrees if the Scala run equals one of them (refinement).
+        cands = l['alternatives'] if 'alternatives' in l else [l]
+        first_bad = None
+        for cand in cands:
+            bad = next((f for f in fields if dumps(s.get(f)) != dumps(cand.get(f))), None)
+            if bad is None:
+                return 'agree', ''
+            first_bad = first_bad or bad
+        kb = known_model_bug(case)
+        return ('known-model-bug', f"{kb}:{first_bad}") if kb else ('mismatch', first_bad)
     # testcontrol: refinement. Lean gives the set of allowed (outcome, trace) pairs.
     if s['outcome'].get('t') == 'inconclusive':
         return 'inconclusive', 'scala: step cap'
