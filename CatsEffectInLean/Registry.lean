@@ -824,6 +824,18 @@ def registry : List Entry := [
       hangs, drops or doubles its effect breaks it. All Async kinds, under sequential consistency. Satisfiable \
       (QueueWitness.seqSpec_satisfiable). Battery: QueueBatteryAsync (BoundedAsyncQueue, 18 rows). Smoke: \
       qsmoke (every kind). Open." },
+  { id := "std.Queue.Synchronous.tryTakeHandoff"
+    rows := ["std.Queue.synchronous", "std.Queue.Synchronous.tryTake", "std.Queue.Synchronous.offer"]
+    prop := ``Props.Phase7.Queue.syncTryTakeHandoff
+    status := .«open»
+    note := "Decision 63 gap (Synchronous#tryTake drops), closed: Scaladoc QueueSource tryTake (dequeue if one \
+      is available without fiber blocking) and synchronous (an element passes when a taker and an offerer \
+      meet, both are freed, Queue.scala:139-148); code Queue.scala:347-353 hands the element over. A per-run \
+      claim over all schedules cannot tell a broken tryTake from one that ran before the offerer \
+      registered, so the statement uses the FIFO replay schedule: the offerer suspends in offer before the \
+      tryTake fiber starts. For every element x and fuel, a stopped run has tryTake = Some(x), both joins \
+      Succeeded, root Succeeded. Satisfiable (QueueWitness.syncTryTakeHandoff_satisfiable). Wrong function: \
+      tryTake drops breaks it (QueueBattery.sync_tryTake_drops, kernel-checked). Open." },
   { id := "std.CountDownLatch.awaitCompletes"
     rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
     prop := ``Props.Phase7.CountDownLatch.cdlAwaitCompletes

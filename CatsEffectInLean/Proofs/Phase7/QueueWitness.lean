@@ -237,4 +237,23 @@ theorem seqSpec_satisfiable :
   exact ⟨⟨o, concAny_of_keep concKeep_bounded2, ⟨3000, [], ho⟩, hp.2.trans h1.symm, hp.1⟩,
     ⟨o', asyncAny_of_keep asyncKeep_bounded2, ⟨3000, [], ho'⟩, hp'.2.trans h3.symm, hp'.1⟩⟩
 
+/-! ## Statement 8 (`syncTryTakeHandoff`): satisfiable, element `1` -/
+
+def handoffRun : Option Obs := runObsP {} counterMaskModel henv 3000 [] (handoffRoot (.nat 1))
+
+def handoffEvents : List (Nat × Nat × Val) :=
+  [(6, 0, .nat 1), (2, 1, .some (.nat 1)), (0, 0, .nat 1), (7, 0, .ocSucceeded .unit), (7, 1, .ocSucceeded .unit)]
+
+theorem handoffRun_ok : handoffRun.map (fun o =>
+    o.summary == .done (.succeeded .unit) && events o.out == handoffEvents) = some true := by
+  decide +kernel
+
+/-- A stopped run of the input of statement 8 exists and meets its claim (element `1`). -/
+theorem syncTryTakeHandoff_satisfiable : ∃ fuel o, runObsP {} counterMaskModel henv fuel [] (handoffRoot (.nat 1)) = some o ∧
+    (evTryTook, 1, Val.some (.nat 1)) ∈ events o.out ∧ (evJoined, 0, Val.ocSucceeded .unit) ∈ events o.out ∧
+    (evJoined, 1, Val.ocSucceeded .unit) ∈ events o.out ∧ o.summary = .done (.succeeded .unit) := by
+  obtain ⟨o, ho, hp⟩ := exists_of_map handoffRun_ok
+  simp only [Bool.and_eq_true, beq_iff_eq] at hp
+  refine ⟨3000, o, ho, ?_, ?_, ?_, hp.1⟩ <;> simp [hp.2, handoffEvents, evTryTook, evJoined]
+
 end CatsEffectInLean.Proofs.Phase7.QueueWitness

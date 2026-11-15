@@ -1,5 +1,6 @@
 import CatsEffectInLean.Props.Phase7.Queue
 import CatsEffectInLean.Proofs.Phase7.QueueWrongFunction
+import CatsEffectInLean.Proofs.Phase7.QueueBatteryDefs
 import CatsEffectInLean.Model.EnumP
 
 /-!

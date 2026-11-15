@@ -409,3 +409,7 @@
 ## [2026-11-15] ingest | Track Q: review batch 12 H3 fix, SeqSpec, decision 63 battery
 - Updated: Queue families model (join outcomes in TakerLiveness, SeqSpec entries, battery, FailureSignal rows)
 - Raw: raw/cats-effect/2026-11-15-queue-review12-battery.md
+
+## [2026-11-15] ingest | Track Q: Synchronous tryTake handoff (decision 63 gap closed)
+- Updated: Queue families model (statement 8, battery table complete)
+- Raw: raw/cats-effect/2026-11-15-queue-sync-trytake-handoff.md
