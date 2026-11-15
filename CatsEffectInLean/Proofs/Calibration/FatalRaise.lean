@@ -148,7 +148,7 @@ argument and view and returns closed programs). -/
 theorem raiseHandled_wellFormed (e : Err) : WellFormedIO handlerEnv (raiseHandled e) := by
   refine ⟨rfl, fun id _ arg v => ⟨fun w _ => rfl, ?_⟩, ?_⟩
   · by_cases h : id = 0 <;>
-      simp [handlerEnv, h, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.sub, Val.handles]
+      simp [handlerEnv, h, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.subA, Val.handles]
   · refine WF.pollOpaque_of_const handlerEnv (fun id => handlerEnv.call id .unit []) [0]
       { out := .ret .unit } (fun _ _ _ _ => rfl) (by decide +kernel) ?_ ?_ (fun _ _ => rfl)
     · intro id _ h

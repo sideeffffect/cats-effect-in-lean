@@ -84,7 +84,7 @@ theorem not_eqvP : ¬ EqvP {} counterMaskModel r.toEnv alloc (IOI.uncancelable (
 /-! ### The witness is well-formed -/
 
 theorem ids_ok : isLib 279459022985 = true ∧
-    WF.capturedD lib WF.capDepth 279459022985 = some [] ∧
+    WF.cloHandles 279459022985 = [] ∧
     Codec.cloOfId 0 = none ∧ Codec.cloOfId 2 = none := by
   decide +kernel
 
@@ -95,11 +95,11 @@ theorem r_calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
   obtain ⟨hl, hc, hc0, _⟩ := ids_ok
   have he : ∀ w, r.toEnv.callV id arg w = user.call (id / 2) arg w.refs := by
     intro w; simp [REnv.toEnv, REnv.callV, hid, r]; rfl
-  refine ⟨fun w _ => ?_, ?_⟩
+  refine WF.callOK_of_reach (fun w _ => ?_) ?_
   · rw [he, he]
     rcases id / 2 with _ | _ | k <;> rfl
   · have hX : ∀ mem, WF.capOK lib mem 279459022985 = true := fun mem => by
-      unfold WF.capOK; rw [hc]; rfl
+      unfold WF.capOK WF.captured; rw [hc]; rfl
     have h0 : ∀ mem, WF.capOK lib mem 0 = true := fun mem => WF.capOK_of_none _ _ _ hc0
     have hl' : lib.ok 279459022985 = true := hl
     rw [he]

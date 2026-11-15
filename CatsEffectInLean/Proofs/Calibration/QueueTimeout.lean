@@ -122,13 +122,13 @@ theorem isLib_tlam (l : Timeout.TLam) : isLib (2 * valToNat l.toVal + 1) = true 
   cases l <;> simp_all [isLib, isLibId, Timeout.TLam.toVal, ofCloVal_cloVal,
     Timeout.TLam.ofFields, Std.Queue.ns, Timeout.ns] <;> omega
 
-theorem fnOK_qlam (mem : Handle → Bool) (l : Std.Queue.QLam) :
-    WF.fnOK isLib mem l.fn = WF.sub mem l.toVal.handles := by
-  simp [Std.Queue.QLam.fn, WF.fnOK_libFn, isLib_qlam]
+theorem fnOK_qlam (mem : Handle → Bool) (l : Std.Queue.QLam) (h : WF.subA mem l.toVal.handles = true) :
+    WF.fnOK isLib mem l.fn = true :=
+  WF.fnOK_libFn_of isLib mem l.toVal (isLib_qlam l) h
 
-theorem fnOK_tlam (mem : Handle → Bool) (l : Timeout.TLam) :
-    WF.fnOK isLib mem l.fn = WF.sub mem l.toVal.handles := by
-  simp [Timeout.TLam.fn, WF.fnOK_libFn, isLib_tlam]
+theorem fnOK_tlam (mem : Handle → Bool) (l : Timeout.TLam) (h : WF.subA mem l.toVal.handles = true) :
+    WF.fnOK isLib mem l.fn = true :=
+  WF.fnOK_libFn_of isLib mem l.toVal (isLib_tlam l) h
 
 theorem fnOK_rt (lib : Nat → Bool) (mem : Handle → Bool) (k : RtFn) :
     WF.fnOK lib mem (.rt k) = WF.rtOK mem k := rfl
@@ -141,7 +141,7 @@ theorem progOK_drain (R : Handle → Prop) (q : Nat) (hq : R (.ref q)) :
     ∀ n, WF.progOK queueLib (WF.memOf R) (drain q n) = true
   | 0 => rfl
   | n + 1 => by
-    simp [drain, WF.progOK, Std.Queue.tryTakeIO, fnOK_qlam, PLam.fn, WF.fnOK_userFn, WF.sub,
+    simp [drain, WF.progOK, Std.Queue.tryTakeIO, fnOK_qlam, PLam.fn, WF.fnOK_userFn_of, WF.subA,
       Std.Queue.QLam.toVal, PLam.toVal, cloVal, listV, Val.handles, hq]
 
 /-- Each program closure passes `CallOK` (with its closure value as the captured handles). -/
@@ -154,15 +154,14 @@ theorem call_ok (p : PLam) (arg : Val) (v : View) :
   | afterQueue xs d s =>
     refine ⟨fun w _ => rfl, ?_⟩
     cases arg <;> simp [call, prog, illTyped, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK,
-      fnOK_tlam, WF.fnOK_userFn, WF.sub, Timeout.timeoutIO, PLam.fn,
-      Timeout.TLam.toVal, PLam.toVal, cloVal, listV, Val.handles, natsV_handles]
-    refine hb _ ?_
-    simp [Val.handles]
+      Timeout.timeoutIO, PLam.fn, PLam.toVal, cloVal, listV]
+    refine ⟨fnOK_tlam _ _ ?_, WF.fnOK_userFn_of _ _ _ ?_⟩ <;>
+      simp [Timeout.TLam.toVal, cloVal, listV, Val.handles, natsV_handles] <;>
+      exact hb _ (by simp [PLam.toVal, cloVal, listV, Val.handles, natsV_handles])
   | afterStart q xs s =>
     refine ⟨fun w _ => rfl, ?_⟩
     cases arg <;> simp [call, prog, illTyped, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK,
-      WF.fnOK_userFn, WF.sub, PLam.fn, PLam.toVal, cloVal, listV, Val.handles, natsV_handles]
-    refine ⟨hb _ ?_, hb _ ?_⟩ <;> simp [PLam.toVal, cloVal, listV, Val.handles, natsV_handles]
+      WF.fnOK_userFn_of, PLam.fn, PLam.toVal, cloVal, listV, Val.handles, natsV_handles, hb]
   | offerNext q c n xs =>
     have hq : RP (.offerNext q c n xs) arg v (.ref q) :=
       hb _ (by simp [PLam.toVal, cloVal, listV, Val.handles, natsV_handles])
@@ -174,13 +173,13 @@ theorem call_ok (p : PLam) (arg : Val) (v : View) :
       | nil => simp [call, hw.2.2.2.2 c hc]
     · cases xs with
       | cons x rest =>
-        simp [call, prog, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK_userFn,
-          fnOK_qlam, WF.sub, PLam.fn, PLam.toVal, Std.Queue.offerIO,
+        simp [call, prog, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.fnOK_userFn_of,
+          fnOK_qlam, WF.subA, PLam.fn, PLam.toVal, Std.Queue.offerIO,
           Std.Queue.QLam.toVal, cloVal, listV, Val.handles, natsV_handles, hq, hc]
       | nil =>
         cases ho : v.outcome c <;>
           simp [call, prog, ho, IO.cancelOf, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK,
-            WF.fnOK_userFn, fnOK_rt, WF.rtOK, WF.sub, PLam.fn, PLam.toVal, cloVal, listV,
+            WF.fnOK_userFn_of, fnOK_rt, WF.rtOK, WF.subA, PLam.fn, PLam.toVal, cloVal, listV,
             Val.handles, hq, hc]
   | afterCancel q c n =>
     have hq : RP (.afterCancel q c n) arg v (.ref q) :=
@@ -191,12 +190,12 @@ theorem call_ok (p : PLam) (arg : Val) (v : View) :
     cases ho : v.outcome c with
     | none =>
       simp [call, prog, ho, IO.joinOf, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK,
-        WF.fnOK_userFn, fnOK_rt, WF.rtOK, WF.sub, PLam.fn, PLam.toVal, cloVal, listV,
+        WF.fnOK_userFn_of, fnOK_rt, WF.rtOK, WF.subA, PLam.fn, PLam.toVal, cloVal, listV,
         Val.handles, hq, hc]
     | some oc =>
       simp [call, prog, ho, IO.joinOf, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK,
-        WF.fnOK_userFn, WF.sub, PLam.fn, PLam.toVal, cloVal, listV, Val.handles, hq]
-      exact fun h hh => WF.Reach.fiber hc ho hh
+        WF.fnOK_userFn_of, WF.subA, PLam.fn, PLam.toVal, cloVal, listV, Val.handles, hq]
+      exact fun h hh => WF.avail_of_mem ((WF.memOf_eq _ _).2 (WF.Reach.fiber hc ho hh))
   | afterJoin q n =>
     have hq : RP (.afterJoin q n) arg v (.ref q) :=
       hb _ (by simp [PLam.toVal, cloVal, listV, Val.handles])
@@ -224,7 +223,8 @@ theorem env_calls (id : Nat) (hid : id % 2 = 0) (arg : Val) (v : View) :
     intro R hd
     refine ⟨fun w _ => by rw [hd w, hd v], ?_⟩
     simp [hd, illTyped, WF.ResultOK, WF.EffectsOK, WF.OutOK]
-  simp only [WF.CallOK, hE]
+  refine (fun (h : _ ∧ _) => WF.callOK_of_reach h.1 h.2) ?_
+  simp only [hE]
   cases hc : cloOfId id with
   | none => exact bad _ (fun w => by simp [Props.Calibration.QueueTimeout.dispatch, hc])
   | some c =>

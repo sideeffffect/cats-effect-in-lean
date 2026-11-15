@@ -59,7 +59,7 @@ theorem tagged_even (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
 
 theorem cR_ok (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK ptLibDeep R v (cR n) := by
   match n with
-  | 0 | 1 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.sub, Val.handles]
+  | 0 | 1 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.subA, Val.handles]
   | _ + 2 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
 
 theorem constOpaque (e : UserEnv) (he : ∀ id, id % 2 = 0 → ∀ a v, e.callV id a v = cR (id / 2)) :
@@ -150,10 +150,10 @@ theorem neverFn (σ : WF.PollRen) : WF.rnFn σ Timeout.TLam.neverBody.fn = Timeo
 /-- The id of the `IO.never` body closure. -/
 def neverId : Nat := 2 * valToNat Timeout.TLam.neverBody.toVal + 1
 
-theorem neverCapD : WF.capturedD ptLibDeep WF.capDepth neverId = some [] := by decide +kernel
+theorem neverCapD : WF.cloHandles neverId = [] := by decide +kernel
 
 theorem neverCaptured (mem : Handle → Bool) : WF.capOK ptLibDeep mem neverId = true := by
-  simp [WF.capOK, neverCapD, WF.sub]
+  simp [WF.capOK, WF.captured, neverCapD]
 
 theorem neverLib : ptLibDeep.ok neverId = true := by decide +kernel
 
@@ -330,7 +330,7 @@ theorem envL_even (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
 
 theorem cR_okL (n : Nat) (R : Handle → Prop) (v : View) : WF.ResultOK limLib R v (cR n) := by
   match n with
-  | 0 | 1 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.sub, Val.handles]
+  | 0 | 1 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK, WF.progOK, WF.subA, Val.handles]
   | _ + 2 => simp [cR, WF.ResultOK, WF.EffectsOK, WF.OutOK]
 
 theorem cR_free (k : Nat) : tokFreeR limToks (cR k) = true := by

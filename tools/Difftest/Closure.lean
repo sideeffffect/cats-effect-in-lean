@@ -297,6 +297,7 @@ def valTokens : Val → List Nat
   | .ec i => [18, i]
   | .trace => [19]
   | .runtime => [20]
+  | .fn i => [21, i]
 
 /-- Read one value from the front of a token list. `fuel` bounds the depth. -/
 def valOfTokens? : (fuel : Nat) → List Nat → Option (Val × List Nat)
@@ -328,6 +329,7 @@ def valOfTokens? : (fuel : Nat) → List Nat → Option (Val × List Nat)
     | 18, i :: r => some (.ec i, r)
     | 19, r => some (.trace, r)
     | 20, r => some (.runtime, r)
+    | 21, i :: r => some (.fn i, r)
     | _, _ => none
 
 /-- Read `n` values. -/

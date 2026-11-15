@@ -135,21 +135,21 @@ inductive HLam where
 
 def HLam.toVal : HLam → Val
   | .newCells => cloVal hns 0 []
-  | .afterCells g use rel => cloVal hns 1 [.nat g, .nat use, .nat rel]
+  | .afterCells g use rel => cloVal hns 1 [.nat g, .fn use, .fn rel]
   | .markA c => cloVal hns 2 [.ref c]
   | .markThunk c => cloVal hns 3 [.ref c]
-  | .relW c rel => cloVal hns 4 [.ref c, .nat rel]
-  | .relCall rel a => cloVal hns 5 [.nat rel, a]
+  | .relW c rel => cloVal hns 4 [.ref c, .fn rel]
+  | .relCall rel a => cloVal hns 5 [.fn rel, a]
   | .cancelJoin => cloVal hns 6 []
   | .thenJoin f => cloVal hns 7 [.fiber f]
 
 def HLam.ofFields : Nat → List Val → Option HLam
   | 0, [] => some .newCells
-  | 1, [.nat g, .nat use, .nat rel] => some (.afterCells g use rel)
+  | 1, [.nat g, .fn use, .fn rel] => some (.afterCells g use rel)
   | 2, [.ref c] => some (.markA c)
   | 3, [.ref c] => some (.markThunk c)
-  | 4, [.ref c, .nat rel] => some (.relW c rel)
-  | 5, [.nat rel, a] => some (.relCall rel a)
+  | 4, [.ref c, .fn rel] => some (.relW c rel)
+  | 5, [.fn rel, a] => some (.relCall rel a)
   | 6, [] => some .cancelJoin
   | 7, [.fiber f] => some (.thenJoin f)
   | _, _ => none
@@ -172,15 +172,15 @@ def bump (c : Nat) (v : View) : UserEffect :=
 /-- The source codes of the external programs (`Bracket.Src.ext`). Each holds a counter handle,
 so a user program that names a closure with this code must hold the handle (`WellFormed`). -/
 def srcAcq (c : Nat) : Val := .pair (.ref c) (.nat 0)
-def srcFa (c k : Nat) : Val := .pair (.ref c) (.pair (.nat 1) (.nat k))
-def srcFin (c q : Nat) : Val := .pair (.ref c) (.pair (.nat 2) (.nat q))
+def srcFa (c k : Nat) : Val := .pair (.ref c) (.pair (.nat 1) (.fn k))
+def srcFin (c q : Nat) : Val := .pair (.ref c) (.pair (.nat 2) (.fn q))
 
 /-- The external programs: acquire `a0.flatMap(markA)`, `fa = IO.delay(markS) *> k(..)`,
 `fin = IO.delay(markR) *> q(..)`. -/
 def hioOf (a0 : IO) : Val → IO
   | .pair (.ref c) (.nat 0) => .flatMap a0 (HLam.markA c).fn
-  | .pair (.ref c) (.pair (.nat 1) (.nat k)) => .flatMap (.delay (HLam.markThunk c).fn) (.user k)
-  | .pair (.ref c) (.pair (.nat 2) (.nat q)) => .flatMap (.delay (HLam.markThunk c).fn) (.user q)
+  | .pair (.ref c) (.pair (.nat 1) (.fn k)) => .flatMap (.delay (HLam.markThunk c).fn) (.user k)
+  | .pair (.ref c) (.pair (.nat 2) (.fn q)) => .flatMap (.delay (HLam.markThunk c).fn) (.user q)
   | _ => .error { code := 999999, kind := .fatal }
 
 /-- The child program of the harness: `g = 0` the bracket, `g = 1` the guarantee. `g = 2, 3`

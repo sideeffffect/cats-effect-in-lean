@@ -185,7 +185,7 @@ theorem cx_calls (id : Nat) (arg : Val) (v : View) :
   refine ⟨fun w _ => ?_, ?_⟩
   · rcases id with _ | _ | _ | _ | _ | id <;> rfl
   · rcases id with _ | _ | _ | _ | _ | id <;>
-      simp [WF.ResultOK, WF.EffectsOK, WF.OutOK, cxEnv, WF.progOK, WF.fnOK, WF.capOK_coe, WF.sub, c2, c4,
+      simp [WF.ResultOK, WF.EffectsOK, WF.OutOK, cxEnv, WF.progOK, WF.fnOK, WF.capOK_coe, WF.subA, c2, c4,
         Val.handles]
     exact WF.reach_of_mem (by simp [refHandles, cxRefs])
 

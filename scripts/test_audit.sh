@@ -69,10 +69,6 @@ expect_fail missing_row       "inventory row \`core.Fx.noSuchRow\` does not exis
 expect_fail unnamed_modelled  "inventory row core.Fx.unnamed: status modelled, but no registry entry is named"
 expect_fail open_modelled     "inventory row core.Fx.addComm: status modelled, but no named registry entry is proven or refuted"
 expect_fail duplicate_id      "duplicate entry id fx.addZero"
-expect_fail fieldless_lib     "uses a Lib without function fields"
-expect_fail fieldless_lib_lit "uses a Lib without function fields"
-expect_fail fieldless_lib_via "uses a Lib without function fields"
-expect_pass fieldless_lib_noted
 
 # Heavy registry (decision 55)
 expect_pass_msg() {

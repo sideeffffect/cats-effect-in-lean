@@ -1,5 +1,4 @@
 import CatsEffectInLean.Model.ResourceUse
-import CatsEffectInLean.Props.Phase6.HarnessPrivacy
 
 /-!
 # `Resource`: `use`, `both`, `flatMap` finalizer order, the cancelable direction of CE-0002 (Phase 6, track Res)
@@ -15,7 +14,7 @@ All statements run on the scheduler with preemption at any run-loop iteration (`
 `UEnv` (user code at the `Resource` level and the meaning of `Res` codes), all user functions
 and all schedules.
 
-## The test harness (decision 56, `Props/Phase6/HarnessPrivacy.lean`)
+## The test harness (decisions 56, 58)
 
 * The root program is the harness: it first allocates the log cell (`Ref` 0, the token; the heap
   is empty at the start, so no other cell can get id 0), then runs the test body. The harness
@@ -23,12 +22,15 @@ and all schedules.
   the event closures `markA`, `markT`, which capture the token and are in no `Lib`.
 * A resource under test is a marked `make` (`MarkedMake`): acquire is `a0.flatMap(markA tag)`
   (appends `tag` to the log when acquire completes, inside the mask of `Allocate`), release is
-  `IO.delay(markT tag) *> q(..)` (appends `tag` when release starts). The acquire and release
-  codes and the resource code are token names.
-* User code cannot name a token (`Private`: every user result, `Bind` result, other acquire or
-  release program and other resource is token-free; no escape clause). With `WellFormed` (deep
-  `captured`, `Lib.fields`) this makes every log entry come from a harness position, for every
-  user code and schedule (module doc of `HarnessPrivacy`).
+  `IO.delay(markT tag) *> q(..)` (appends `tag` when release starts). The resource code holds the
+  token (`MarkedMake`), so user code cannot build it.
+* Decision 58: closure references are `Val.fn` values, and `WellFormed` holds user code to the
+  available handles (`WF.avail`): what it received, and its own user closures. The token and the
+  event closures are never available to user code unless the library gives them, so user code may
+  pass any value through. `Private` is the Phase 5 `REnv.WellFormed` clauses (review batch 8, S2)
+  for every `REnv` entry that is not part of the harness: acquire programs are closed, release
+  programs and `Bind` results hold only the handles of their argument, and none of them names a
+  harness entry (`Res.idx`).
 * The parent fiber of decision 50: `withParent` (`HLam.cancelJoin`).
 * Each statement has a Lean satisfiability witness (decision 53): `Proofs/Phase6/ResourceWitness.lean`
   (with and without the parent); the CE-0020 refutation is the one of statement 1.
@@ -53,7 +55,6 @@ open CatsEffectInLean.Model
 open CatsEffectInLean.Model.Codec
 open CatsEffectInLean.Model.Resource
 open CatsEffectInLean.Model.ResourceUse
-open CatsEffectInLean.Props.Phase6.HarnessPrivacy
 
 /-- `r.use(f)` built when the body runs (view `{}`: the resources of the statements start with
 `Allocate`, so no user function is called when the term is built). -/
@@ -146,11 +147,10 @@ def HLam.public : HLam → Bool
   | .markA _ _ | .markT _ _ => false
   | _ => true
 
-/-- The `Lib` of a test program: the `Resource` mirror (with its function fields) and the public
-harness closures. -/
+/-- The `Lib` of a test program: the library closures that public operations give to user code
+(`ResourceUse.publicLib`) and the public harness closures. -/
 def libH : Lib :=
-  { ok := fun id => ResourceUse.isLib id || ((HLam.ofId? id).map HLam.public).getD false,
-    fields := ResourceUse.fnFields }
+  { ok := fun id => ResourceUse.publicLib id || ((HLam.ofId? id).map HLam.public).getD false }
 
 /-- The root program: allocate the log cell, then run the body. -/
 def harness : IO := .flatMap (.delay HLam.newCells.fn) HLam.afterCells.fn
@@ -170,32 +170,44 @@ def tagRB : Val := .nat 4
 
 /-! ## Hypotheses -/
 
-/-- A resource `Res` is token-free. -/
-def tokFreeRes (toks : List Handle) : Res → Bool
-  | .allocate (.user k) => tokFreeV toks (.nat k)
-  | .allocate (.make a r) => tokFreeV toks (.nat a) && tokFreeV toks (.nat r)
-  | .bind s f => tokFreeRes toks s && tokFreeV toks (.nat f)
-  | .pure v => tokFreeV toks v
-  | .eval fa => tokFreeIO toks fa
+/-- A resource built by user code holds only available handles (`mem`): `Res.ok` of
+`Model/Resource.lean` with the statement's `Lib`. -/
+def resOK (lib : Lib) (mem : Handle → Bool) : Res → Bool
+  | .allocate (.user id) => WF.fnOK lib mem (.user id)
+  | .allocate (.make _ _) => true
+  | .bind source _ => resOK lib mem source
+  | .pure a => WF.subA mem a.handles
+  | .eval fa => WF.progOK lib mem fa
+
+/-- The `REnv` table entries that a resource names: `make` acquire and release entries, `Bind`
+functions. -/
+def Res.idx : Res → List Nat
+  | .allocate (.make a r) => [a, r]
+  | .bind source fs => fs :: Res.idx source
+  | _ => []
 
 /-- A marked `make` with code `c`: `make(a0.flatMap(markA tA))(_ => IO.delay(markT tR) *> q(..))`.
-The codes are token names; `a0` is token-free user code; `q` is any user function. -/
+The code holds the token, so user code cannot build it; `a0` is closed user code (`progOK`); `q`
+is any user function. -/
 def MarkedMake (U : UEnv) (c : Val) (acq rel : Nat) (a0 : IO) (tA tR : Val) : Prop :=
   U.resOf c = some (Res.make acq rel) ∧
     U.r.acquire acq = .flatMap a0 (HLam.markA logCell tA).fn ∧
     (∀ a, ∃ q, U.r.release rel a = .ok (.flatMap (.delay (HLam.markT logCell tR).fn) (uid q))) ∧
-    tokFreeIO toks a0 = true ∧
-    tokFreeV toks c = false ∧ tokFreeV toks (.nat acq) = false ∧ tokFreeV toks (.nat rel) = false
+    WF.progOK libH (fun _ => false) a0 = true ∧
+    Handle.ref logCell ∈ c.handles
 
-/-- User code cannot name a token (decision 56, `HarnessPrivacy`): user results (even ids), user
-`Bind` results, other acquire and release programs, other resources are token-free. `acqs`,
-`rels`, `ks`, `cs`: the harness codes. -/
+/-- The `REnv` entries that are not part of the harness (`acqs`, `rels`, `ks`: harness table
+entries; `cs`: harness codes) are Scala code (review batch 8, S2: the Phase 5 `REnv.WellFormed`
+clauses, with `libH`): acquire programs are closed; a release program and a `Bind` result hold
+only the handles of their argument; a resource of a code holds only the handles of the code; and
+none of them names a harness table entry. -/
 def Private (U : UEnv) (acqs rels ks : List Nat) (cs : List Val) : Prop :=
-  UserPrivate U.toEnv toks ∧
-  (∀ k a r, k ∉ ks → U.r.bind k a = .ok r → tokFreeRes toks r = true) ∧
-  (∀ k, k ∉ acqs → tokFreeIO toks (U.r.acquire k) = true) ∧
-  (∀ k a q, k ∉ rels → U.r.release k a = .ok q → tokFreeIO toks q = true) ∧
-  (∀ c r, c ∉ cs → U.resOf c = some r → tokFreeRes toks r = true)
+  (∀ k a r, k ∉ ks → U.r.bind k a = .ok r →
+    resOK libH (a.handles.contains ·) r = true ∧ ∀ i ∈ Res.idx r, i ∉ acqs ++ rels ++ ks) ∧
+  (∀ k, k ∉ acqs → WF.progOK libH (fun _ => false) (U.r.acquire k) = true) ∧
+  (∀ k a q, k ∉ rels → U.r.release k a = .ok q → WF.progOK libH (a.handles.contains ·) q = true) ∧
+  (∀ c r, c ∉ cs → U.resOf c = some r →
+    resOK libH (c.handles.contains ·) r = true ∧ ∀ i ∈ Res.idx r, i ∉ acqs ++ rels ++ ks)
 
 /-! ## Statements -/
 
@@ -229,12 +241,12 @@ def Before (l : List Val) (x y : Val) : Prop := l.idxOf x < l.idxOf y
 
 /-- 3. `make(A).flatMap(_ => make(B)).use(f)`: each release iff its acquire, and `B` is released
 before `A` (`Resource.scala:156-196`: nested `bracketFull`). `k` is the harness `flatMap` function
-(`_ => make(B)`), a token name. -/
+(`_ => make(B)`), a harness entry. -/
 def flatMapReleaseOrder : Prop :=
   ∀ (U : UEnv) (ca cb : Val) (acqA relA acqB relB : Nat) (a0 b0 : IO) (f k : Nat) (viaParent : Bool),
     MarkedMake U ca acqA relA a0 tagA tagRA →
     MarkedMake U cb acqB relB b0 tagB tagRB →
-    (∀ x, U.r.bind k x = .ok (Res.make acqB relB)) → tokFreeV toks (.nat k) = false →
+    (∀ x, U.r.bind k x = .ok (Res.make acqB relB)) →
     Private U [acqA, acqB] [relA, relB] [k] [ca, cb] →
     WellFormed libH [] (envH U (withParent viaParent (useOf U f ((Res.make acqA relA).flatMap k)))) harness →
     ∀ o, outcomesP {} counterMaskModel

@@ -1,33 +1,36 @@
 import CatsEffectInLean.Proofs.Phase6.ResourceWitness
 import CatsEffectInLean.Proofs.Phase6.BracketWitness
-import CatsEffectInLean.Props.Phase6.ParTraverse
+import CatsEffectInLean.Model.Timeout
 
 /-!
-# Regression: the forgeries of review batches 4-6 are rejected (decision 56)
+# Regression: the forgeries of review batches 4-8 are rejected (decision 58)
 
-Each forgery that a review found is a Lean `example` here: the hypothesis of the current
-statements rejects it (`decide +kernel`). See `Props/Phase6/HarnessPrivacy.lean` for the
-construction that closes the whole class; these examples only guard against regressions.
+Decision 58: a closure reference is a `Val.fn` value, separate from data numbers. `WellFormed`
+follows references structurally (`Val.handles`) and holds user code to the available handles
+(`WF.avail`): what it received, and its own user closures (even ids) whose captured handles are
+available. A library closure (odd id) is available only if held, or (in a program) if `Lib.ok`
+allows it and its captured handles are available. Each forgery that a review found is a Lean
+`example` here (`decide +kernel`).
 
-* Batch 4 (track G): the marker hypothesis `MarkersOnly` could never hold together with the
-  others (vacuous). Regression: the satisfiability witnesses (decision 53) exist for every
-  statement: `BracketWitness.bracketReleaseOnce_satisfiable`, `guaranteeFinalizerOnce_satisfiable`,
-  `ResourceWitness.use_sat`, `flat_sat`, and the CE-0020 refutation.
-* Batch 5 (track Res): a marker forwarded through a library closure field
-  (`ULam.allocFn (.user mR)`), and the same through other fields.
-* Batch 6 (track G): a `Bracket` leaf that captured a counter handle, named by number in
-  `BLam.thenUse` (the shallow `captured` accepted it; the deep one does not).
-* Batch 6 (track Res): a clock number used as a harness name (`IO.sleep n >> IO.realTime`, then a
-  user function returns a program that names `n`); and a resource code `c = .unit`.
+* Batch 4 (track G): vacuous hypotheses. Regression: the satisfiability witnesses (decision 53).
+* Batch 5 (track Res): a marker forwarded through a library closure field (`ULam.allocFn`).
+* Batch 6 (track G): a `Bracket` leaf that captured a counter handle, named in `BLam.thenUse`.
+* Batch 6 (track Res): a clock number used as a closure name.
+* Batch 8, F1: a `Bracket` external source whose data names a harness closure (`hioOf`).
+* Batch 8, F2: a reference nested under `.some` in a `Timeout.fold` fallback source
+  (`parTraverseN`). F3: the same reference writes the semaphore `Ref` of statement 8. Shown here in
+  the form that decision 58 gives the `parTraverseN` codes (`srcAction` with a `Val.fn` field;
+  track G switches `Model/ParTraverse.lean` to it).
+* Batch 8, S1: user code may pass any value through (`x => IO.pure(x)` passes `CallOK`).
 -/
 
 namespace CatsEffectInLean.Proofs.Phase6.PrivacyExamples
 
 open CatsEffectInLean.Model
+open CatsEffectInLean.Model.Codec
 open CatsEffectInLean.Model.Resource
 open CatsEffectInLean.Model.ResourceUse
 open CatsEffectInLean.Props.Phase6.Resource
-open CatsEffectInLean.Props.Phase6.HarnessPrivacy
 open CatsEffectInLean.Proofs.Phase6.ResourceWitnessEnv
 
 /-! ## Batch 4: the hypotheses are satisfiable -/
@@ -39,127 +42,108 @@ example := @CatsEffectInLean.Proofs.Phase6.ResourceWitness.flat_sat
 
 /-! ## Batch 5 (track Res): forwarding through a library closure field -/
 
-/-- The event closure of release (`markT RA`) forwarded by number in `ULam.allocFn`: the user
-result names the token. -/
-example : tokFreeIO toks (.map (.pure .unit) (ULam.allocFn (.user (HLam.markT logCell tagRA).id)).fn) = false := by
+/-- `ULam.allocFn (.user mT)` in a user program: `ULam` is internal (not in `libH.ok`), and the
+reference to the event closure `markT` is not available. -/
+example : WF.progOK libH (fun _ => false)
+    (.map (.pure .unit) (ULam.allocFn (.user (HLam.markT logCell tagRA).id)).fn) = false := by
   decide +kernel
 
-/-- The marked `make` itself, named by its codes (acquire and release would run again). -/
-example : tokFreeIO toks (.map (.pure .unit) (ULam.allocFn (.make (code 0) (code 1))).fn) = false := by
-  decide +kernel
-
-/-- The release code in `Clo.makePair` (a `RelFn.const` for the harness release). -/
-example : tokFreeIO toks (.flatMap (.pure .unit) (cloFn (.makePair (code 1)))) = false := by
-  decide +kernel
-
-/-- The release code in a `RelFn` value that a user `Allocate` function returns (data that the
-library reads as a release function). -/
-example : tokFreeR toks { out := .ret (.pair .unit (RelFn.const (code 1) .unit).toVal) } = false := by
-  decide +kernel
-
-/-- The harness resource code in a rebuilt `fold` source (`USrc.fold`). -/
-example : tokFreeIO toks (Race.bothIO (USrc.fold cA OnOut.pure.toVal OnRel.apply.toVal).toVal (.nat 0)) = false := by
-  decide +kernel
-
-/-- The event closure named directly is not in the statement's `Lib`. -/
+/-- The event closure itself, named in a program. -/
 example : WF.progOK libH (fun _ => false) (.delay (HLam.markT logCell tagRA).fn) = false := by
   decide +kernel
 
-/-! ## Batch 6 (track Res): runtime numbers and the resource code `.unit` -/
-
-/-- The clock forgery: the user function gets the clock value `n` (the id of the release event
-closure, after `IO.sleep n >> IO.realTime`) and returns a program that runs it. The result names
-the token, so `Private` rejects it, whatever the argument was (no escape clause). -/
-example : tokFreeR toks { out := .prog (.delay (.user (HLam.markT logCell tagRA).id)) } = false := by
+/-- A `Race` closure (public) whose source names the event closure by reference: rejected. -/
+example : WF.progOK libH (fun _ => false)
+    (Race.bothIO (USrc.relApp (RelFn.user (HLam.markT logCell tagRA).id).toVal .unit (snapU {})).toVal
+      (.nat 0)) = false := by
   decide +kernel
 
-/-- The same with the number as returned data (a harness code). -/
-example : tokFreeR toks { out := .ret (.nat (code 1)) } = false := by decide +kernel
+/-! ## Batch 6 (track Res): runtime numbers name nothing -/
 
-/-- A resource code `.unit` is not a token name, so it cannot be the code of a marked `make`
-(`MarkedMake` needs `tokFreeV toks c = false`). -/
-example : tokFreeV toks .unit = true := by decide +kernel
-
-/-- `WellFormed` rejects a write of the log cell (not held). -/
-example : tokFreeR toks { effects := [.writeRef logCell (Codec.listV [tagRA])], out := .ret .unit } = false := by
+/-- A program that names the event closure by a number computed at run time is still rejected:
+the id is odd, not in `libH.ok`, and not held. -/
+example : WF.fnOK libH (fun _ => false) (.user (HLam.markT logCell tagRA).id) = false := by
   decide +kernel
 
-/-! ## Batch 6 (track G): a `Bracket` leaf that captured a counter handle, named by number -/
+/-- A data number is only data: returning it needs nothing. -/
+example : WF.subA (fun _ => false) (Val.nat (HLam.markT logCell tagRA).id).handles = true := by
+  decide +kernel
+
+/-! ## Batch 6 (track G): a `Bracket` leaf that captured a counter handle -/
 
 section TrackG
 open CatsEffectInLean.Model.Bracket
-open CatsEffectInLean.Props.Phase6.Bracket (srcAcq srcFa HLam)
+open CatsEffectInLean.Props.Phase6.Bracket
 
-/-- The leaf `_ => this` whose `this` is the acquire program with counter 0. -/
 def leafAcq : Nat := (BLam.constThis (Src.ext (srcAcq 0)).toVal).id
-def leafFa : Nat := (BLam.constThis (Src.ext (srcFa 0 6)).toVal).id
 
-/-- The forged program: `IO.unit.flatMap(_ => leaf(()))` through `thenUse`. -/
-def forged (leaf : Nat) : IO := .flatMap (.pure .unit) (BLam.thenUse leaf .unit).fn
+/-- `thenUse` names the leaf by reference (`Val.fn`); the leaf captured the counter `Ref` 0, which
+is not held. -/
+example : WF.progOK Bracket.lib (fun _ => false) (.flatMap (.pure .unit) (BLam.thenUse leafAcq .unit).fn) = false := by
+  decide +kernel
 
-/-- With the shallow capture (a `Lib` without function fields, the old `WellFormed`) the forgery
-passes: this was the gap. -/
-example : WF.progOK (Bracket.isLib : Lib) (fun _ => false) (forged leafAcq) = true := by decide +kernel
+/-! ## Batch 8, F1: a `Bracket` external source that names a harness closure -/
 
-/-- With the deep capture (`Bracket.lib`, decision 56) it is rejected: it needs the counter
-handle `Ref` 0. -/
-example : WF.progOK Bracket.lib (fun _ => false) (forged leafAcq) = false := by decide +kernel
-example : WF.progOK Bracket.lib (fun _ => false) (forged leafFa) = false := by decide +kernel
+/-- The forged source of F1: the user's own cell `r = 2`, and the harness release counter's
+event closure `markA 1` as a reference (`hioOf` runs it). -/
+def f1Src : Val := .pair (.ref 2) (.pair (.nat 1) (.fn (Props.Phase6.Bracket.HLam.markA 1).id))
 
-/-- The clock forgery for track G: a number that is the id of a counter event closure, named in a
-program, is not in `Bracket.lib` (and captures the counter handle). -/
-example : WF.progOK Bracket.lib (fun _ => false) (.delay (HLam.markThunk 0).fn) = false := by decide +kernel
-example : WF.progOK Bracket.lib (fun _ => false) (.flatMap (.pure .unit) (BLam.thenUse (HLam.markThunk 0).id .unit).fn) = false := by
+/-- The F1 program: `IO.unit.flatMap(constThis(Src.ext f1Src))`, built by user code that holds
+only its cell `Ref` 2. Rejected: `markA 1` is a library closure that the user does not hold. -/
+example : WF.progOK Bracket.lib (fun h => h == .ref 2)
+    (.flatMap (.pure .unit) (BLam.constThis (Src.ext f1Src).toVal).fn) = false := by
+  decide +kernel
+
+/-- The honest form: the same source with the user's own closure `k = 14` (no captured handle). -/
+example : WF.progOK Bracket.lib (fun h => h == .ref 2)
+    (.flatMap (.pure .unit) (BLam.constThis (Src.ext (.pair (.ref 2) (.pair (.nat 1) (.fn 14)))).toVal).fn) = true := by
   decide +kernel
 
 end TrackG
 
-/-! ## Review batch 7 (track G, `parTraverseN`, defect D): a user function stored as a number
+/-! ## Batch 8, F2 and F3: a reference under `.some` in a `Timeout.fold` fallback -/
 
-`parTraverseNIO n as f` names the library closure `PT.k1 n as f` (`Model/ParTraverse.lean`); the
-user function is only a number field (through the harness closure `TL.tag f` of statement 1). With
-a `Lib` without function fields (`ptIsLib`, as the statement `parTraverseNOrder` uses it now), the
-handles that `f` captured are never checked: a well-formed `f` that captured the element's result
-`Deferred` can complete it with a forged value. With the deep `captured` (decision 56) and a `Lib`
-that declares the function fields of `PT` and `TL`, the forgery is rejected. The statement of track
-G must use such a `Lib` (`ptLibDeep` below is the declaration). -/
+section F2
+open CatsEffectInLean.Model.Timeout
 
-section ParTraverseD
-open CatsEffectInLean.Model.Codec
-open CatsEffectInLean.Model.ParTraverse
-open CatsEffectInLean.Props.Phase6.ParTraverse
+/-- The `srcAction f a` code of `Model/ParTraverse.lean` in the form of decision 58. -/
+def srcActionFn (f : Nat) (a : Val) : Val := cloVal 41 80 [.fn f, a]
 
--- `ptLibDeep` (with `ptFields`) is declared in `Props/Phase6/ParTraverse.lean` (track G).
+/-- F2: the forging function of review batch 7, a user closure that captured the element's result
+`Deferred` 5. -/
+def fForge : Nat := 2 * valToNat (.deferred 5)
 
-/-- The forging `f` of review batch 7: a user closure that captured `Deferred` 5. -/
-def forgingF : Nat := 2 * valToNat (.deferred 5)
-
-/-- The root of the forgery: `parTraverseNIO 1 [0] (TL.tag f)`. -/
-def ptRoot : IO := parTraverseNIO 1 [.nat 0] (TL.tag forgingF).id
-
-/-- With `ptIsLib` (no function fields) the root passes `progOK`: the gap. -/
-example : WF.progOK (ptIsLib : Lib) (fun _ => false) ptRoot = true := by decide +kernel
-
-/-- With the deep `Lib` it is rejected: `f`'s captured `Deferred` 5 is not held. -/
-example : WF.progOK ptLibDeep (fun _ => false) ptRoot = false := by decide +kernel
-
-/-- An honest `f` (no captured handle) is still accepted. -/
-example : WF.progOK ptLibDeep (fun _ => false) (parTraverseNIO 1 [.nat 0] (TL.tag 14).id) = true := by
+/-- The traversed function returns `IO.pure(Canceled).flatMap(fold(Some(srcAction fForge 0), 3))`.
+Rejected: the reference to `fForge` is found under `.some`, and `fForge` captured `Deferred` 5. -/
+example : WF.progOK (fun id => (Codec.isLibId id)) (fun _ => false)
+    (.flatMap (.pure .ocCanceled) (TLam.fold (.some (srcActionFn fForge (.nat 0))) 3).fn) = false := by
   decide +kernel
 
-/-- The same forging `f` hidden in a source code: `guaranteeCase` (`Bracket`) of the action source
-`srcAction f a` (the `Src.ext` field). Passes the shallow check, rejected by the deep one. -/
-def ptSrcForged : IO := Bracket.guaranteeCaseIO (.ext (srcAction forgingF (.nat 0))) 14
+/-- F3: the same with a forging function that captured the semaphore state `Ref` 7. -/
+example : WF.progOK (fun id => (Codec.isLibId id)) (fun _ => false)
+    (.flatMap (.pure .ocCanceled) (TLam.fold (.some (srcActionFn (2 * valToNat (.ref 7)) (.nat 0))) 3).fn) = false := by
+  decide +kernel
 
-example : WF.progOK (ptIsLib : Lib) (fun _ => false) ptSrcForged = true := by decide +kernel
-example : WF.progOK ptLibDeep (fun _ => false) ptSrcForged = false := by decide +kernel
+/-- An honest function (captures nothing) in the same position is accepted. -/
+example : WF.progOK (fun id => (Codec.isLibId id)) (fun _ => false)
+    (.flatMap (.pure .ocCanceled) (TLam.fold (.some (srcActionFn 14 (.nat 0))) 3).fn) = true := by
+  decide +kernel
 
-/-- The same in a `Race` source (`both`). -/
-def ptRaceForged : IO := Race.bothIO (srcAction forgingF (.nat 0)) (srcAction 14 (.nat 0))
+end F2
 
-example : WF.progOK (ptIsLib : Lib) (fun _ => false) ptRaceForged = true := by decide +kernel
-example : WF.progOK ptLibDeep (fun _ => false) ptRaceForged = false := by decide +kernel
+/-! ## Batch 8, S1: user code may pass any value through -/
 
-end ParTraverseD
+/-- `x => IO.pure(x)` (user function 0, closure id 0). -/
+def idEnv : UserEnv where
+  call _ arg _ := { out := .prog (.pure arg) }
+
+/-- It passes `CallOK` on every argument, also one that holds a token or a harness reference: it
+returns only what it received. -/
+theorem idEnv_callOK (arg : Val) (v : View) : WF.CallOK libH [] idEnv 0 arg v := by
+  refine WF.callOK_of_reach (fun _ _ => rfl) ?_
+  show WF.progOK libH _ (.pure arg) = true
+  simp only [WF.progOK, WF.subA, List.all_eq_true]
+  intro h hh
+  exact WF.avail_of_mem ((WF.memOf_eq _ _).2 (WF.Reach.base (by simp [hh])))
 
 end CatsEffectInLean.Proofs.Phase6.PrivacyExamples
