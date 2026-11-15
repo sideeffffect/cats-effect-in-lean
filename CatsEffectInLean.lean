@@ -84,6 +84,12 @@ import CatsEffectInLean.Std.QueueFactory
 import CatsEffectInLean.Props.Phase7.Queue
 import CatsEffectInLean.Proofs.Phase7.QueueWitness
 import CatsEffectInLean.Proofs.Phase7.QueueWrongFunction
+import CatsEffectInLean.Model.Semaphore
+import CatsEffectInLean.Model.Mutex
+import CatsEffectInLean.Props.Phase7.Semaphore
+import CatsEffectInLean.Proofs.Phase7.SemaphoreCount
+import CatsEffectInLean.Proofs.Phase7.SemaphoreCountFixedDefs
+import CatsEffectInLean.Proofs.Phase7.SemaphoreWitness
 import CatsEffectInLean.Std.CountDownLatch
 import CatsEffectInLean.Std.CyclicBarrier
 import CatsEffectInLean.Props.Phase7.CountDownLatch

@@ -57,6 +57,10 @@ V2RES_MIN = 0.02
 # Format v2 (batch 6.3)
 V2PT_OPS = ('parTraverseN',)
 V2PT_MIN = 0.02
+# Format v2 (Phase 7, track S): `Semaphore`/`Mutex` parts appended with their own RNG (`p_sem`);
+# opcount.py with `--boost tpl_sem=20` / `tpl_mutex=40` gives the 50,000-case runs
+V2S_OPS = ('semNew', 'mutexNew')
+V2S_MIN = 0.01
 # Format v2 (Phase 7, track L): appended with its own RNG (`p_latch`, about 4 % each);
 # opcount.py with `--boost tpl_cdl=12 tpl_cb=12` gives the 50,000-case runs
 V2L_OPS = ('cdlNew', 'cdlRelease', 'cdlAwait', 'cbNew', 'cbAwait')
@@ -72,7 +76,8 @@ def check(cond, msg):
 def main():
     t0 = time.time()
     # 1. type checker
-    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race', 'bracket', 'memoize', 'resuse', 'partraverse', 'latch')
+    basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race', 'bracket', 'memoize', 'resuse', 'partraverse',
+                                            'semaphore', 'latch')
              for x in (drive.REPO / f'difftest/cases/{f}.jsonl').read_text().splitlines() if x.strip()]
     check(all(well_typed(c['prog']) for c in basic), f"type checker accepts all {len(basic)} golden cases")
     N1 = {'t': 'nat', 'v': 1}
@@ -109,6 +114,10 @@ def main():
         {'op': 'rBoth', 'a': {'op': 'rPure', 'v': N1}, 'b': {'op': 'rPure', 'v': N1}},
         {'op': 'rUse', 'res': {'op': 'rBoth', 'a': {'op': 'rPure', 'v': N1}, 'b': {'op': 'rPure', 'v': N1}},
          'x': 'v', 'k': {'op': 'map', 'e': {'op': 'pure', 'v': {'t': 'var', 'x': 'v'}}, 'fn': 2}},
+        # format v2 (Phase 7, track S): a semaphore op on a `Ref`; a mutex used as a semaphore
+        {'op': 'bind', 'x': 'r', 'e': {'op': 'refNew', 'v': N1}, 'k': {'op': 'semAvailable', 's': {'t': 'var', 'x': 'r'}}},
+        {'op': 'bind', 'x': 'm', 'e': {'op': 'mutexNew'}, 'k': {'op': 'semAcquireN', 's': {'t': 'var', 'x': 'm'}, 'n': 1}},
+        {'op': 'semNew', 'n': -1},
     ]
     for p in bad:
         try:
@@ -143,6 +152,9 @@ def main():
     v2pcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2PT_OPS}
     lowp = {op: f for op, f in v2pcov.items() if f < V2PT_MIN}
     check(not lowp, f"each format v2 op of batch 6.3 in >= {V2PT_MIN:.0%} of {N} cases {lowp}")
+    v2scov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2S_OPS}
+    lows = {op: f for op, f in v2scov.items() if f < V2S_MIN}
+    check(not lows, f"each format v2 op of track S (Semaphore, Mutex) in >= {V2S_MIN:.0%} of {N} cases {lows}")
     v2lcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2L_OPS}
     lowl = {op: f for op, f in v2lcov.items() if f < V2L_MIN}
     check(not lowl, f"each format v2 op of track L in >= {V2L_MIN:.1%} of {N} cases {lowl}")

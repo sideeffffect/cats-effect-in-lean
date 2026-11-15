@@ -52,6 +52,7 @@ Op `parTraverseN` (format v2). Fixed cases `partraverse.jsonl` (74, all agree). 
 ## See Also
 
 - [Race, both and fiber leaks](race-both-model.md)
+- [Semaphore and Mutex model](semaphore-mutex-model.md) (`MiniSemaphore` and `Semaphore` share the lazy cancelation of PR #4648; a track S difftest case found a gap of `rankOrder`: it assumes consecutive child fiber ids, which fails when `f` starts fibers)
 - [guarantee and bracket model](bracket-model.md)
 - [Difftest program format](../methodology/difftest-program-format.md)
 - [Outcome sets, Eqv and the IO laws](../semantics/outcome-equivalence.md)

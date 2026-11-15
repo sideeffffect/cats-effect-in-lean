@@ -17,6 +17,8 @@ import CatsEffectInLean.Props.Phase6.Resource
 import CatsEffectInLean.Proofs.Phase6.ResourceBoth
 import CatsEffectInLean.Props.Phase6.ParTraverse
 import CatsEffectInLean.Props.Phase7.Queue
+import CatsEffectInLean.Props.Phase7.Semaphore
+import CatsEffectInLean.Proofs.Phase7.SemaphoreCount
 import CatsEffectInLean.Props.Phase7.CountDownLatch
 import CatsEffectInLean.Props.Phase7.CyclicBarrier
 
@@ -628,6 +630,92 @@ def registry : List Entry := [
       consistency. Satisfiable (QueueWitness.twinSeq_satisfiable: full queue, tryOffer false, FIFO, \
       size). Wrong function: wLifo on the Async side gives another trace (wLifo_twin_breaks). Smoke: \
       qsmoke (twin loop). Open." },
+  -- Phase 7, track S (Semaphore, Mutex)
+  { id := "std.Semaphore.noLostPermit"
+    rows := ["std.Semaphore.apply", "std.Semaphore.acquireN", "std.Semaphore.releaseN",
+      "std.Semaphore.tryAcquireN", "std.Semaphore.available", "std.Semaphore.permit",
+      "std.Semaphore.acquire", "std.Semaphore.release"]
+    prop := ``Props.Phase7.Semaphore.semNoLostPermit
+    status := .«open»
+    note := "When every user fiber has ended (canceled or joined, AllEnded), available = k + the \
+      permits the parent released: no use (permit.use(g), uncancelable(poll => poll(acquireN n) *> \
+      releaseN n), tryAcquireN then releaseN), no cancel at any run-loop iteration (all PChoice \
+      schedules) and no WellFormed user code (semLib: Bracket and the public SL/ML operations) \
+      loses or adds a permit (S:28-35, S:63-65 'restoring any permits it has acquired'). The lock \
+      object and the counter Ref 0 are never given to user code. Satisfiable \
+      (SemaphoreWitness.semNoLostPermit_satisfiable). semsmoke: 0 violations; wrong functions \
+      'leak' (cleanup won = false is F.unit) and 'twice' (releaseN adds 2n) break it; a forging g \
+      that captured the state Ref is rejected by WellFormed and breaks it when run. Open: needs a \
+      state invariant over Step/SchedP (permits + held + sunk = k + released)." },
+  { id := "std.Semaphore.noDeadlock"
+    rows := ["std.Semaphore.apply", "std.Semaphore.acquireN", "std.Semaphore.releaseN",
+      "std.Semaphore.permit"]
+    prop := ``Props.Phase7.Semaphore.semNoDeadlock
+    status := .«open»
+    note := "Behaviour tables (critical sections: cedes, then pure/raiseError/canceled; no user \
+      code, no WellFormed), need <= k: every run that stops ends Succeeded with available = k + \
+      released (no deadlock, no lost wakeup, no lost permit). Satisfiable \
+      (semNoDeadlock_satisfiable). semsmoke: 0 violations; wrong function 'skip a waiter' \
+      (releaseN drops a woken request without completing its gate) and 'leak' break it. Open." },
+  { id := "std.Semaphore.permit.atMostK"
+    rows := ["std.Semaphore.permit", "std.Semaphore.acquireN", "std.Semaphore.releaseN"]
+    prop := ``Props.Phase7.Semaphore.semAtMostK
+    status := .«open»
+    note := "At most k fibers hold a permit of Semaphore(k) at once: counted uses (enter/exit in \
+      the harness counter Ref 0 inside uncancelable(poll => enter *> poll(g).attempt.onCancel(exit) \
+      ...)), other uses take permits too, no release acts. All WellFormed user code and schedules. \
+      Satisfiable (semAtMostK_satisfiable: two counted uses, highest 1 = k). semsmoke: 0 \
+      violations; wrong function 'wide' (Semaphore(k + 1)) breaks it. Open." },
+  { id := "std.Mutex.lock.mutualExclusion"
+    rows := ["std.Mutex.apply", "std.Mutex.lock", "std.Mutex.ConcurrentImpl.lock", "std.LockQueue.lock"]
+    prop := ``Props.Phase7.Semaphore.mutexMutualExclusion
+    status := .«open»
+    note := "At most one fiber holds the Mutex at once (Mutex.scala:24-28), counted as in \
+      std.Semaphore.permit.atMostK; LockQueue (CLH queue of Deferred cells, SyncRef access/CAS) \
+      mirror, all WellFormed user code, cancels at any point. Satisfiable \
+      (mutexMutualExclusion_satisfiable). semsmoke: 0 violations; wrong function 'no wait' (loop \
+      takes every cell as free) breaks it. Open." },
+  { id := "std.Mutex.lock.noDeadlock"
+    rows := ["std.Mutex.apply", "std.Mutex.lock", "std.LockQueue.lock"]
+    prop := ``Props.Phase7.Semaphore.mutexNoDeadlock
+    status := .«open»
+    note := "Behaviour tables, every user fiber ended: every run that stops ends Succeeded(()) - the \
+      final lock.use(_ => IO.unit) gets the lock (no lost lock, no lost wakeup, canceled waiters \
+      hand on their predecessor's cell). Satisfiable (mutexNoDeadlock_satisfiable). semsmoke: 0 \
+      violations; wrong function 'lost wakeup' (awakeCell never completes the cell) breaks it. Open." },
+  { id := "std.Semaphore.count.atRest"
+    rows := ["std.Semaphore.count", "std.Semaphore.acquireN", "std.Semaphore.acquire",
+      "std.Semaphore.releaseN", "std.Semaphore.apply"]
+    prop := ``Props.Phase7.Semaphore.semCountAtRest
+    status := .refuted
+    thm := some ``Proofs.Phase7.semCountAtRest_refuted
+    bug := some "bugs/CE-0060.yaml"
+    note := "When every user fiber has ended nobody waits, so count = available (S:47-53). Refuted: \
+      Semaphore(0), two acquires, cancel the second, then the first: count = -1, available = 0 \
+      (default FIFO schedule, fuel 92, kernel). A canceled non-head request stays in the queue \
+      (reclaim removes only the head, S:168-177), and reclaim(head) with sunk = 0 is releaseN(0) = \
+      F.unit, so no sweep reaches it (PR #4648, v3.7.1). Low priority, maybe intended (the PR \
+      says 'count may transiently include them'); persistent until the next release. Fixed twin \
+      (eager removal, as v3.7.0): Proofs/Phase7/SemaphoreCountFixed.lean (4 inputs x 12 \
+      schedules, kernel) and semsmoke. Reproducer: v3.7.1, series/3.x, series/3.7.x." },
+  { id := "std.Semaphore.acquireN.fifo"
+    rows := ["std.Semaphore.acquireN", "std.Semaphore.releaseN", "std.Semaphore.count"]
+    prop := ``Props.Phase7.Semaphore.semFifo
+    status := .«open»
+    note := "Strict FIFO (S:58-61): Semaphore(0); the requests n_1..n_m enter the queue in order \
+      (the parent spins on count); after releaseN(r) the longest prefix with sum <= r is served \
+      (joins succeed) and count = r - sum. All n, r and schedules; no user code. Satisfiable \
+      (semFifo_satisfiable). semsmoke: 0 violations; wrong function 'LIFO' breaks it. Open." },
+  { id := "std.Mutex.lock.semaphoreTwin"
+    rows := ["std.Mutex.lock", "std.Mutex.apply", "std.Semaphore.permit", "std.LockQueue.lock"]
+    prop := ``Props.Phase7.Semaphore.mutexSemaphoreTwin
+    status := .«open»
+    note := "Twin (docs/std/mutex.md:7-8, 'Basically, it's a Semaphore with a single available \
+      permit'): every (outcome, user trace) of a program with Mutex.lock.use is one of the same \
+      program with Semaphore(1).permit.use (one direction; the final heap holds the lock state, so \
+      only summary and trace are compared). v3.7.1 has no Mutex AsyncImpl any more (LockQueue, \
+      commit 8deb2fdabe). Satisfiable (mutexSemaphoreTwin_satisfiable). semsmoke samples both sides. \
+      Open." },
   { id := "std.CountDownLatch.awaitNotEarly"
     rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
     prop := ``Props.Phase7.CountDownLatch.cdlAwaitNotEarly

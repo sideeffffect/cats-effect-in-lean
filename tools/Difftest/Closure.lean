@@ -241,6 +241,20 @@ inductive Lam where
   | qBool
   /-- `qSize`: `n => VNat(n)` (the model already holds `Val.nat n`). -/
   | qNat
+  -- format v2 (Phase 7, track S): `Semaphore`, `Mutex` run on `Model/Semaphore.lean`,
+  -- `Model/Mutex.lean`
+  /-- `semNew`: `s => VSem(h.newSem(s))`. -/
+  | semHandle
+  /-- `semPermit`: `_ => I(e)` (the `use` function). `vals = env`. -/
+  | semUse
+  /-- `semTryAcquireN`/`semAvailable`: `VBool(_)`/`VNat(_)` (the model already holds the value). -/
+  | semVal
+  /-- `semCount`: `c => if (c >= 0) VRight(VNat(c)) else VLeft(VNat(-c))`. -/
+  | semCountMap
+  /-- `mutexNew`: `m => VMutex(h.newMutex(m))`. -/
+  | mutexHandle
+  /-- `mutexLock`: `_ => I(e)` (the `use` function). `vals = env`. -/
+  | mutexUse
   -- format v2 (Phase 7, track L): `std.CountDownLatch`, `std.CyclicBarrier` run on the mirrors
   -- `Std/CountDownLatch.lean`, `Std/CyclicBarrier.lean`
   /-- `cdlNew`: `l => VLatch(h.newLatch(l))` (the model value is the latch itself). -/
@@ -266,6 +280,7 @@ def Lam.all : List Lam :=
    .ruUse, .raK, .raRelAs, .ruRes, .rbA, .rbB, .rbPair,
    .ptF, .ptList,
    .qHandle, .qBool, .qNat,
+   .semHandle, .semUse, .semVal, .semCountMap, .mutexHandle, .mutexUse,
    .latchHandle, .barrierHandle]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l

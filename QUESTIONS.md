@@ -29,3 +29,9 @@ Only non-obvious questions that agents cannot decide alone. Answers: `raw/projec
 - Question 2: The scheduled `paranoid-heavy.yml` replays the heavy proofs through six kernels (`lake check --from-export --paranoid`). One default-kernel replay takes about 38 min locally, so six kernels may need about 4 h or more; the job timeout is 350 min (GitHub-hosted maximum 360). The export file size is not measured yet. If it does not fit: run it on a self-hosted runner, split it by kernel, or accept only the default-kernel replay (in `heavy-proofs`) for heavy proofs?
 - Context: decision 55 (`raw/project-decisions/2026-11-10-decision-55-heavy-proofs.md`). The law entry is out of the default build either way.
 - Default until you answer: agents treat a red `heavy-proofs` job like a red `lean` job (no merge to `main`); `paranoid-heavy.yml` stays scheduled as is, and its first result decides.
+
+## Q5 (2026-11-15): Is a trade-off that a PR names a bug? (CE-0060, `Semaphore#count`)
+
+- Question: PR #4648 (in v3.7.1) made the cancelation of `Semaphore#acquireN` O(1). Its description says "count may transiently include [canceled waiters]". The Scaladoc of `count` was not changed ("returns the number of permits callers are waiting for"). Track S refuted "`count` = `available` when every user fiber has ended": with `Semaphore(0)` and two canceled waiters, `count` stays -1 until the next release, which may never come. Should such a documented-in-a-PR trade-off stay a bug record?
+- Context: no permit is lost; only `count` is wrong. `bugs/CE-0060.yaml` has priority low and `maybe_intended: likely`. AGENTS.md: "Known deliberate behavior is not a bug".
+- Default until you answer: keep CE-0060 as a low-priority record with `maybe_intended: likely`, because the state is not transient without a later release and the Scaladoc still promises the old meaning. Nothing is filed upstream.

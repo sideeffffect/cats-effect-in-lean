@@ -55,7 +55,7 @@ object Json:
       case "succeeded" => only("v"); Val.VSucceeded(decodeVal(field(o, "v", t)))
       case "errored" => only("code"); Val.VErrored(Err.User(nat(field(o, "code", t), "errored.code")))
       case "canceled" => only(); Val.VCanceled
-      case "fiber" | "ref" | "deferred" | "queue" | "memo" | "latch" | "barrier" => fail(s"value '$t': handles cannot be literals")
+      case "fiber" | "ref" | "deferred" | "queue" | "memo" | "sem" | "mutex" | "latch" | "barrier" => fail(s"value '$t': handles cannot be literals")
       case _ => fail(s"unknown value tag '$t'")
 
   def encodeErr(e: Err): ujson.Obj = e match
@@ -77,6 +77,8 @@ object Json:
     case Val.VDeferred(i) => ujson.Obj("t" -> "deferred", "id" -> i)
     case Val.VQueue(i) => ujson.Obj("t" -> "queue", "id" -> i)
     case Val.VMemo(i) => ujson.Obj("t" -> "memo", "id" -> i)
+    case Val.VSem(i) => ujson.Obj("t" -> "sem", "id" -> i)
+    case Val.VMutex(i) => ujson.Obj("t" -> "mutex", "id" -> i)
     case Val.VLatch(i) => ujson.Obj("t" -> "latch", "id" -> i)
     case Val.VBarrier(i) => ujson.Obj("t" -> "barrier", "id" -> i)
 
@@ -107,6 +109,9 @@ object Json:
   val V2Ops: Set[String] = Set("race", "raceOutcome", "both", "bothOutcome", "guarantee", "bracket", "bracketCase",
     "bracketFull", "memoize", "memoGet", "rUse", "rAllocated", "rBoth",
     "parTraverseN", "qNew", "qOffer", "qTryOffer", "qTake", "qTryTake", "qSize",
+    // Phase 7, track S
+    "semNew", "semAcquireN", "semReleaseN", "semTryAcquireN", "semAvailable", "semCount", "semPermit",
+    "mutexNew", "mutexLock",
     // Phase 7, track L
     "cdlNew", "cdlRelease", "cdlAwait", "cbNew", "cbAwait")
 
@@ -288,6 +293,16 @@ object Json:
       case "qTake" => only("q"); Prog.QTake(a("q"))
       case "qTryTake" => only("q"); Prog.QTryTake(a("q"))
       case "qSize" => only("q"); Prog.QSize(a("q"))
+      // ---- format v2 (Phase 7, track S)
+      case "semNew" => only("n"); Prog.SemNew(n("n"))
+      case "semAcquireN" => only("s", "n"); Prog.SemAcquireN(a("s"), n("n"))
+      case "semReleaseN" => only("s", "n"); Prog.SemReleaseN(a("s"), n("n"))
+      case "semTryAcquireN" => only("s", "n"); Prog.SemTryAcquireN(a("s"), n("n"))
+      case "semAvailable" => only("s"); Prog.SemAvailable(a("s"))
+      case "semCount" => only("s"); Prog.SemCount(a("s"))
+      case "semPermit" => only("s", "e"); Prog.SemPermit(a("s"), p("e"))
+      case "mutexNew" => only(); Prog.MutexNew
+      case "mutexLock" => only("m", "e"); Prog.MutexLock(a("m"), p("e"))
       // ---- format v2 (Phase 7, track L)
       case "cdlNew" | "cbNew" =>
         only("n")

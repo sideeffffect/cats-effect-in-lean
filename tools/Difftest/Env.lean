@@ -393,6 +393,33 @@ def runClo (U : ResourceUse.UEnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) :
   | .ptF, .parTraverseN _ _ f => ofTr (tr R f (node + 1) (arg :: env) vw)
   -- `.map(bs => list)`: the model already holds the list encoding
   | .ptList, _ => ret arg
+  -- format v2 (Phase 7, track S)
+  -- `s => VSem(h.newSem(s))`: the semaphore is a reference to `Semaphore.SL.obj q`
+  | .semHandle, _ =>
+    match arg with
+    | .fn k =>
+      match Semaphore.semRef? k with
+      | some q => ret arg [.semH q]
+      | none => DResult.harness
+    | _ => DResult.harness
+  -- `_ => I(e)` of `semPermit`, called by the `use` closure (`Semaphore.SL.useOut`)
+  | .semUse, .semPermit _ e => ofTr (tr R e (node + 1) env vw)
+  -- `VBool(_)`, `VNat(_)`: the model already holds the value
+  | .semVal, _ => ret arg
+  -- `c => if (c >= 0) VRight(VNat(c)) else VLeft(VNat(-c))`
+  | .semCountMap, _ =>
+    match arg with
+    | .int i => ret (if i ≥ 0 then .right (.nat i.toNat) else .left (.nat (-i).toNat))
+    | _ => DResult.harness
+  -- `m => VMutex(h.newMutex(m))`
+  | .mutexHandle, _ =>
+    match arg with
+    | .fn k =>
+      match Mutex.mutexRef? k with
+      | some q => ret arg [.mutexH q]
+      | none => DResult.harness
+    | _ => DResult.harness
+  | .mutexUse, .mutexLock _ e => ofTr (tr R e (node + 1) env vw)
   | _, _ => DResult.harness
 
 /-- The difftest closures of program `p`, with trace and failure lists. -/
@@ -482,6 +509,8 @@ inductive LibClo where
   | memoize (l : Memoize.MLam)
   | ures (l : ResourceUse.ULam)
   | ptrav (l : ParTraverse.PT)
+  | sem (l : Semaphore.SL)
+  | mutex (l : Mutex.ML)
   | cdl (l : CatsEffectInLean.Std.CountDownLatch.CLam)
   | cb (l : CatsEffectInLean.Std.CyclicBarrier.BLam)
 
@@ -503,6 +532,8 @@ def libClo? (id : Nat) : Option LibClo :=
           else if k == Memoize.ns then (Memoize.MLam.ofFields tag fs).map .memoize
           else if k == ResourceUse.ns then (ResourceUse.ULam.ofFields tag fs).map .ures
           else if k == ParTraverse.ns then (ParTraverse.PT.ofFields tag fs).map .ptrav
+          else if k == Semaphore.ns then (Semaphore.SL.ofFields tag fs).map .sem
+          else if k == Mutex.ns then (Mutex.ML.ofFields tag fs).map .mutex
           else if k == CatsEffectInLean.Std.CountDownLatch.ns then
             (CatsEffectInLean.Std.CountDownLatch.CLam.ofFields tag fs).map .cdl
           else if k == CatsEffectInLean.Std.CyclicBarrier.ns then
@@ -526,6 +557,26 @@ def dispatchDt (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
     | none => DResult.harness.toUser
   | none => DResult.harness.toUser
 
+/-- Phase 7, track S: the closures that the `Semaphore` fold closures call back (`useRel` applies a
+release function value, `SL.relEc` or `ML.relEc`; `useOut` calls the difftest `use` function).
+These never call back again. -/
+def dispatchSemLeaf (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
+  match Semaphore.SL.ofId? id with
+  | some l => Semaphore.call (dispatchDt p) l arg vw
+  | none =>
+    match Mutex.ML.ofId? id with
+    | some l => Mutex.call l arg vw
+    | none => dispatchDt p id arg vw
+
+/-- Phase 7, track S: the `Semaphore` and `Mutex` closures, then the difftest closures. -/
+def dispatchSem (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
+  match Semaphore.SL.ofId? id with
+  | some l => Semaphore.call (dispatchSemLeaf p) l arg vw
+  | none =>
+    match Mutex.ML.ofId? id with
+    | some l => Mutex.call l arg vw
+    | none => dispatchDt p id arg vw
+
 /-- The difftest closures and the `ResourceUse` lambdas of program `p` (the functions that the
 `Bracket` mirror calls: `IO.bracketFull` of `Resource#fold`, track Res). -/
 def dispatchRes (ho : List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
@@ -535,7 +586,8 @@ def dispatchRes (ho : List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (
     -- batch 6.3: the `guaranteeCase` finalizers of `parTraverseN` are `ParTraverse` closures
     match ParTraverse.PT.ofId? id with
     | some l => ParTraverse.call ho (dispatchDt p) l arg vw
-    | none => dispatchDt p id arg vw
+    -- Phase 7, track S: the `Allocate` and fold closures of `permit.use`/`lock.use`
+    | none => dispatchSem p id arg vw
 
 /-- All closures of program `p`: difftest closures (with trace and failures) and library
 closures (module doc). `ho`: the `HashSet` iteration order of the `parTraverseN` mirror. -/
@@ -553,6 +605,7 @@ def dispatch (ho : List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (vw 
     | some (.ures l) => ResourceUse.callU (uenvOf p) (dispatchDt p) l arg vw
     | some (.memoize l) => Memoize.call (srcIO p) l arg vw
     | some (.ptrav l) => ParTraverse.call ho (dispatchDt p) l arg vw
+    | some (.sem _) | some (.mutex _) => dispatchSem p id arg vw
     | some (.cdl l) => CatsEffectInLean.Std.CountDownLatch.call l arg vw
     | some (.cb l) => CatsEffectInLean.Std.CyclicBarrier.call l arg vw
     | none =>

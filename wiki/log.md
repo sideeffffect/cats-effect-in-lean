@@ -350,6 +350,11 @@
 - Updated: Difftest program format (format v2 track Q ops), Differential testing (track Q section), Queue and timeout model (See Also), index
 - Raw: raw/cats-effect/2026-11-15-queue-track-q-notes.md, raw/cats-effect/2026-11-15-queue-track-q-results.md
 
+## [2026-11-15] ingest | Phase 7 track S: Semaphore and Mutex mirrors, difftest, 8 statements, CE-0060
+- Created: Semaphore and Mutex model (cats-effect/semaphore-mutex-model.md)
+- Updated: Difftest program format (track S ops), Bug history (CE-0060), parTraverseN model (See Also; `rankOrder` gap), index
+- Raw: raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md
+
 ## [2026-11-15] ingest | Track L: CountDownLatch and CyclicBarrier (Phase 7)
 - Created: CountDownLatch and CyclicBarrier model (cats-effect/latch-barrier-model.md)
 - Updated: Differential testing (format v2 ops of track L, mutation check)

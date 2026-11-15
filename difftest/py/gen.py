@@ -113,6 +113,9 @@ WEIGHTS = {
     # format v2 (Phase 7, track Q): the `qNew` queue scenario, appended by `gen_case` with its own
     # RNG (`p_queue2`), as `parTraverseN`; the weight only scales that probability (`--boost`)
     'tpl_queue2': 1.0,
+    # format v2 (Phase 7, track S): `Semaphore` and `Mutex`, appended by `gen_case` with its own RNG
+    # (`p_sem`), as `parTraverseN`; the weights scale the two shapes (`--boost` in opcount.py)
+    'tpl_sem': 1.0, 'tpl_mutex': 0.6,
     # format v2 (Phase 7, track L): `CountDownLatch` and `CyclicBarrier` scenarios, appended by
     # `gen_case` with their own RNG (`p_latch`), like `parTraverseN`. Weights scale the two shapes.
     'tpl_cdl': 1.0, 'tpl_cb': 1.0,
@@ -140,6 +143,7 @@ CONFIG = {
     # preempt coverage (Phase 5 gate caveat 3): small IORuntimeConfig thresholds
     'p_runtime': 0.25,
     'p_queue2': 0.08,          # Phase 7, track Q: append a `qNew` queue scenario (own RNG, see gen_case)
+    'p_sem': 0.08,             # Phase 7, track S: append a `Semaphore`/`Mutex` part (own RNG, see gen_case)
     'p_latch': 0.08,           # Phase 7, track L: append a latch/barrier part (own RNG, see gen_case)
     'p_par_traverse': 0.08,    # batch 6.3: append a `parTraverseN` part (own RNG, see gen_case)         # replay case gets a `runtime` field (auto-yield every few iterations)
 }
@@ -950,6 +954,120 @@ class Gen:
         return {'op': 'bind', 'x': fv, 'e': {'op': 'start', 'e': {'op': 'map', 'e': p, 'fn': 1}},
                 'k': {'op': 'seq', 'ps': ps}}
 
+    # ---- Phase 7, track S: `Semaphore` and `Mutex` scenarios (type unit)
+
+    def sem_mark(self, k):
+        """A trace marker: `delay inc (nat k)` (type nat)."""
+        return {'op': 'delay', 'fn': 2, 'arg': {'t': 'nat', 'v': k}}
+
+    def sem_stop(self):
+        """How a critical section ends: value, error, self-cancel, sleep, rarely never."""
+        return self.pick([(6, {'op': 'pure', 'v': {'t': 'unit'}}), (2, {'op': 'raise', 'code': self.code()}),
+                          (1.5, {'op': 'canceled'}), (1, {'op': 'sleep', 'ms': self.r.randint(1, 3)}),
+                          (0.3, {'op': 'never'})])
+
+    def sem_section(self, env, k, size):
+        """The body of a critical section: cedes, a marker, maybe a small program, then a stop."""
+        ps = [{'op': 'cede'} for _ in range(self.pick([(2, 0), (3, 1), (2, 2), (1, 4)]))]
+        ps.append(self.sem_mark(k))
+        if size > 2 and self.r.random() < 0.3:
+            ps.append(self.prog(self.small_type(), env, min(size, 4), {}))
+        ps.append(self.sem_stop())
+        return {'op': 'map', 'e': {'op': 'seq', 'ps': ps}, 'fn': 1}
+
+    def sem_fiber(self, sv, env, k, size):
+        """One user of semaphore `sv` (type unit)."""
+        s = {'t': 'var', 'x': sv}
+        n = self.pick([(1, 0), (6, 1), (3, 2), (1, 3)])
+        kind = self.pick([(5, 'permit'), (3, 'acqrel'), (2, 'masked'), (3, 'try'), (1.5, 'read')])
+        if kind == 'permit':
+            return {'op': 'semPermit', 's': s, 'e': self.sem_section(env, k, size)}
+        if kind == 'acqrel':
+            ps = [{'op': 'semAcquireN', 's': s, 'n': n}, self.sem_mark(k)]
+            ps += [{'op': 'cede'} for _ in range(self.r.randint(0, 2))]
+            ps.append({'op': 'semReleaseN', 's': s, 'n': n})
+            return {'op': 'seq', 'ps': ps}
+        if kind == 'masked':
+            # `uncancelable(p => poll(acquireN(n)) *> section-with-release)`: no permit leaks
+            pv = self.fresh('p')
+            ps = [{'op': 'poll', 'poll': pv, 'e': {'op': 'semAcquireN', 's': s, 'n': n}}, self.sem_mark(k)]
+            if self.r.random() < 0.5:
+                ps.append({'op': 'poll', 'poll': pv, 'e': {'op': 'cede'}})
+            ps.append({'op': 'semReleaseN', 's': s, 'n': n})
+            return {'op': 'uncancelable', 'poll': pv, 'body': {'op': 'seq', 'ps': ps}}
+        if kind == 'try':
+            return {'op': 'map', 'e': {'op': 'seq', 'ps': [{'op': 'semTryAcquireN', 's': s, 'n': n},
+                    {'op': 'semCount', 's': s}]}, 'fn': 1}
+        return {'op': 'map', 'e': {'op': 'seq', 'ps': [{'op': 'cede'}, {'op': 'semAvailable', 's': s}]}, 'fn': 1}
+
+    def tpl_sem(self, env, size):
+        """`Semaphore[IO](k)`; 1-3 started users (permit, acquire/release, masked acquire, tryAcquire,
+        reads); the parent cedes, cancels some users (a cancel can land while a user waits, holds a
+        permit, or between acquire and release), releases, joins the rest, then reads `available` and
+        `count`. Type unit."""
+        sv = self.fresh('s')
+        k = self.pick([(3, 0), (4, 1), (3, 2), (1, 3)])
+        env2 = {**env, sv: ('val', ('sem',))}
+        s = {'t': 'var', 'x': sv}
+        m = self.pick([(2, 1), (3, 2), (2, 3)])
+        fvs = [self.fresh('x') for _ in range(m)]
+        ps = []
+        for _ in range(self.pick([(2, 0), (3, 1), (2, 2), (1, 3)])):
+            ps.append({'op': 'cede'})
+        canceled = set()
+        for j, fv in enumerate(fvs):
+            if self.r.random() < 0.45:
+                if self.r.random() < 0.5:
+                    ps.append({'op': 'cede'})
+                ps.append({'op': 'cancel', 'f': {'t': 'var', 'x': fv}})
+                canceled.add(j)
+            if self.r.random() < 0.35:
+                ps.append({'op': 'semReleaseN', 's': s, 'n': self.pick([(3, 1), (2, 2), (1, 3)])})
+        if self.r.random() < 0.3:
+            ps.append({'op': 'semPermit', 's': s, 'e': self.sem_section(env2, 99, size)})
+        for j, fv in enumerate(fvs):
+            if j not in canceled:
+                ps.append({'op': 'map', 'e': {'op': 'join', 'f': {'t': 'var', 'x': fv}}, 'fn': 1})
+        ps.append({'op': 'map', 'e': {'op': 'semAvailable', 's': s}, 'fn': 1})
+        ps.append({'op': 'map', 'e': {'op': 'semCount', 's': s}, 'fn': 1})
+        body = {'op': 'seq', 'ps': ps}
+        for j in reversed(range(m)):
+            env_j = {**env2, **{fvs[i]: ('val', fiber(UNIT)) for i in range(j)}}
+            body = {'op': 'bind', 'x': fvs[j], 'e': {'op': 'start', 'e': self.sem_fiber(sv, env_j, j + 1, size)},
+                    'k': body}
+        return {'op': 'bind', 'x': sv, 'e': {'op': 'semNew', 'n': k}, 'k': body}
+
+    def tpl_mutex(self, env, size):
+        """`Mutex[IO]`; 1-3 started users of `lock.use`; the parent cedes, cancels some users,
+        maybe takes the lock itself, joins the rest, then takes the lock once more (it must be free).
+        Type unit."""
+        mv = self.fresh('m')
+        env2 = {**env, mv: ('val', ('mutex',))}
+        mm = {'t': 'var', 'x': mv}
+        m = self.pick([(2, 1), (3, 2), (2, 3)])
+        fvs = [self.fresh('x') for _ in range(m)]
+        ps = [{'op': 'cede'} for _ in range(self.pick([(2, 0), (3, 1), (2, 2), (1, 3)]))]
+        canceled = set()
+        for j, fv in enumerate(fvs):
+            if self.r.random() < 0.45:
+                if self.r.random() < 0.5:
+                    ps.append({'op': 'cede'})
+                ps.append({'op': 'cancel', 'f': {'t': 'var', 'x': fv}})
+                canceled.add(j)
+        if self.r.random() < 0.4:
+            ps.append({'op': 'mutexLock', 'm': mm, 'e': self.sem_section(env2, 99, size)})
+        for j, fv in enumerate(fvs):
+            if j not in canceled:
+                ps.append({'op': 'map', 'e': {'op': 'join', 'f': {'t': 'var', 'x': fv}}, 'fn': 1})
+        ps.append({'op': 'mutexLock', 'm': mm, 'e': {'op': 'map', 'e': self.sem_mark(100), 'fn': 1}})
+        body = {'op': 'seq', 'ps': ps}
+        for j in reversed(range(m)):
+            env_j = {**env2, **{fvs[i]: ('val', fiber(UNIT)) for i in range(j)}}
+            body = {'op': 'bind', 'x': fvs[j],
+                    'e': {'op': 'start', 'e': {'op': 'mutexLock', 'm': mm, 'e': self.sem_section(env_j, j + 1, size)}},
+                    'k': body}
+        return {'op': 'bind', 'x': mv, 'e': {'op': 'mutexNew'}, 'k': body}
+
     def tpl_resource(self, t, env, size, ctx):
         """allocatedCase(rFlatMap(rMake(acq, x, rel), y, rest)): the rest often waits, fails or is
         canceled, so the release `rel(ExitCase)` runs (`Resource.scala:507-510`)."""
@@ -1652,6 +1770,17 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
         g3 = Gen(qr, weights, config)
         g3.names = 20000
         extra = g3.tpl_queue2(UNIT, {}, qr.randint(3, 12), {})
+        prog = {'op': 'seq', 'ps': [prog, extra]}
+        check_prog(prog)
+    # Phase 7, track S: append a `Semaphore` or `Mutex` scenario. Own RNG, so the rest of the case
+    # does not change; the probability scales with the template weights.
+    sr = random.Random(f"difftest-semaphore:{seed}:{i}")
+    ps = g.c['p_sem'] * (w['tpl_sem'] + w['tpl_mutex']) / 1.6
+    if prog.get('op') != 'syncStep' and sr.random() < ps:
+        g3 = Gen(sr, weights, config)
+        g3.names = 30000
+        mutex = sr.random() * (w['tpl_sem'] + w['tpl_mutex']) < w['tpl_mutex']
+        extra = g3.tpl_mutex({}, sr.randint(3, 10)) if mutex else g3.tpl_sem({}, sr.randint(3, 10))
         prog = {'op': 'seq', 'ps': [prog, extra]}
         check_prog(prog)
     # Phase 7, track L: append a `CountDownLatch` or `CyclicBarrier` scenario. Own RNG, so the
