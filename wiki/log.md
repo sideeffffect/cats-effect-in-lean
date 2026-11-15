@@ -347,5 +347,5 @@
 
 ## [2026-11-15] ingest | Phase 7 track Q: Queue families mirror, difftest, statements
 - Created: Queue families model (cats-effect/queue-families-model.md)
-- Updated: Difftest program format (format v2 track Q ops), Queue and timeout model (See Also), index
+- Updated: Difftest program format (format v2 track Q ops), Differential testing (track Q section), Queue and timeout model (See Also), index
 - Raw: raw/cats-effect/2026-11-15-queue-track-q-notes.md

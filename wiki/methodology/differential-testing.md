@@ -127,6 +127,10 @@ Phase 5 gate caveat 3: `preempt` choices of `Model/SchedP.lean` had no difftest.
 - Covered: preemption at many positions (periods 2-32 iterations), combined with picks and external cancels. About 300,000 agreeing generated cases in the 1.2 million run.
 - Not covered: a preemption with a pending cancel from another thread (`Loop.flush`); true parallel runs. Refinement against the multi-threaded runtime needs a compiled bounded `exploreP` with a `complete` flag; estimate 2-3 agent days (raw note).
 
+## Format v2 queue ops (Phase 7, track Q)
+
+Ops `qNew`, `qOffer`, `qTryOffer`, `qTake`, `qTryTake`, `qSize` on both queue families ([Queue families model](../cats-effect/queue-families-model.md)). Generator template `tpl_queue2` with its own RNG stream (as `parTraverseN`), so no other op's coverage changes; `selftest.py` passes. Fixed cases `queue2.jsonl`: 222 agree. Generated: seeds 71-73 × 22,000 (`--boost tpl_queue2=11`): 66,000 agree, 52,941 agreeing cases per op, 0 mismatch on the first run.
+
 ## Triage bins for a mismatch
 
 model bug · harness/glue bug · deliberate model simplification · intended CE behaviour (spec decision) · underspecified (ask maintainers) · real CE bug. Expect most early mismatches to be model bugs. A human sets the bin in the corpus entry (`triage`: `model-bug`, `harness-bug`, `model-simplification`, `intended-ce-behaviour`, `underspecified`, `ce-bug`; default `untriaged`).

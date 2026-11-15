@@ -54,11 +54,13 @@ Open points: proofs need invariants over `SchedP` runs (as the Phase 6 entries).
 
 ## Difftest (format v2)
 
-Ops `qNew {kind, cap}`, `qOffer`, `qTryOffer`, `qTake`, `qTryTake`, `qSize` ([format](../methodology/difftest-program-format.md)). Fixed cases `queue2.jsonl` (222, every kind, cancels at several points, atomic takes, small runtime thresholds, external cancel): all agree on the first run. Generated (`opcount.py --seeds 71 72 73 --n 22000 --boost tpl_queue2=11`, own RNG stream): see the results line in the log of this article's update; target >= 50,000 agreeing cases per op.
+Ops `qNew {kind, cap}`, `qOffer`, `qTryOffer`, `qTake`, `qTryTake`, `qSize` ([format](../methodology/difftest-program-format.md)). Fixed cases `queue2.jsonl` (222, every kind, cancels at several points, atomic takes, small runtime thresholds, external cancel): all agree on the first run. Generated (`opcount.py --seeds 71 72 73 --n 22000 --boost tpl_queue2=11`, own RNG stream, about 20 % with small runtime thresholds): 66,000 of 66,000 cases agree; each of the six ops is in 52,941 agreeing cases (17,598 to 17,692 per seed). Kinds in these cases: `bounded(2)` 5,931, `synchronous` 5,904, `bounded(1)` 5,824, `unbounded` 5,755, `unboundedConc` 3,899, `dropping(2)` 3,849, `circularBuffer(2)` 3,847, `boundedConc(2)` 3,806, `bounded(3)` 3,798, `bounded(0)` 2,018, `dropping(1)` 1,942, `circularBuffer(1)` 1,935, `boundedConc(1)` 1,904, `droppingConc(2)` 1,903, `bounded(70000)` 626. No model bug was found: every case agreed on the first run.
 
 ## Smoke
 
-`qsmoke 300 20 1`: 600 harness inputs (safety and liveness), 11,040 stopped runs, 0 violations; twin loop added later. All 11 wrong-function checks break their claims; the mirror meets them.
+- `qsmoke 300 20 1`: 600 harness inputs (safety and liveness), 11,040 stopped runs, 0 violations. `qsmoke 1500 30 7`: 3,000 inputs, 84,210 stopped runs, 0 violations. The twin loop (statement 6) was added after these runs: `qsmoke 40 8 3`, 0 violations.
+- `qsmoke exact [bound]`: exhaustive over every `PChoice` schedule (`outcomesPList`, sound by `outcomesPList_sound`) for one-fiber inputs that the root cancels at every point (`[take]`, `[offer 1, offer 2]`, `[offer 1, take]`): 0 violations for every kind checked (8 to 11 observations each, 4-55 s each). Inputs with two fibers (three with the root) do not close within 3,000 states.
+- `qsmoke wrong`: all 11 wrong-function checks break their claims; the mirror meets them.
 
 ## See Also
 

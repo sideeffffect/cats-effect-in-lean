@@ -1,5 +1,6 @@
 import CatsEffectInLean.Props.Phase7.Queue
 import CatsEffectInLean.Proofs.Phase7.QueueWrongFunction
+import CatsEffectInLean.Model.EnumP
 
 /-!
 # `Queue` smoke test (Phase 7, track Q)
@@ -153,6 +154,32 @@ end QSmoke
 open QSmoke in
 def main (args : List String) : IO UInt32 := do
   if args == ["demo"] then demo; return 0
+  if args.head? == some "exact" then
+    -- exhaustive: every `PChoice` schedule of small inputs (`outcomesPList`, sound by
+    -- `outcomesPList_sound`); every observation must meet the claims
+    let bound := match args with | _ :: b :: _ => b.toNat! | _ => 4000
+    -- one fiber (the root cancels it at every point): larger inputs do not close (3 fibers with a
+    -- preemption at every run-loop iteration)
+    let inputs : List (List (List Op) × List (Nat × Nat)) := [
+      ([[.take]], [(0, 0)]),
+      ([[.offer (.nat 1), .offer (.nat 2)]], [(0, 0)]),
+      ([[.offer (.nat 1), .take]], [(0, 0)])]
+    let mut bad := 0
+    for k in anyKinds do
+      for (sc, plan) in inputs do
+        let t0 ← IO.monoMsNow
+        match outcomesPList {} counterMaskModel henv bound (rootIO k sc plan .cancelAll) with
+        | some os =>
+          let fails := os.filter fun o =>
+            !(noDupC sc o && doneC o && (!keeps k || noLossC o) && fifoC sc o)
+          let t1 ← IO.monoMsNow
+          IO.println s!"{repr k} {repr sc} plan={repr plan}: {os.length} observations, {fails.length} violations ({t1 - t0} ms)"
+          bad := bad + fails.length
+        | none =>
+          IO.println s!"{repr k} {repr sc} plan={repr plan}: not closed within {bound} states"
+          bad := bad + 1
+    IO.println s!"qsmoke exact: {bad} violations"
+    return (if bad == 0 then 0 else 1)
   if args == ["wrong"] then
     -- each wrong function must break its claim on a small fixed program, under some schedule
     let tests : List (String × UserEnv × IO × (Obs → Bool)) := [
@@ -192,7 +219,10 @@ def main (args : List String) : IO UInt32 := do
     let (c, g1) := randCase g false
     g := g1
     let io := rootIO c.k c.scripts c.plan .cancelAll
-    let nodupScripts := (allOffers c.scripts)
+    -- the decidable hypotheses: distinct elements (`Fifo`), capacities of the families
+    let offs := allOffers c.scripts
+    if offs.eraseDups.length != offs.length then
+      bad := bad + 1; IO.println s!"HYPOTHESIS nodup case {i}"
     let fifoOK := (c.scripts.filter takes).length ≤ 1
     let claim : Obs → Bool := fun o =>
       noDupC c.scripts o && doneC o && (!keeps c.k || noLossC o) && (!fifoOK || fifoC c.scripts o)
@@ -202,7 +232,6 @@ def main (args : List String) : IO UInt32 := do
     | some (cs, o) =>
       bad := bad + 1
       IO.println s!"VIOLATION safety case {i}: {repr c} nodup={noDupC c.scripts o} done={doneC o} loss={noLossC o} fifo={fifoC c.scripts o} summary={repr o.summary} events={evStr o.out} choices={repr (cs.take 120)}"
-      let _ := nodupScripts
     | none => pure ()
     -- liveness (mode join consumers)
     let (c2, g2) := randCase g true
