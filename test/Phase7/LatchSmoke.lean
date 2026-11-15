@@ -157,7 +157,10 @@ def stats (v : Nat) : Nat × Nat × Nat × Nat × Nat × Nat := Id.run do
 /-! Statement 4 (`cdlAwaitCompletes`, decision 63): a done root leaves no awaiter at status 1.
 Variant 8 (`await` raises) breaks it. -/
 def isDone (s : Sched CounterMask) : Bool := match s.halt with | some (.done _) => true | _ => false
-def bad4 (s : Sched CounterMask) : Bool := isDone s && (List.range 4).any (fun j => status s j == 1)
+def bad4 (s : Sched CounterMask) : Bool :=
+  match s.halt with
+  | some (.done oc) => oc != .succeeded .unit || (List.range 4).any (fun j => status s j == 1)
+  | _ => false
 def viol4 (v : Nat) : Nat × Nat := Id.run do
   let mut r := (0, 0)
   for i in [0:nRuns] do
@@ -165,7 +168,25 @@ def viol4 (v : Nat) : Nat × Nat := Id.run do
     r := (r.1 + (if bad4 last then 1 else 0), r.2 + (if isDone last then 1 else 0))
   return r
 #eval (viol4 0, viol4 8)
-#guard (viol4 0).1 == 0 && (viol4 0).2 > 0 && (viol4 8).1 > 0
+#guard (viol4 0).1 == 0 && (viol4 0).2 > 0 && (viol4 8).1 > 0 && (viol4 11).1 > 0
+
+/-! Statement 5 (`cdlNoDeadlock`, review 13): `n ≥ 1`, pure user programs, `m ≥ n` releasers,
+random cancels: never blocked. Variants 5, 9, 12 (`release`, `await`, `apply` hang) break it. -/
+def dlRuns (v : Nat) : Nat := Id.run do
+  let mut bad := 0
+  for i in [0:600] do
+    let n := 1 + i % 3
+    let k := i % 4
+    let m := n + (i / 4) % 2
+    let ws := List.replicate k (.pure .unit)
+    let us := List.replicate m (.pure .unit)
+    let cs := (List.range k).filter (fun j => (i / 8 + j) % 3 == 0)
+    let last := (states (env ws us u) (prog n ws cs v) (sched (i + 5) 300)).getLastD
+      (Sched.init counterMaskModel (.pure .unit))
+    if last.halt == some .blocked then bad := bad + 1
+  return bad
+#eval (dlRuns 0, dlRuns 5, dlRuns 9, dlRuns 12)
+#guard dlRuns 0 == 0 && dlRuns 5 > 0 && dlRuns 9 > 0 && dlRuns 12 > 0
 
 end C
 
@@ -265,11 +286,30 @@ def isDone (s : Sched CounterMask) : Bool := match s.halt with | some (.done _) 
 def viol5 (v : Nat) : Nat × Nat := Id.run do
   let mut r := (0, 0)
   for i in [0:nRuns] do
-    let last := (runOf i v false).2.2.getLastD (Sched.init counterMaskModel (.pure .unit))
-    r := (r.1 + (if isDone last && waiting last != 0 then 1 else 0), r.2 + (if isDone last then 1 else 0))
+    let (_, x, ss) := runOf i v false
+    let last := ss.getLastD (Sched.init counterMaskModel (.pure .unit))
+    let bad : Bool := match last.halt with
+      | some (.done oc) => (if 1 ≤ x.k then oc != .succeeded .unit else false) || waiting last != 0
+      | _ => false
+    r := (r.1 + (if bad then 1 else 0), r.2 + (if isDone last then 1 else 0))
   return r
 #eval (viol5 0, viol5 5)
-#guard (viol5 0).1 == 0 && (viol5 0).2 > 0 && (viol5 5).1 > 0
+#guard (viol5 0).1 == 0 && (viol5 0).2 > 0 && (viol5 5).1 > 0 && (viol5 9).1 > 0
+
+/-! Statement 6 (`cbNoDeadlock`, review 13): `cap * g` pure awaiters, no cancels: never blocked.
+Variants 6, 10 (`await`, `apply` hang) break it. -/
+def dlRuns (v : Nat) : Nat := Id.run do
+  let mut bad := 0
+  for i in [0:600] do
+    let cap := 1 + i % 3
+    let g := (i / 3) % 3
+    let as := List.replicate (cap * g) (.pure .unit)
+    let last := (states (env as [] u) (prog cap as [] [] v) (sched (i + 9) 300)).getLastD
+      (Sched.init counterMaskModel (.pure .unit))
+    if last.halt == some .blocked then bad := bad + 1
+  return bad
+#eval (dlRuns 0, dlRuns 6, dlRuns 10)
+#guard dlRuns 0 == 0 && dlRuns 6 > 0 && dlRuns 10 > 0
 
 end B
 

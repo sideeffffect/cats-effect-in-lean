@@ -828,21 +828,40 @@ def registry : List Entry := [
     rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
     prop := ``Props.Phase7.CountDownLatch.cdlAwaitCompletes
     status := .«open»
-    note := "Phase 7, track L, decision 63 item 3 (companion success claim): if the root is done \
-      (it joined every fiber), no awaiter has status 1: every await that began returned or was \
-      canceled, none ended with an error. Same harness and quantifiers. Satisfiable \
-      (LatchBattery.CDL.awaitCompletes_sat). Wrong function: await raises (await_raises_breaks). \
+    note := "Phase 7, track L, decision 63 item 3 (companion success claim), restated after review 13 \
+      (H4): for n >= 1 a done root is Succeeded(()) (a root that ends Errored is done too) and no \
+      awaiter has status 1: every await that began returned or was canceled, none ended with an \
+      error. Same harness and quantifiers. Satisfiable (LatchBattery.CDL.awaitCompletes_sat). Wrong \
+      functions: await raises (await_raises_breaks), apply raises (apply_raises_breaks). \
       Decision 63 battery (release/await x raises/hangs/drops/doubles): Proofs/Phase7/LatchBattery.lean, \
       every row breaks one of the four latch statements. Open." },
   { id := "std.CyclicBarrier.awaitCompletes"
     rows := ["std.CyclicBarrier.apply", "std.CyclicBarrier.await"]
     prop := ``Props.Phase7.CyclicBarrier.cbAwaitCompletes
     status := .«open»
-    note := "Phase 7, track L, decision 63 item 3 (companion success claim): if the root is done, \
-      waiting = 0: every await that began returned or was canceled. Same harness, any cancels. \
-      Satisfiable (LatchBattery.CB.awaitCompletes_sat). Wrong function: await raises \
-      (await_raises_breaks). Decision 63 battery (await x raises/hangs/drops/doubles): \
-      Proofs/Phase7/LatchBattery.lean, every row breaks one of the five barrier statements. Open." }
+    note := "Phase 7, track L, decision 63 item 3 (companion success claim), restated after review 13 \
+      (H4): for cap >= 1 a done root is Succeeded(()) and waiting = 0: every await that began \
+      returned or was canceled. Same harness, any cancels. Satisfiable \
+      (LatchBattery.CB.awaitCompletes_sat). Wrong functions: await raises, apply raises \
+      (await_raises_breaks, apply_raises_breaks). Decision 63 battery (apply, await x \
+      raises/hangs/drops/doubles): \
+      Proofs/Phase7/LatchBattery.lean, every row breaks one of the five barrier statements. Open." },
+  { id := "std.CountDownLatch.noDeadlock"
+    rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
+    prop := ``Props.Phase7.CountDownLatch.cdlNoDeadlock
+    status := .«open»
+    note := "Phase 7, track L, review 13 (H4): for n >= 1, awaiters and at least n releasers with user \
+      programs IO.pure(()), any program cancels, all schedules and fuel: the run is never blocked. \
+      Satisfiable (LatchBattery.CDL.noDeadlock_sat). Wrong functions: apply hangs \
+      (apply_hangs_breaks); smoke: release and await hang. Open." },
+  { id := "std.CyclicBarrier.noDeadlock"
+    rows := ["std.CyclicBarrier.apply", "std.CyclicBarrier.await"]
+    prop := ``Props.Phase7.CyclicBarrier.cbNoDeadlock
+    status := .«open»
+    note := "Phase 7, track L, review 13 (H4): for cap >= 1 and cap * g awaiters with user programs \
+      IO.pure(()), no cancels, all schedules and fuel: the run is never blocked. Satisfiable \
+      (LatchBattery.CB.noDeadlock_sat). Wrong functions: apply hangs (apply_hangs_breaks); smoke: \
+      await hangs. Open." }
 ]
 
 end CatsEffectInLean

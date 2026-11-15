@@ -1,11 +1,11 @@
 # CountDownLatch and CyclicBarrier model
 
 > Sources: Cats Effect v3.7.1 (`std/.../CountDownLatch.scala`, `std/.../CyclicBarrier.scala`, `kernel/.../Ref.scala:123-141`, `kernel/jvm-native/.../SyncRef.scala`, `core/.../IODeferred.scala:55-79`, `core/.../IO.scala:1822-1824`, `:2008-2163`); read-only `gh` history and issue search; own Lean, scala-cli and difftest runs, 2026-11-15
-> Raw: [Review batch 13 notes](../../raw/project-decisions/2026-11-15-review-batch-13-notes.md); [Track L notes](../../raw/cats-effect/2026-11-15-track-l-latch-barrier-notes.md); [Decision 63 battery](../../raw/cats-effect/2026-11-15-track-l-decision63-battery.md)
+> Raw: [Review batch 13 notes](../../raw/project-decisions/2026-11-15-review-batch-13-notes.md); [Track L notes](../../raw/cats-effect/2026-11-15-track-l-latch-barrier-notes.md); [Decision 63 battery](../../raw/cats-effect/2026-11-15-track-l-decision63-battery.md); [Review 13 fixes](../../raw/cats-effect/2026-11-15-track-l-review13-fix.md)
 
 ## Overview
 
-Phase 7, batch 7.1, track L. Mirrors of `std.CountDownLatch` and `std.CyclicBarrier` with `F = IO`, difftest ops (format v2), nine registered properties (seven reviewed FAITHFUL in batch 11b, two decision-63 companions), all `open`, each with a kernel-checked satisfiability witness, a wrong-function test and a smoke test. No bug found. Codec namespaces 70–75.
+Phase 7, batch 7.1, track L. Mirrors of `std.CountDownLatch` and `std.CyclicBarrier` with `F = IO`, difftest ops (format v2), eleven registered properties (seven reviewed FAITHFUL in batch 11b; two decision-63 companions, HOLLOW in batch 13 (H4) and restated; two `noDeadlock` claims added after batch 13), all `open`, each with a kernel-checked satisfiability witness, a wrong-function test and a smoke test. No bug found. Codec namespaces 70–75.
 
 ## Mirrors
 
@@ -51,6 +51,11 @@ Harness: awaiters `user.attempt *> uncancelable(poll => mark 1 *> poll(await).on
 | `CountDownLatch.release` | `releaseTotal` | `releaseTotal` | `noLostWakeup` | `awaitNotEarly` |
 | `CountDownLatch.await` | `awaitCompletes` | `noLostWakeup` | `awaitNotEarly` | meaningless (no effect on the state) |
 | `CyclicBarrier.await` | `awaitCompletes` | `exactGenerations` | `noEarlyTrip` | `noEarlyTrip` |
+| `CountDownLatch.apply` | `awaitCompletes` | `noDeadlock` | not applicable (allocation only) | not applicable |
+| `CyclicBarrier.apply` | `awaitCompletes` | `noDeadlock` | not applicable | not applicable |
+
+- Review 13 (H4): the first `awaitCompletes` ("a done root leaves no await open") held for an `apply` that always raises (root done `Errored`, no fiber starts). Restated: for `n ≥ 1` / `cap ≥ 1` a done root is `Succeeded(())`. New `noDeadlock` claims (pure user programs, enough releasers / `cap * g` awaiters: never blocked) reject hangs. Lesson: "if done then ..." claims must say *how* the root is done.
+- Review 13 (L4): `v0_*` theorems run the v3.7.1 mirror on every battery input.
 
 - Gap found: an `await` that raises broke none of the first seven statements (the root still joins the errored awaiter and completes). Fix: the companion claims `std.CountDownLatch.awaitCompletes`, `std.CyclicBarrier.awaitCompletes` (a done root leaves no awaiter at status 1), with witnesses.
 - Smoke of the companions: v3.7.1 0 violations (936 and 874 done runs); `await` raises: 838 and 1,384 violating runs.

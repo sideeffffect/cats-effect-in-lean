@@ -75,7 +75,8 @@ state), `3` re-increments without the epoch check, `4` never completes `unblock`
 
 Decision 63 battery for `await` (the only public operation): `5` always raises, `6` never returns,
 `7` drops its effect (returns `()` at once, no count), `8` doubles its effect (decrements the count
-by 2).
+by 2). Review batch 13 (H4), the factory `apply`: `9` always raises (`apply? = none`), `10` never
+returns; "drops" and "doubles" are meaningless for it (its only effect is the allocation).
 -/
 
 namespace CatsEffectInLean.Std.CyclicBarrier
@@ -228,7 +229,9 @@ def BLam.ofId? (id : Nat) : Option BLam :=
 /-- `CyclicBarrier[IO](capacity)` (`CB:58-91`): `none` when `capacity < 1` (Scala throws
 `IllegalArgumentException` while it builds the term, `CB:59-61`). -/
 def apply? (cap : Nat) (v : Nat := 0) : Option IO :=
-  if cap < 1 then none
+  if cap < 1 || v == 9 then none
+  -- variant 10 (not Cats Effect code): never returns
+  else if v == 10 then some (.flatMap (.delay BLam.newDeferred.fn) BLam.neverK.fn)
   else some (.map (.flatMap (.map (.delay BLam.newDeferred.fn) (BLam.mkState cap).fn) BLam.refK.fn)
     (BLam.mkBarrier cap v).fn)
 

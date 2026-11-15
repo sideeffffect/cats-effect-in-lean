@@ -24,6 +24,28 @@ definition (`*_iff`).
 | `CyclicBarrier.await` | hangs | 6 | `cbExactGenerations` | `cap = 1`, one awaiter: blocked, `waiting = 1` |
 | `CyclicBarrier.await` | drops | 7 | `cbNoEarlyTrip` | `cap = 2`, one awaiter: `passed = 1`, `entered = 1` |
 | `CyclicBarrier.await` | doubles | 8 | `cbNoEarlyTrip` | the same |
+| `CountDownLatch.apply` | raises | 11 | `cdlAwaitCompletes` | `n = 1`, `[p]`, `[p]`: the root is done `Errored(IllegalArgumentException)` |
+| `CountDownLatch.apply` | hangs | 12 | `cdlNoDeadlock` | `n = k = m = 1`: blocked before any fiber starts |
+| `CountDownLatch.apply` | drops, doubles | — | meaningless | the factory's only effect is the allocation: without it there is no latch to return; a second allocation is unreachable |
+| `CyclicBarrier.apply` | raises | 9 | `cbAwaitCompletes` | `cap = 1`, `[p]`: the root is done `Errored` |
+| `CyclicBarrier.apply` | hangs | 10 | `cbNoDeadlock` | `cap = 1`, `g = 1`: blocked |
+| `CyclicBarrier.apply` | drops, doubles | — | meaningless | as for `CountDownLatch.apply` |
+
+Review batch 13 (H4): the first form of `*AwaitCompletes` ("if the root is done, no await is left
+open") held for an `apply` that always raises (the root is done `Errored`, no fiber starts). The
+statements now claim, for `n ≥ 1` / `cap ≥ 1`, that a done root is `Succeeded(())`, and two new
+statements `cdlNoDeadlock`, `cbNoDeadlock` reject a factory (or operation) that never returns.
+
+Review batch 13 (L4): `v0_*` below run the Cats Effect v3.7.1 mirror (variant 0) on every battery
+input; on each, the broken statement's conclusion holds:
+
+| Input | v3.7.1 run |
+|---|---|
+| `n = 1`, `[p]`, `[p]`, fuel 400 | done `Succeeded(())`, `started = completed = 1`, status 2 (`v0_n1`) |
+| `n = 2`, `[p]`, `[p]`, fuel 48 and 400 | status 1 at 48; blocked at 400 with `started = 1 < n`, status 1 (`v0_n2`) |
+| `n = 1`, `[p]`, `[]`, fuel 400 | blocked, `started = 0`, status 1 (`v0_noRelease`) |
+| `cap = 1`, `[p]`, fuel 400 | done `Succeeded(())`, `passed = 1`, `waiting = 0` (`v0_cap1`) |
+| `cap = 2`, `[p]`, fuel 400 | blocked, `passed = 0`, `entered = 1`, `waiting = 1 < 2` (`v0_cap2`) |
 
 `CountDownLatch` has no public `count` (only `release`, `await`, `mapK`); `CyclicBarrier` only
 `await` (and `mapK`). `mapK` only applies a natural transformation to the two methods (`F ~> G`;
@@ -54,6 +76,7 @@ theorem awaitNotEarly_iff : cdlAwaitNotEarly ↔ cdlAwaitNotEarlyV 0 := Iff.rfl
 theorem noLostWakeup_iff : cdlNoLostWakeup ↔ cdlNoLostWakeupV 0 := Iff.rfl
 theorem releaseTotal_iff : cdlReleaseTotal ↔ cdlReleaseTotalV 0 := Iff.rfl
 theorem awaitCompletes_iff : cdlAwaitCompletes ↔ cdlAwaitCompletesV 0 := Iff.rfl
+theorem noDeadlock_iff : cdlNoDeadlock ↔ cdlNoDeadlockV 0 := Iff.rfl
 
 theorem allWF_p_nil : AllWF [p] [] u := by
   intro q hq
@@ -99,7 +122,21 @@ theorem await_raises_breaks : ¬ cdlAwaitCompletesV 8 := by
   intro h
   have hd : (run [p] [p] u 1 [] 400 [] 8).halt = some (.done (.succeeded .unit)) := by decide +kernel
   have hst : status (run [p] [p] u 1 [] 400 [] 8) 0 = 1 := by decide +kernel
-  exact h u 1 [p] [p] [] LatchWitness.CDL.allWF_p_p 400 [] _ hd 0 hst
+  exact (h u 1 [p] [p] [] LatchWitness.CDL.allWF_p_p (by decide) 400 [] _ hd).2 0 hst
+
+/-- `apply` raises (variant 11): the root ends `Errored` before any fiber starts. -/
+theorem apply_raises_breaks : ¬ cdlAwaitCompletesV 11 := by
+  intro h
+  have hd : (run [p] [p] u 1 [] 400 [] 11).halt =
+      some (.done (.errored CatsEffectInLean.Std.CountDownLatch.iaeErr)) := by decide +kernel
+  have := (h u 1 [p] [p] [] LatchWitness.CDL.allWF_p_p (by decide) 400 [] _ hd).1
+  cases this
+
+/-- `apply` hangs (variant 12): the run is blocked. -/
+theorem apply_hangs_breaks : ¬ cdlNoDeadlockV 12 := by
+  intro h
+  have hb : (run [p] [p] u 1 [] 400 [] 12).halt = some .blocked := by decide +kernel
+  exact h u 1 1 1 [] LatchWitness.CDL.allWF_p_p (by decide) (by decide) 400 [] hb
 
 /-- `await` hangs (variant 9). -/
 theorem await_hangs_breaks : ¬ cdlNoLostWakeupV 9 := by
@@ -117,11 +154,38 @@ theorem await_drops_breaks : ¬ cdlAwaitNotEarlyV 10 := by
   have := h u 1 [p] [] [] allWF_p_nil 400 [] 0 hst
   omega
 
-/-- `cdlAwaitCompletes` is not vacuous: the root is done and the awaiter returned. -/
+/-- `cdlAwaitCompletes` is not vacuous: `n ≥ 1`, the root is done `Succeeded(())` and the awaiter
+returned. -/
 theorem awaitCompletes_sat :
-    AllWF [p] [p] u ∧ (run [p] [p] u 1 [] 400 []).halt = some (.done (.succeeded .unit)) ∧
+    AllWF [p] [p] u ∧ 1 ≤ 1 ∧ (run [p] [p] u 1 [] 400 []).halt = some (.done (.succeeded .unit)) ∧
       status (run [p] [p] u 1 [] 400 []) 0 = 2 :=
-  ⟨LatchWitness.CDL.allWF_p_p, by decide +kernel, by decide +kernel⟩
+  ⟨LatchWitness.CDL.allWF_p_p, by decide, by decide +kernel, by decide +kernel⟩
+
+/-- `cdlNoDeadlock` is not vacuous: its hypotheses hold (`k = m = n = 1`), the awaiter waits and is
+released, and the run completes. -/
+theorem noDeadlock_sat :
+    AllWF (List.replicate 1 (.pure .unit)) (List.replicate 1 (.pure .unit)) u ∧ 1 ≤ 1 ∧ 1 ≤ 1 ∧
+      (run [p] [p] u 1 [] 400 []).halt = some (.done (.succeeded .unit)) ∧
+      status (run [p] [p] u 1 [] 400 []) 0 = 2 :=
+  ⟨LatchWitness.CDL.allWF_p_p, by decide, by decide, by decide +kernel, by decide +kernel⟩
+
+/-! ### Review 13 L4: Cats Effect v3.7.1 (variant 0) on every battery input -/
+
+theorem v0_n1 :
+    (run [p] [p] u 1 [] 400 []).halt = some (.done (.succeeded .unit)) ∧
+      started (run [p] [p] u 1 [] 400 []) = 1 ∧ completed (run [p] [p] u 1 [] 400 []) = 1 ∧
+      status (run [p] [p] u 1 [] 400 []) 0 = 2 :=
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel⟩
+
+theorem v0_n2 :
+    status (run [p] [p] u 2 [] 48 []) 0 = 1 ∧ (run [p] [p] u 2 [] 400 []).halt = some .blocked ∧
+      started (run [p] [p] u 2 [] 400 []) = 1 ∧ status (run [p] [p] u 2 [] 400 []) 0 = 1 :=
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel⟩
+
+theorem v0_noRelease :
+    (run [p] [] u 1 [] 400 []).halt = some .blocked ∧ started (run [p] [] u 1 [] 400 []) = 0 ∧
+      status (run [p] [] u 1 [] 400 []) 0 = 1 :=
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel⟩
 
 /-! ### Harness privacy (track S note): `mark` and `incr` are not in `cdlLib` -/
 
@@ -162,6 +226,7 @@ open CatsEffectInLean.Props.Phase7.CyclicBarrier
 theorem noEarlyTrip_iff : cbNoEarlyTrip ↔ cbNoEarlyTripV 0 := Iff.rfl
 theorem exactGenerations_iff : cbExactGenerations ↔ cbExactGenerationsV 0 := Iff.rfl
 theorem awaitCompletes_iff : cbAwaitCompletes ↔ cbAwaitCompletesV 0 := Iff.rfl
+theorem noDeadlock_iff : cbNoDeadlock ↔ cbNoDeadlockV 0 := Iff.rfl
 
 theorem allWF_p : AllWF [p] [] u := LatchWitness.CB.allWF _ _ (by decide) (by decide)
 
@@ -170,8 +235,22 @@ theorem await_raises_breaks : ¬ cbAwaitCompletesV 5 := by
   intro h
   have hd : (run [p] [] u 1 [] 400 [] 5).halt = some (.done (.succeeded .unit)) := by decide +kernel
   have hw : waiting (run [p] [] u 1 [] 400 [] 5) = 1 := by decide +kernel
-  have := h u 1 [p] [] [] allWF_p 400 [] _ hd
+  have := (h u 1 [p] [] [] allWF_p (by decide) 400 [] _ hd).2
   omega
+
+/-- `apply` raises (variant 9). -/
+theorem apply_raises_breaks : ¬ cbAwaitCompletesV 9 := by
+  intro h
+  have hd : (run [p] [] u 1 [] 400 [] 9).halt =
+      some (.done (.errored CatsEffectInLean.Std.CyclicBarrier.iaeErr)) := by decide +kernel
+  have := (h u 1 [p] [] [] allWF_p (by decide) 400 [] _ hd).1
+  cases this
+
+/-- `apply` hangs (variant 10). -/
+theorem apply_hangs_breaks : ¬ cbNoDeadlockV 10 := by
+  intro h
+  have hb : (run [p] [] u 1 [] 400 [] 10).halt = some .blocked := by decide +kernel
+  exact h u 1 1 allWF_p (by decide) 400 [] hb
 
 /-- `await` hangs (variant 6). -/
 theorem await_hangs_breaks : ¬ cbExactGenerationsV 6 := by
@@ -197,11 +276,30 @@ theorem await_doubles_breaks : ¬ cbNoEarlyTripV 8 := by
   have := h u 2 [p] [] allWF_p 400 []
   omega
 
-/-- `cbAwaitCompletes` is not vacuous: the root is done after a trip. -/
+/-- `cbAwaitCompletes` is not vacuous: `cap ≥ 1`, the root is done `Succeeded(())` after a trip. -/
 theorem awaitCompletes_sat :
-    AllWF [p, p] [] u ∧ (run [p, p] [] u 2 [] 400 []).halt = some (.done (.succeeded .unit)) ∧
+    AllWF [p, p] [] u ∧ 1 ≤ 2 ∧ (run [p, p] [] u 2 [] 400 []).halt = some (.done (.succeeded .unit)) ∧
       passed (run [p, p] [] u 2 [] 400 []) = 2 :=
-  ⟨LatchWitness.CB.allWF _ _ (by decide) (by decide), by decide +kernel, by decide +kernel⟩
+  ⟨LatchWitness.CB.allWF _ _ (by decide) (by decide), by decide, by decide +kernel, by decide +kernel⟩
+
+/-- `cbNoDeadlock` is not vacuous: `cap = 2`, `g = 1`; the first awaiter waits, the second trips. -/
+theorem noDeadlock_sat :
+    AllWF (List.replicate (2 * 1) (.pure .unit)) [] u ∧ 1 ≤ 2 ∧
+      (run [p, p] [] u 2 [] 400 []).halt = some (.done (.succeeded .unit)) ∧
+      passed (run [p, p] [] u 2 [] 400 []) = 2 :=
+  ⟨LatchWitness.CB.allWF _ _ (by decide) (by decide), by decide, by decide +kernel, by decide +kernel⟩
+
+/-! ### Review 13 L4: Cats Effect v3.7.1 (variant 0) on every battery input -/
+
+theorem v0_cap1 :
+    (run [p] [] u 1 [] 400 []).halt = some (.done (.succeeded .unit)) ∧
+      passed (run [p] [] u 1 [] 400 []) = 1 ∧ waiting (run [p] [] u 1 [] 400 []) = 0 :=
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel⟩
+
+theorem v0_cap2 :
+    (run [p] [] u 2 [] 400 []).halt = some .blocked ∧ passed (run [p] [] u 2 [] 400 []) = 0 ∧
+      entered (run [p] [] u 2 [] 400 []) = 1 ∧ waiting (run [p] [] u 2 [] 400 []) = 1 :=
+  ⟨by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel⟩
 
 /-! ### Harness privacy: `mark` is not in `cbLib` -/
 

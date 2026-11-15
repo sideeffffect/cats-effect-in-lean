@@ -65,10 +65,14 @@ the user programs (self-cancel).
 3. `cdlReleaseTotal`: if the run is blocked or the root is done, then `completed = started`:
    every `release` returned, also the ones after the count reached 0. Wrong function: a
    `release` that raises after `Done`.
-4. `cdlAwaitCompletes` (decision 63, item 3: the companion success claim): if the root is done
-   (it joined every fiber), no awaiter has status 1: every `await` that began returned
-   (status 2) or was canceled (status 3); none ended with an error. Wrong function: an `await`
-   that raises.
+4. `cdlAwaitCompletes` (decision 63, item 3: the companion success claim): for `n ≥ 1` (the
+   documented precondition of `apply`), if the root is done, it is `Succeeded(())` (review batch
+   13, H4: a root that ends `Errored` is done too), and no awaiter has status 1: every `await`
+   that began returned (status 2) or was canceled (status 3); none ended with an error. Wrong
+   functions: an `await` that raises; an `apply` that raises.
+5. `cdlNoDeadlock` (review batch 13, H4): for `n ≥ 1`, awaiters and releasers whose user programs
+   are `IO.pure(())`, at least `n` releasers and any cancels, the run is never blocked. Wrong
+   functions: an `apply`, `release` or `await` that never returns.
 
 Decision 63 battery (`Proofs/Phase7/LatchBattery.lean`): every wrong `release` and `await`
 (raises, hangs, drops, doubles; variants of `Std/CountDownLatch.lean`) breaks one of the four
@@ -356,13 +360,21 @@ def cdlReleaseTotal : Prop :=
         ∃ oc, (run ws us u n cancels fuel cs).halt = some (.done oc)) →
       completed (run ws us u n cancels fuel cs) = started (run ws us u n cancels fuel cs)
 
-/-- Statement 4 (decision 63, item 3): in a run whose root is done, every `await` that began
-returned or was canceled. -/
+/-- Statement 4 (decision 63, item 3; review 13 H4): for `n ≥ 1`, a done root is
+`Succeeded(())`, and every `await` that began returned or was canceled. -/
 def cdlAwaitCompletes : Prop :=
-  ∀ (u : UserEnv) (n : Nat) (ws us : List IO) (cancels : List Nat), AllWF ws us u →
+  ∀ (u : UserEnv) (n : Nat) (ws us : List IO) (cancels : List Nat), AllWF ws us u → 1 ≤ n →
     ∀ (fuel : Nat) (cs : List PChoice) (oc : Outcome),
       (run ws us u n cancels fuel cs).halt = some (.done oc) →
-      ∀ j, status (run ws us u n cancels fuel cs) j ≠ 1
+      oc = .succeeded .unit ∧ ∀ j, status (run ws us u n cancels fuel cs) j ≠ 1
+
+/-- Statement 5 (review 13 H4): for `n ≥ 1`, user programs `IO.pure(())` and at least `n`
+releasers, no run is blocked. -/
+def cdlNoDeadlock : Prop :=
+  ∀ (u : UserEnv) (n k m : Nat) (cancels : List Nat),
+    AllWF (List.replicate k (.pure .unit)) (List.replicate m (.pure .unit)) u → 1 ≤ n → n ≤ m →
+    ∀ (fuel : Nat) (cs : List PChoice),
+      (run (List.replicate k (.pure .unit)) (List.replicate m (.pure .unit)) u n cancels fuel cs).halt ≠ some .blocked
 
 /-! ## The statements with a mirror variant (decision 63 battery; `v = 0` gives the statements) -/
 
@@ -386,9 +398,15 @@ def cdlReleaseTotalV (v : Nat) : Prop :=
       completed (run ws us u n cancels fuel cs v) = started (run ws us u n cancels fuel cs v)
 
 def cdlAwaitCompletesV (v : Nat) : Prop :=
-  ∀ (u : UserEnv) (n : Nat) (ws us : List IO) (cancels : List Nat), AllWF ws us u →
+  ∀ (u : UserEnv) (n : Nat) (ws us : List IO) (cancels : List Nat), AllWF ws us u → 1 ≤ n →
     ∀ (fuel : Nat) (cs : List PChoice) (oc : Outcome),
       (run ws us u n cancels fuel cs v).halt = some (.done oc) →
-      ∀ j, status (run ws us u n cancels fuel cs v) j ≠ 1
+      oc = .succeeded .unit ∧ ∀ j, status (run ws us u n cancels fuel cs v) j ≠ 1
+
+def cdlNoDeadlockV (v : Nat) : Prop :=
+  ∀ (u : UserEnv) (n k m : Nat) (cancels : List Nat),
+    AllWF (List.replicate k (.pure .unit)) (List.replicate m (.pure .unit)) u → 1 ≤ n → n ≤ m →
+    ∀ (fuel : Nat) (cs : List PChoice),
+      (run (List.replicate k (.pure .unit)) (List.replicate m (.pure .unit)) u n cancels fuel cs v).halt ≠ some .blocked
 
 end CatsEffectInLean.Props.Phase7.CountDownLatch

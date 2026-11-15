@@ -81,6 +81,10 @@ always raises, `5` `release` never returns, `6` `release` drops its effect (retu
 decrement), `7` `release` doubles its effect (decrements by 2), `8` `await` always raises, `9`
 `await` never returns, `10` `await` drops its effect (returns `()` at once). `await` has no effect
 on the state, so "doubles" is meaningless for it (two `await`s return at the same time as one).
+Review batch 13 (H4): `11` `apply` always raises (`IllegalArgumentException` while the term is
+built, `apply? = none`), `12` `apply` never returns. "Drops" and "doubles" are meaningless for the
+factory: its only effect is to allocate the latch (a factory that skips it has no latch to
+return; one that allocates twice returns one latch, and the other is unreachable).
 -/
 
 namespace CatsEffectInLean.Std.CountDownLatch
@@ -218,7 +222,10 @@ def CLam.ofId? (id : Nat) : Option CLam :=
 /-- `CountDownLatch[IO](n)` (`CDL:57-65`): `none` when `n < 1` (Scala throws
 `IllegalArgumentException` while it builds the term, `CDL:58-60`). -/
 def apply? (n : Nat) (v : Nat := 0) : Option IO :=
-  if n < 1 then none
+  if n < 1 || v == 11 then none
+  -- variant 12 (not Cats Effect code): never returns (a new `Deferred`, read with `awaitSel`)
+  else if v == 12 then
+    some (.flatMap (.map (.delay CLam.newDeferred.fn) (CLam.awaitingK 1).fn) CLam.awaitSel.fn)
   else some (.flatMap (.map (.delay CLam.newDeferred.fn) (CLam.awaitingK n).fn) (CLam.refK v).fn)
 
 /-- The latch object with state cell `r` (a closure reference). -/

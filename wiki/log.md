@@ -414,3 +414,7 @@
 - Created: review/2026-11-15-review-batch-13.md
 - Updated: Agent workflow and review protocol (review log, battery rules), Queue families model, Semaphore and Mutex model, CountDownLatch and CyclicBarrier model
 - Raw: raw/project-decisions/2026-11-15-review-batch-13-notes.md
+
+## [2026-11-15] update | Track L: review batch 13 fixes (H4, L4)
+- Updated: CountDownLatch and CyclicBarrier model (apply battery rows, restated awaitCompletes, noDeadlock claims, v3.7.1 runs on battery inputs)
+- Raw: raw/cats-effect/2026-11-15-track-l-review13-fix.md

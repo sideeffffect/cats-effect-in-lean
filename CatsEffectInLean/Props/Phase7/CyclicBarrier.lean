@@ -68,9 +68,13 @@ status 1, `canceledIn` = status 3.
    every awaiter with status 3 left the count. Wrong function: a cleanup that does not
    re-increment (the canceled awaiter still counts, and the barrier trips early).
 
-5. `cbAwaitCompletes` (decision 63, item 3: the companion success claim): if the root is done
-   (it joined every awaiter), `waiting = 0`: every `await` that began returned or was canceled;
-   none ended with an error. Wrong function: an `await` that raises.
+5. `cbAwaitCompletes` (decision 63, item 3: the companion success claim): for `cap ≥ 1`, if the
+   root is done, it is `Succeeded(())` (review batch 13, H4), and `waiting = 0`: every `await`
+   that began returned or was canceled; none ended with an error. Wrong functions: an `await`
+   or `apply` that raises.
+6. `cbNoDeadlock` (review batch 13, H4): for `cap ≥ 1`, `cap * g` group A awaiters with user
+   programs `IO.pure(())`, no group B and no cancels, the run is never blocked. Wrong functions:
+   an `apply` or `await` that never returns.
 
 Decision 63 battery (`Proofs/Phase7/LatchBattery.lean`): every wrong `await` (raises, hangs,
 drops, doubles; variants of `Std/CyclicBarrier.lean`) breaks one of the five statements.
@@ -331,11 +335,20 @@ def cbCancelRemoved : Prop :=
       passed (run as bs u cap cancels fuel cs) ≤
         cap * ((entered (run as bs u cap cancels fuel cs) - canceledIn (run as bs u cap cancels fuel cs)) / cap)
 
-/-- Statement 5 (decision 63, item 3): in a run whose root is done, no `await` is left open. -/
+/-- Statement 5 (decision 63, item 3; review 13 H4): for `cap ≥ 1`, a done root is
+`Succeeded(())`, and no `await` is left open. -/
 def cbAwaitCompletes : Prop :=
-  ∀ (u : UserEnv) (cap : Nat) (as bs : List IO) (cancels : List Nat), AllWF as bs u →
+  ∀ (u : UserEnv) (cap : Nat) (as bs : List IO) (cancels : List Nat), AllWF as bs u → 1 ≤ cap →
     ∀ (fuel : Nat) (cs : List PChoice) (oc : Outcome),
-      (run as bs u cap cancels fuel cs).halt = some (.done oc) → waiting (run as bs u cap cancels fuel cs) = 0
+      (run as bs u cap cancels fuel cs).halt = some (.done oc) →
+      oc = .succeeded .unit ∧ waiting (run as bs u cap cancels fuel cs) = 0
+
+/-- Statement 6 (review 13 H4): for `cap ≥ 1` and `cap * g` awaiters with user programs
+`IO.pure(())`, no run is blocked. -/
+def cbNoDeadlock : Prop :=
+  ∀ (u : UserEnv) (cap g : Nat), AllWF (List.replicate (cap * g) (.pure .unit)) [] u → 1 ≤ cap →
+    ∀ (fuel : Nat) (cs : List PChoice),
+      (run (List.replicate (cap * g) (.pure .unit)) [] u cap [] fuel cs).halt ≠ some .blocked
 
 /-! ## The statements with a mirror variant (decision 63 battery; `v = 0` gives the statements) -/
 
@@ -351,8 +364,14 @@ def cbExactGenerationsV (v : Nat) : Prop :=
       passed (run as bs u cap [] fuel cs v) % cap = 0 ∧ waiting (run as bs u cap [] fuel cs v) < cap
 
 def cbAwaitCompletesV (v : Nat) : Prop :=
-  ∀ (u : UserEnv) (cap : Nat) (as bs : List IO) (cancels : List Nat), AllWF as bs u →
+  ∀ (u : UserEnv) (cap : Nat) (as bs : List IO) (cancels : List Nat), AllWF as bs u → 1 ≤ cap →
     ∀ (fuel : Nat) (cs : List PChoice) (oc : Outcome),
-      (run as bs u cap cancels fuel cs v).halt = some (.done oc) → waiting (run as bs u cap cancels fuel cs v) = 0
+      (run as bs u cap cancels fuel cs v).halt = some (.done oc) →
+      oc = .succeeded .unit ∧ waiting (run as bs u cap cancels fuel cs v) = 0
+
+def cbNoDeadlockV (v : Nat) : Prop :=
+  ∀ (u : UserEnv) (cap g : Nat), AllWF (List.replicate (cap * g) (.pure .unit)) [] u → 1 ≤ cap →
+    ∀ (fuel : Nat) (cs : List PChoice),
+      (run (List.replicate (cap * g) (.pure .unit)) [] u cap [] fuel cs v).halt ≠ some .blocked
 
 end CatsEffectInLean.Props.Phase7.CyclicBarrier
