@@ -77,9 +77,15 @@ Behaviour tables (namespace 63) for the liveness statements. FIFO harness (names
   statement 1 when run.
 - Statement 6 (`count` = `available` when every user fiber has ended) is refuted: CE-0060.
   Witness `Semaphore(0)`, two `acquire`s, cancel the second, then the first: `(available, count) =
-  (0, -1)`, default schedule, fuel 92 (`decide +kernel`, about 7 s). The random smoke needs
-  `need > k` inputs to find it (with `need ≤ k` and all fibers ended, a later release always sweeps
-  the canceled request).
+  (0, -1)`, default schedule, fuel 92 (`decide +kernel`, about 7 s). The random smoke did not find
+  it (60 random inputs, also with `need > k`): it needs two waiters that both enqueue, then the
+  non-head canceled first, and no later release. With `need ≤ k` and all fibers ended a later
+  release always sweeps the canceled request.
+- `lake exe semsmoke 40` (about 35 min): 60 inputs per statement (48 for FIFO), 13,920 stopped runs,
+  0 violations of statements 1-5 and 7; twin sampling: every sampled `Mutex` (outcome, trace) was
+  also sampled for `Semaphore(1)`; fixed twin: 0 runs break statements 2 or 6; forgery rejected
+  and breaks statement 1 in 40 runs; wrong functions break their claims (leak 9, twice 160, skip
+  91, LIFO 160, no wait 95, lost wakeup 85, wide 78 runs).
 - Fixed twin (eager removal, as v3.7.0): 4 inputs x 12 one-preemption schedules, kernel, 68 s,
   3 GB (`Proofs/Phase7/SemaphoreCountFixed.lean`, `TwinChecks`). A first version with 4 x 120
   schedules in one `decide` took 28 GB and timed out: split per input.

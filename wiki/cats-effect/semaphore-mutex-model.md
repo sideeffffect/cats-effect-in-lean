@@ -75,6 +75,12 @@ cases.
 | `std.Semaphore.acquireN.fifo` | open | strict FIFO: after `releaseN(r)` the longest prefix with sum ≤ r is served |
 | `std.Mutex.lock.semaphoreTwin` | open | each (outcome, trace) of `Mutex` is one of `Semaphore(1)` |
 
+Smoke (`lake exe semsmoke 40`): 13,920 stopped runs, 0 violations of the open statements; every
+wrong function ('leak a permit', 'release twice', 'skip a waiter', 'LIFO', 'no wait', 'lost
+wakeup', 'wide') breaks its claim; a forging user function is rejected by `WellFormed`. The random
+inputs did not hit CE-0060 (it needs a non-head waiter canceled first and no later release); the
+refutation is a fixed input.
+
 Why open: a proof for all schedules needs a state invariant over `Step`/`SchedP` (for example
 permits + held + sunk = k + released), as the open Phase 6 entries.
 
