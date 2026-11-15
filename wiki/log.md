@@ -269,3 +269,7 @@
 ## [2026-11-14] ingest | Track Res: Lib.fields probe check
 - Updated: Resource use/both (probe check, 2 defects fixed), Outcome sets (Lib fields check), index
 - Raw: raw/cats-effect/2026-11-14-lib-fields-probe-notes.md
+
+## [2026-11-15] ingest | Decision 58: separate closure references (user answer)
+- Updated: Agent workflow (closure references section)
+- Raw: raw/project-decisions/2026-11-15-decision-58-closure-refs.md
