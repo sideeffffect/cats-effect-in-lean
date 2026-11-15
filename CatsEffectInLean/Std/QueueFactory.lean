@@ -138,12 +138,19 @@ def env (u : UserEnv) : UserEnv where
 
 /-- The library closures that a public operation puts into a user program (`WellFormed`, clause 3):
 the method entry closures (`this` = a held queue reference), the factory closures, `IO.ref`,
-`IO.deferred`. The other closures are internal: user code never gets them. -/
+`IO.deferred`. The other closures are internal: user code never gets them.
+
+Review batch 11a D1: `QC.getState` (the thunk of `AbstractQueue#size`, `state.get`) is **not**
+public. Its result is the whole `State`, with the taker and offerer `Deferred`s; a user program
+`.delay (QC.getState o).fn` could read a taker `Deferred` and complete it (a forged wakeup). So a
+user program under `WellFormed` with this `Lib` cannot call the `Concurrent` `size`. No current
+statement uses `isPublic` (the queue statements have no user code). A future statement with user
+code and `size` needs a size closure that returns only the size. -/
 def isPublic (id : Nat) : Bool :=
   match QueueConcurrent.QC.ofId? id with
   | some (.newRef _) | some .newDeferred | some (.mkAbs _ _) | some .mkSync
   | some (.offerBody _ _) | some (.tryOfferBody _ _) | some (.takeBody _) | some (.tryTakeBody _)
-  | some (.getState _) | some .sizeK | some (.sOfferK _ _) | some (.sTryOfferBody _ _) | some (.sTakeK _)
+  | some (.sOfferK _ _) | some (.sTryOfferBody _ _) | some (.sTakeK _)
   | some (.sTryTakeOuter _) => true
   | some _ => false
   | none =>

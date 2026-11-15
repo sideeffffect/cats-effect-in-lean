@@ -1768,7 +1768,7 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
     qr = random.Random(f"difftest-queue2:{seed}:{i}")
     if prog.get('op') != 'syncStep' and qr.random() < g.c['p_queue2'] * w['tpl_queue2']:
         g3 = Gen(qr, weights, config)
-        g3.names = 20000
+        g3.names = 40000  # own name base (latch 20000, semaphore 30000; review batch 11a D3)
         extra = g3.tpl_queue2(UNIT, {}, qr.randint(3, 12), {})
         prog = {'op': 'seq', 'ps': [prog, extra]}
         check_prog(prog)

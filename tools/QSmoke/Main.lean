@@ -48,8 +48,10 @@ def subMulti (a b : List Val) : Bool := a.all fun x => a.count x ≤ b.count x
 /-- The claims (decidable forms) for one run. -/
 def noLossC (o : Obs) : Bool := o.summary != .done (.succeeded .unit) || subMulti (offeredOf o.out) (removedOf o.out)
 def noDupC (scripts : List (List Op)) (o : Obs) : Bool := subMulti (removedOf o.out) (allOffers scripts)
+/-- `Fifo` per remover (each script index, and the drain) and per producer (review batch 11a). -/
 def fifoC (scripts : List (List Op)) (o : Obs) : Bool :=
-  scripts.all fun s => isSublist ((removedOf o.out).filter (· ∈ offersOf s)) (offersOf s)
+  ((List.range scripts.length).map some ++ [none]).all fun c =>
+    scripts.all fun s => isSublist ((removedBy o.out c).filter (· ∈ offersOf s)) (offersOf s)
 def doneC (o : Obs) : Bool := o.summary == .done (.succeeded .unit)
 
 def keepKinds : List QKind := [.boundedConc 1, .boundedConc 2, .unboundedConc, .synchronous, .bounded 2, .bounded 3, .unbounded]
@@ -189,10 +191,14 @@ def main (args : List String) : IO UInt32 := do
       ("wDupAsync (asyncNoDup)", wDupAsync, rootIO (.bounded 2) dupIn [] (.join [0]), noDupC dupIn),
       ("wLifoConc (concFifo)", wLifoConc, rootIO (.boundedConc 3) fifoIn [] (.join [0]), fifoC fifoIn),
       ("wLifo (asyncFifo)", wLifo, rootIO (.bounded 3) fifoIn [] (.join [0]), fifoC fifoIn),
+      ("wLastIfWaiters (concFifo)", wLastIfWaiters, rootIO (.boundedConc 2) fifoMulti [(1, 1)] .cancelAll, fifoC fifoMulti),
+      ("wLastIfWaitersAsync (asyncFifo)", wLastIfWaitersAsync, rootIO (.bounded 3) fifoMulti [(1, 1)] .cancelAll, fifoC fifoMulti),
+      ("wNoPassOn (concTakerLiveness)", wNoPassOn, rootIO (.boundedConc 2) passOnIn [(1, 0)] (.join [0, 1]), liveOKB),
+      ("wNoAnywayU (asyncTakerLiveness)", wNoAnywayU, rootIO .unbounded passOnIn [(1, 0)] (.join [0, 1]), liveOKB),
       ("wHangConc (concNoDeadlock)", wHangConc, rootIO (.boundedConc 1) hangIn [(1, 0)] .cancelAll, doneC),
       ("wHangAsync (asyncNoDeadlock)", wHangAsync, rootIO .unbounded hangIn [(1, 0)] .cancelAll, doneC),
-      ("wNoWake (concTakerLiveness)", wNoWake, rootIO (.boundedConc 2) lossIn [] (.join [0]), doneC),
-      ("wNoNotify (asyncTakerLiveness)", wNoNotify, rootIO .unbounded lossIn [] (.join [0]), doneC),
+      ("wNoWake (concTakerLiveness)", wNoWake, rootIO (.boundedConc 2) lossIn [] (.join [0]), liveOKB),
+      ("wNoNotify (asyncTakerLiveness)", wNoNotify, rootIO .unbounded lossIn [] (.join [0]), liveOKB),
       ("wLifo (twinSeq: Async side)", wLifo, rootIO (.bounded 3) fifoIn [] (.join [0]), fun o =>
         some (events o.out) == (runWith henv (.boundedConc 3) fifoIn [] (.join [0])).map (fun o => events o.out))]
     let mut failed := 0
@@ -223,9 +229,8 @@ def main (args : List String) : IO UInt32 := do
     let offs := allOffers c.scripts
     if offs.eraseDups.length != offs.length then
       bad := bad + 1; IO.println s!"HYPOTHESIS nodup case {i}"
-    let fifoOK := (c.scripts.filter takes).length ≤ 1
     let claim : Obs → Bool := fun o =>
-      noDupC c.scripts o && doneC o && (!keeps c.k || noLossC o) && (!fifoOK || fifoC c.scripts o)
+      noDupC c.scripts o && doneC o && (!keeps c.k || noLossC o) && fifoC c.scripts o
     let (d, f) := randCheck henv io runs seed claim
     seed := seed + 1; stopped := stopped + d
     match f with
@@ -237,10 +242,11 @@ def main (args : List String) : IO UInt32 := do
     let (c2, g2) := randCase g true
     g := g2
     let plan2 := c2.plan.filter fun p => match c2.scripts[p.2]? with | some s => s.all (· == .take) | none => false
-    if (c2.scripts.map takeCount).sum ≤ (allOffers c2.scripts).length then
+    -- no count hypothesis any more (review batch 11a L1)
+    if true then
       let js := (List.range c2.scripts.length).filter fun i => match c2.scripts[i]? with | some s => takes s | none => false
       let io2 := rootIO c2.k c2.scripts plan2 (.join js)
-      let (d2, f2) := randCheck henv io2 runs seed doneC
+      let (d2, f2) := randCheck henv io2 runs seed liveOKB
       seed := seed + 1; stopped := stopped + d2
       match f2 with
       | some (cs, o) =>

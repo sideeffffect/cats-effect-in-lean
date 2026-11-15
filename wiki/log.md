@@ -376,6 +376,10 @@
 - Raw: raw/cats-effect/2026-11-15-partraverse-rankorder-fix.md
 - Hash cases (33, with `pth-regress-g61-9094`): agree in 3 runs. `opcount.py --seeds 61 62 63 --n 20000 --boost tpl_sem=20 tpl_mutex=0`: 60,000 cases, all agree (g61-9094 included); parTraverseN 4,240, semNew 54,499, semAcquireN 29,725, semReleaseN 42,346, semPermit 37,377.
 
+## [2026-11-15] ingest | Track Q: fixes after review batch 11a
+- Updated: Queue families model (fifo per remover, takerLiveness QuietBlock, D1-D5, merged-generator difftest)
+- Raw: raw/cats-effect/2026-11-15-queue-review11a-fixes.md
+
 ## [2026-11-15] update | Track S: review batch 11b fixes (H1, W1, L2, L4)
 - Updated: Semaphore and Mutex model (noDeadlock statements restated: not blocked + join records; W1 wrong function; twin docstring; citation)
 - Raw: raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md

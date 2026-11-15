@@ -65,6 +65,10 @@ V2S_MIN = 0.01
 # opcount.py with `--boost tpl_cdl=12 tpl_cb=12` gives the 50,000-case runs
 V2L_OPS = ('cdlNew', 'cdlRelease', 'cdlAwait', 'cbNew', 'cbAwait')
 V2L_MIN = 0.015
+# Format v2 (Phase 7, track Q): the queue scenario appended with its own RNG (`p_queue2`, about
+# 8 %; it uses every queue op); opcount.py with `--boost tpl_queue2=11` gives the 50,000-case runs
+V2Q_OPS = ('qNew', 'qOffer', 'qTryOffer', 'qTake', 'qTryTake', 'qSize')
+V2Q_MIN = 0.03
 
 
 def check(cond, msg):
@@ -77,7 +81,7 @@ def main():
     t0 = time.time()
     # 1. type checker
     basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race', 'bracket', 'memoize', 'resuse', 'partraverse',
-                                            'semaphore', 'latch')
+                                            'semaphore', 'latch', 'queue2')
              for x in (drive.REPO / f'difftest/cases/{f}.jsonl').read_text().splitlines() if x.strip()]
     check(all(well_typed(c['prog']) for c in basic), f"type checker accepts all {len(basic)} golden cases")
     N1 = {'t': 'nat', 'v': 1}
@@ -158,6 +162,9 @@ def main():
     v2lcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2L_OPS}
     lowl = {op: f for op, f in v2lcov.items() if f < V2L_MIN}
     check(not lowl, f"each format v2 op of track L in >= {V2L_MIN:.1%} of {N} cases {lowl}")
+    v2qcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2Q_OPS}
+    lowq = {op: f for op, f in v2qcov.items() if f < V2Q_MIN}
+    check(not lowq, f"each format v2 op of track Q (Queue) in >= {V2Q_MIN:.0%} of {N} cases {lowq}")
 
     # 3 + 4. Scala runs: no generator bug, deterministic
     tcs = [gen.to_testcontrol(c, t) for c in a[:N // 2] for t in (1, 2)]
