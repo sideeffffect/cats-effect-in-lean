@@ -14,7 +14,7 @@ For each statement: one concrete input that meets all hypotheses together, and o
   `IO.never`: a run ends `Errored(E5)` (the never-ending action is canceled).
 * `parTraverseNCancelAborts_satisfiable`: the same with `f(1) = IO.canceled`: a run ends `Canceled`.
 * `parTraverseNSucceedsGen_satisfiable`: `n = 2`, five inputs `[1..5]` (the supervision set
-  becomes a `HashSet`), `HashSet` order `List.reverse`, `f(a) = IO.cede.replicateA_(a % 2).as(a)`:
+  becomes a `HashSet`), `HashSet` order `revOrd` (reverse insertion order), `f(a) = IO.cede.replicateA_(a % 2).as(a)`:
   a run ends `Succeeded([1, 2, 3, 4, 5])`.
 * `parTraverseNErrorAbortsGen_satisfiable`: `n = 1`, inputs `[1, 2, 3]`, `f(1)` cedes once and
   gives `0`, `f(2)` cedes twice and raises `E5`, `f(3)` never completes: `f(2)` starts only after
@@ -30,9 +30,14 @@ open CatsEffectInLean.Model.ParTraverse
 open CatsEffectInLean.Props.Phase6.ParTraverse
 
 /-- The `HashSet` order of the runs below (none of them reaches 5 elements, except where noted). -/
-def idOrd : List Val → List Val := fun xs => xs
+def idOrd : List Val → List Val → List Val := fun _ xs => xs
 
-theorem idOrd_perm (xs : List Val) : (idOrd xs).Perm xs := List.Perm.refl _
+theorem idOrd_perm (all xs : List Val) : (idOrd all xs).Perm xs := List.Perm.refl _
+
+/-- `HashSet` order: the reverse of the insertion order. -/
+def revOrd : List Val → List Val → List Val := fun _ xs => xs.reverse
+
+theorem revOrd_perm (all xs : List Val) : (revOrd all xs).Perm xs := List.reverse_perm xs
 
 /-! ## Constant user code: id 2 is `_ => IO.pure(0)` -/
 
@@ -43,7 +48,7 @@ def cR : Nat → UserResult
 def cu : UserEnv where
   call id _ _ := cR (id / 2)
 
-theorem env_even (ord : List Val → List Val) (u : UserEnv) (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
+theorem env_even (ord : List Val → List Val → List Val) (u : UserEnv) (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) :
     (env ord u).callV id a v = u.callV id a v := by
   have h1 : PT.ofId? id = none := by simp [PT.ofId?, isLibId, hid]
   have h2 : Bracket.BLam.ofId? id = none := Bracket.BLam.ofId?_even hid
@@ -98,8 +103,8 @@ theorem orderRun_ok : orderRun.map (fun o =>
   decide +kernel
 
 theorem parTraverseNOrder_satisfiable :
-    ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat),
-      (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧
+    ∃ (ord : List Val → List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat),
+      (∀ all xs, (ord all xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧
       WellFormed ptLibDeep [] (env ord (tagged u)) (orderRoot n as f) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord (tagged u)) (orderRoot n as f) o ∧
         o.summary = .done (.succeeded (listV [.pair (.nat 1) (.nat 0), .pair (.nat 2) (.nat 0)])) := by
@@ -121,8 +126,8 @@ theorem cu_even (id : Nat) (hid : id % 2 = 0) (a : Val) (v : View) : (env idOrd 
   rw [env_even _ _ id hid]; rfl
 
 theorem parTraverseNPureSucceeds_satisfiable :
-    ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (g : Val → Val),
-      (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧
+    ∃ (ord : List Val → List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (g : Val → Val),
+      (∀ all xs, (ord all xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧
       (∀ a v, u.callV f a v = { out := .prog (.pure (g a)) }) ∧
       WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o ∧
@@ -210,8 +215,8 @@ theorem errRun_ok : errRun.map (fun o => o.summary == .done (.errored { code := 
   decide +kernel
 
 theorem parTraverseNErrorAborts_satisfiable :
-    ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val) (e : Err),
-      (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧ a0 ∈ as.take n ∧ e.kind = .nonFatal ∧
+    ∃ (ord : List Val → List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val) (e : Err),
+      (∀ all xs, (ord all xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧ a0 ∈ as.take n ∧ e.kind = .nonFatal ∧
       (∀ a v, u.callV f a v = { out := .prog (if a = a0 then .error e else Timeout.neverIO) }) ∧
       WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o ∧
@@ -228,8 +233,8 @@ theorem canRun_ok : canRun.map (fun o => o.summary == .done .canceled) = some tr
   decide +kernel
 
 theorem parTraverseNCancelAborts_satisfiable :
-    ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val),
-      (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧ a0 ∈ as.take n ∧
+    ∃ (ord : List Val → List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (f : Nat) (a0 : Val),
+      (∀ all xs, (ord all xs).Perm xs) ∧ 1 ≤ n ∧ f % 2 = 0 ∧ a0 ∈ as.take n ∧
       (∀ a v, u.callV f a v = { out := .prog (if a = a0 then .canceled else Timeout.neverIO) }) ∧
       WellFormed ptLibDeep [] (env ord u) (parTraverseNIO n as f) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord u) (parTraverseNIO n as f) o ∧ o.summary = .done .canceled := by
@@ -247,18 +252,18 @@ def bhOk : Val → Nat × Base
 def ins5 : List Val := [.nat 1, .nat 2, .nat 3, .nat 4, .nat 5]
 
 def okRun : Option Obs :=
-  runObsP {} counterMaskModel (env List.reverse (behaved bhOk)) 8000 [] (parTraverseNIO 2 ins5 BL.body.id)
+  runObsP {} counterMaskModel (env revOrd (behaved bhOk)) 8000 [] (parTraverseNIO 2 ins5 BL.body.id)
 
 theorem okRun_ok : okRun.map (fun o => o.summary == .done (.succeeded (listV ins5))) = some true := by
   decide +kernel
 
 theorem parTraverseNSucceedsGen_satisfiable :
-    ∃ (ord : List Val → List Val) (n : Nat) (as : List Val) (bh : Val → Nat × Base),
-      (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ (∀ a ∈ as, ∃ v, (bh a).2 = .ok v) ∧
+    ∃ (ord : List Val → List Val → List Val) (n : Nat) (as : List Val) (bh : Val → Nat × Base),
+      (∀ all xs, (ord all xs).Perm xs) ∧ 1 ≤ n ∧ (∀ a ∈ as, ∃ v, (bh a).2 = .ok v) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord (behaved bh)) (parTraverseNIO n as BL.body.id) o ∧
         o.summary = .done (.succeeded (listV (as.map fun a => (bh a).2.okVal))) := by
   obtain ⟨o, ho, hp⟩ := exists_of_map okRun_ok
-  refine ⟨List.reverse, 2, ins5, bhOk, fun xs => List.reverse_perm xs, by decide, ?_, o, ⟨8000, [], ho⟩, ?_⟩
+  refine ⟨revOrd, 2, ins5, bhOk, revOrd_perm, by decide, ?_, o, ⟨8000, [], ho⟩, ?_⟩
   · intro a ha; simp [ins5] at ha; rcases ha with h | h | h | h | h <;> subst h <;> exact ⟨_, rfl⟩
   · simpa [ins5, bhOk, Base.okVal] using hp
 
@@ -278,8 +283,8 @@ theorem errGenRun_ok : errGenRun.map (fun o => o.summary == .done (.errored { co
   decide +kernel
 
 theorem parTraverseNErrorAbortsGen_satisfiable :
-    ∃ (ord : List Val → List Val) (n : Nat) (as : List Val) (bh : Val → Nat × Base),
-      (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ (∀ a ∈ as, (bh a).2 ≠ .canc) ∧
+    ∃ (ord : List Val → List Val → List Val) (n : Nat) (as : List Val) (bh : Val → Nat × Base),
+      (∀ all xs, (ord all xs).Perm xs) ∧ 1 ≤ n ∧ (∀ a ∈ as, (bh a).2 ≠ .canc) ∧
       (∀ a ∈ as, ∀ e, (bh a).2 = .err e → e.kind = .nonFatal) ∧
       (∃ i, ∃ h : i < as.length, (∃ e, (bh as[i]).2 = .err e) ∧ nevers bh (as.take i) < n) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord (behaved bh)) (parTraverseNIO n as BL.body.id) o ∧
@@ -298,8 +303,8 @@ theorem canGenRun_ok : canGenRun.map (fun o => o.summary == .done .canceled) = s
   decide +kernel
 
 theorem parTraverseNCancelAbortsGen_satisfiable :
-    ∃ (ord : List Val → List Val) (n : Nat) (as : List Val) (bh : Val → Nat × Base),
-      (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ (∀ a ∈ as, ∀ e, (bh a).2 ≠ .err e) ∧
+    ∃ (ord : List Val → List Val → List Val) (n : Nat) (as : List Val) (bh : Val → Nat × Base),
+      (∀ all xs, (ord all xs).Perm xs) ∧ 1 ≤ n ∧ (∀ a ∈ as, ∀ e, (bh a).2 ≠ .err e) ∧
       (∃ i, ∃ h : i < as.length, (bh as[i]).2 = .canc ∧ nevers bh (as.take i) < n) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord (behaved bh)) (parTraverseNIO n as BL.body.id) o ∧
         o.summary = .done .canceled := by
@@ -345,8 +350,8 @@ def limRun : Option Obs := runObsP {} counterMaskModel (env idOrd (limited cu)) 
 theorem limRun_ok : limRun.map (fun o => highest o == some 1) = some true := by decide +kernel
 
 theorem parTraverseNAtMostN_satisfiable :
-    ∃ (ord : List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (g : Nat),
-      (∀ xs, (ord xs).Perm xs) ∧ 1 ≤ n ∧ g % 2 = 0 ∧
+    ∃ (ord : List Val → List Val → List Val) (u : UserEnv) (n : Nat) (as : List Val) (g : Nat),
+      (∀ all xs, (ord all xs).Perm xs) ∧ 1 ≤ n ∧ g % 2 = 0 ∧
       WellFormed limLib [] (env ord (limited u)) (limitRoot n as g) ∧
       ∃ o, outcomesP {} counterMaskModel (env ord (limited u)) (limitRoot n as g) o ∧
         highest o = some n := by

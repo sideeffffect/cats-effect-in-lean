@@ -94,6 +94,20 @@ lost. Lean: `semCountAtRest_refuted` (default schedule, fuel 92). Fixed twin (ea
 v3.7.0): 4 inputs x 12 schedules (kernel) and the smoke test. Reproducer: v3.7.1, series/3.x,
 series/3.7.x.
 
+## Review (batch 11b, 2026-11-15)
+
+- Mirrors faithful. CE-0060: FAITHFUL. As statements FAITHFUL: `noLostPermit`, `permit.atMostK`,
+  `mutualExclusion`, `acquireN.fifo`, `semaphoreTwin` (one direction, stated).
+- HOLLOW: `std.Semaphore.noDeadlock`, `std.Mutex.lock.noDeadlock`. `Base.err e` allows a fatal `e`;
+  a fatal `raiseError` stops the run with `Summary.fatal`, so "every stopped run is `Succeeded`" is
+  false for every implementation (`bus = [.permit 0 (.err { code := 0, kind := .fatal })]`, `as =
+  [.join 0]`). Fix: a non-fatal hypothesis, or "not blocked" as the conclusion.
+- Weakness: "`acquireN(n ≥ 2)` always raises" satisfies every `Semaphore` statement (`fifo`
+  vacuously). Add a success clause to `noDeadlock`.
+- The twin docstring sentence "the converse is the same claim ...; the smoke test samples both" is
+  wrong: the smoke checks only mutex ⊆ semaphore.
+- Source: [review batch 11b](../../review/2026-11-15-review-batch-11b.md).
+
 ## See Also
 
 - [parTraverseN model](partraverse-model.md) (its `MiniSemaphore` got the same lazy cancelation in PR #4648)

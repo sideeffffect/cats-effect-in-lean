@@ -1,7 +1,7 @@
 # Queue families model (Phase 7, track Q)
 
 > Sources: Cats Effect v3.7.1 (`std/.../Queue.scala:31-1206`, `UnsafeUnbounded.scala:23-113`, `QueueSource.scala:23-80`, `kernel/jvm-native/.../SyncRef.scala`, `kernel/.../Ref.scala:123-124`, `IO.scala:1353-1431`, `:1548`, `:1996-2163`, `IOFiber.scala:225-260`, `:1210-1266`, `tests/.../QueueSuite.scala:787-890`); own Lean work, difftest and smoke runs, 2026-11-15
-> Raw: [Review batch 11a notes](../../raw/project-decisions/2026-11-15-review-batch-11a-notes.md); [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
+> Raw: [Review 11a fixes](../../raw/cats-effect/2026-11-15-queue-review11a-fixes.md); [Review batch 11a notes](../../raw/project-decisions/2026-11-15-review-batch-11a-notes.md); [Track Q results](../../raw/cats-effect/2026-11-15-queue-track-q-results.md); [Track Q notes](../../raw/cats-effect/2026-11-15-queue-track-q-notes.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md)
 
 ## Overview
 

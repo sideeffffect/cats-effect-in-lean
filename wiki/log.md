@@ -365,6 +365,17 @@
 - Updated: Agent workflow and review protocol (review log, raw link)
 - Raw: raw/project-decisions/2026-11-15-review-batch-11a-notes.md
 
+## [2026-11-15] lint | Review batch 11b: Phase 7 tracks S and L
+- 15 entries. HOLLOW: `std.Semaphore.noDeadlock`, `std.Mutex.lock.noDeadlock` (a fatal `Base.err` stops the run with `Summary.fatal`: false for every implementation). FAITHFUL: CE-0060 `std.Semaphore.count.atRest`; as statements the other 5 track S and all 7 track L entries.
+- Updated: Agent workflow (review log), Semaphore and Mutex model (review result), CountDownLatch and CyclicBarrier model (review result), index
+- Raw: raw/project-decisions/2026-11-15-review-batch-11b-notes.md
+- Review: review/2026-11-15-review-batch-11b.md
+
+## [2026-11-15] update | parTraverseN difftest: rankOrder fix (track S case g61-9094)
+- Updated: parTraverseN model (HashSet ghost list `all`, order input `ho all xs`), Difftest program format (rankOrder by index in `all`)
+- Raw: raw/cats-effect/2026-11-15-partraverse-rankorder-fix.md
+- Hash cases (33, with `pth-regress-g61-9094`): agree in 3 runs. `opcount.py --seeds 61 62 63 --n 20000 --boost tpl_sem=20 tpl_mutex=0`: 60,000 cases, all agree (g61-9094 included); parTraverseN 4,240, semNew 54,499, semAcquireN 29,725, semReleaseN 42,346, semPermit 37,377.
+
 ## [2026-11-15] ingest | Track Q: fixes after review batch 11a
 - Updated: Queue families model (fifo per remover, takerLiveness QuietBlock, D1-D5, merged-generator difftest)
 - Raw: raw/cats-effect/2026-11-15-queue-review11a-fixes.md
