@@ -8,9 +8,9 @@ statements `TakerLiveness` (with the join outcomes, review batch 12 H3), `NoDup`
 one-fiber rows use `SeqSpec`. FIFO schedule, fuel 3000, kernel-checked. The mirror meets every
 claim on the same inputs (`sync_*_mirror`).
 
-Gap (not rejected by any registered statement): `tryTake` `drops` (it answers `None` while an
-offerer waits, without effect). No statement claims that a `tryTake` finds a waiting partner (a
-one-fiber `tryTake` correctly answers `None`); it needs a linearizability statement (open).
+`tryTake` `drops` (it answers `None` while an offerer waits, without effect) breaks statement 8
+(`syncHandoff`, FIFO schedule: the offerer is registered when `tryTake` runs). Review batch 13 G1:
+`wSyncTryOfferFalse` (`tryOffer` always answers `false`, no effect) breaks its `tryOffer` part.
 -/
 
 namespace CatsEffectInLean.Proofs.Phase7.QueueBattery
@@ -83,6 +83,40 @@ theorem sync_tryTake_raises : oneSpec (battery .tryTake .raises) [.tryTake] = so
 theorem sync_tryTake_hangs : oneSpec (battery .tryTake .hangs) [.tryTake] = some false := by
   decide +kernel
 theorem sync_tryTake_doubles : (sr (battery .tryTake .doubles) tryTakeIn [(3, 2)] .cancelAll).map noLossB = some false := by
+  decide +kernel
+
+/-- The claim of statement 8 as a `Bool` (element `1`, fuel 3000). -/
+def handoffB (e : UserEnv) : Option Bool :=
+  (runObsP {} counterMaskModel e 3000 [] (handoffRoot (.nat 1))).map fun o =>
+    (events o.out).contains (evTryTook, 1, .some (.nat 1)) && (events o.out).contains (evJoined, 0, .ocSucceeded .unit) &&
+      (events o.out).contains (evJoined, 1, .ocSucceeded .unit) && o.summary == .done (.succeeded .unit)
+
+theorem sync_tryTake_handoff_mirror : handoffB henv = some true := by
+  decide +kernel
+theorem sync_tryTake_drops : handoffB (battery .tryTake .drops) = some false := by
+  decide +kernel
+
+/-- The `tryOffer` claim of statement 8 as a `Bool` (element `1`, fuel 3000). -/
+def handoffOfferB (e : UserEnv) : Option Bool :=
+  (runObsP {} counterMaskModel e 3000 [] (handoffOfferRoot (.nat 1))).map fun o =>
+    (events o.out).contains (evTryOffered, 1, .pair (.nat 1) (.bool true)) && (events o.out).contains (evTook, 0, .nat 1) &&
+      (events o.out).contains (evJoined, 0, .ocSucceeded .unit) && (events o.out).contains (evJoined, 1, .ocSucceeded .unit) &&
+      o.summary == .done (.succeeded .unit)
+
+open CatsEffectInLean.Std.QueueConcurrent in
+/-- Review batch 13 G1: `Synchronous#tryOffer` always answers `false` (no effect). -/
+def wSyncTryOfferFalse : UserEnv :=
+  let f (id : Nat) (arg : Val) (v : View) : UserResult :=
+    match QC.ofId? id with
+    | some (.sTryOfferBody _ _) => { out := .prog (.pure (.bool false)) }
+    | _ => henv.callV id arg v
+  { call := fun id arg refs => f id arg { refs }, callV := f }
+
+theorem sync_tryOffer_handoff_mirror : handoffOfferB henv = some true := by
+  decide +kernel
+theorem sync_tryOffer_false_breaks : handoffOfferB wSyncTryOfferFalse = some false := by
+  decide +kernel
+theorem sync_tryOffer_drops_handoff : handoffOfferB (battery .tryOffer .drops) = some false := by
   decide +kernel
 
 theorem sync_size_mirror : oneSpec henv [.size] = some true := by

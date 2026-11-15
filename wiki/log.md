@@ -418,3 +418,11 @@
 ## [2026-11-15] update | Track S: review batch 13 (L3 factory rows, O1 reads under contention)
 - Updated: Semaphore and Mutex model (FIFO root reads available/count under contention; battery 46 rows)
 - Raw: raw/cats-effect/2026-11-15-semaphore-mutex-review13.md
+
+## [2026-11-15] ingest | Track Q: Synchronous tryTake handoff (decision 63 gap closed)
+- Updated: Queue families model (statement 8, battery table complete)
+- Raw: raw/cats-effect/2026-11-15-queue-sync-trytake-handoff.md
+
+## [2026-11-15] ingest | Track Q: review batch 13 follow-ups (G1 tryOffer handoff, battery on all classes, factory rows)
+- Updated: Queue families model
+- Raw: raw/cats-effect/2026-11-15-queue-review13-battery.md

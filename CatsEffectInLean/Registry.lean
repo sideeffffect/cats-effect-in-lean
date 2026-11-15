@@ -830,6 +830,21 @@ def registry : List Entry := [
       hangs, drops or doubles its effect breaks it. All Async kinds, under sequential consistency. Satisfiable \
       (QueueWitness.seqSpec_satisfiable). Battery: QueueBatteryAsync (BoundedAsyncQueue, 18 rows). Smoke: \
       qsmoke (every kind). Open." },
+  { id := "std.Queue.Synchronous.tryHandoff"
+    rows := ["std.Queue.synchronous", "std.Queue.Synchronous.tryTake", "std.Queue.Synchronous.tryOffer", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.take"]
+    prop := ``Props.Phase7.Queue.syncHandoff
+    status := .«open»
+    note := "Decision 63 gap (Synchronous#tryTake drops) and review batch 13 G1 (Synchronous#tryOffer always \
+      false), closed: Scaladoc QueueSource tryTake (dequeue if one is available without fiber blocking), \
+      QueueSink tryOffer (enqueue without semantically blocking) and synchronous (an element passes when a \
+      taker and an offerer meet, both are freed, Queue.scala:139-148); code Queue.scala:274-290, :347-353 \
+      hands the element over. A per-run claim over all schedules cannot tell a broken try* from one that ran \
+      before the partner registered, so the statement uses the FIFO replay schedule: the waiting partner \
+      suspends before the try* fiber starts. For every element x and fuel: tryTake = Some(x) (resp. tryOffer \
+      = true and the taker took x), both joins Succeeded, root Succeeded. Satisfiable \
+      (QueueWitness.syncHandoff_satisfiable). Wrong functions: tryTake drops (sync_tryTake_drops), tryOffer \
+      always false (sync_tryOffer_false_breaks), tryOffer drops (sync_tryOffer_drops_handoff), kernel-checked. \
+      Open." },
   { id := "std.CountDownLatch.awaitCompletes"
     rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
     prop := ``Props.Phase7.CountDownLatch.cdlAwaitCompletes
