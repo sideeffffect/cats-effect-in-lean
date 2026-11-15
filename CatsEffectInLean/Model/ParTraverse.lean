@@ -46,11 +46,13 @@ import CatsEffectInLean.Model.Timeout
 * An `IO` held as a value (the traverse result is a `List[F[B]]`; `modify` returns an `F[...]`)
   is a descriptor `Val` (`Desc`); the closure that consumes it rebuilds the term.
 * `Set[(Fiber, Deferred)]`: Scala's `Set1`..`Set4` keep insertion order under `+` and `-`
-  (`listV xs`). A fifth element makes a `HashSet` (`.right (listV xs)`, `xs` in insertion order),
-  which stays a `HashSet` under `-`. Its iteration order depends on identity hashes, so the
-  model takes it as an input: `ho xs`, where `ho` is any function (the statements require
-  `(ho xs).Perm xs`). This over-approximates the real order (a `HashSet` order is also
-  consistent between a set and its subsets; `ho` need not be).
+  (`listV xs`). A fifth element makes a `HashSet`, which stays a `HashSet` under `-`. Its
+  iteration order depends on identity hashes, so the model takes it as an input: `ho all xs`,
+  where `xs` are the elements (insertion order) and `all` is ghost state: every element that the
+  `HashSet` ever held, in insertion order (`.right (.pair (listV all) (listV xs))`). `ho` is any
+  function (the statements require `(ho all xs).Perm xs`). This over-approximates the real order
+  (a function of the elements; it is also consistent between a set and its subsets, `ho` need
+  not be). `all` lets the difftest name one total order of all children (`rankOrder`).
 * `Chain` = list. A list value is `Codec.listV`.
 * The source of an `IO` in a `guaranteeCase` or `both` is a source code (`ioOf`).
 -/
@@ -414,27 +416,36 @@ def illTyped : UserResult := { out := .throw { code := illCode, kind := .fatal }
 /-- The list of a list value. -/
 def listOf (v : Val) : List Val := (unlistV v).getD []
 
-/-- A supervision set value: `(isHashSet, elements in insertion order)`. -/
-def setOf : Val → Bool × List Val
-  | .right xs => (true, listOf xs)
-  | xs => (false, listOf xs)
+/-- A supervision set: `Set1`..`Set4` (`hash = false`) or a `HashSet`; `xs` the elements in
+insertion order; `all` (ghost, `HashSet` only) every element it ever held, in insertion order. -/
+structure SetSt where
+  hash : Bool
+  all : List Val
+  xs : List Val
+
+/-- A supervision set value. -/
+def setOf : Val → SetSt
+  | .right (.pair all xs) => { hash := true, all := listOf all, xs := listOf xs }
+  | xs => { hash := false, all := [], xs := listOf xs }
 
 /-- The value of a supervision set. -/
-def setVal : Bool × List Val → Val
-  | (true, xs) => .right (listV xs)
-  | (false, xs) => listV xs
+def setVal (st : SetSt) : Val :=
+  if st.hash then .right (.pair (listV st.all) (listV st.xs)) else listV st.xs
 
 /-- `Set + elem`: `Set1`..`Set4` add at the end; `Set4 + new` and `HashSet + new` give a
 `HashSet` (Scala 2.13 `immutable/Set.scala`, `Set4.incl`). -/
-def setAdd (st : Bool × List Val) (x : Val) : Bool × List Val :=
-  if st.2.contains x then st else (st.1 || st.2.length ≥ 4, st.2 ++ [x])
+def setAdd (st : SetSt) (x : Val) : SetSt :=
+  if st.xs.contains x then st
+  else if st.hash then { st with all := st.all ++ [x], xs := st.xs ++ [x] }
+  else if st.xs.length ≥ 4 then { hash := true, all := st.xs ++ [x], xs := st.xs ++ [x] }
+  else { st with xs := st.xs ++ [x] }
 
 /-- `Set - elem` (`Set1`..`Set4` shrink in order; a `HashSet` stays a `HashSet`). -/
-def setRemove (st : Bool × List Val) (x : Val) : Bool × List Val := (st.1, st.2.filter (· != x))
+def setRemove (st : SetSt) (x : Val) : SetSt := { st with xs := st.xs.filter (· != x) }
 
 /-- `set.toList`: insertion order for `Set1`..`Set4`, the chosen order `ho` for a `HashSet`. -/
-def setToList (ho : List Val → List Val) (st : Bool × List Val) : List Val :=
-  if st.1 then ho st.2 else st.2
+def setToList (ho : List Val → List Val → List Val) (st : SetSt) : List Val :=
+  if st.hash then ho st.all st.xs else st.xs
 
 /-- The state of the semaphore: `(waiting, permits)`. -/
 def semState (v : View) (q : Nat) : Option (List Val × Nat) :=
@@ -443,7 +454,7 @@ def semState (v : View) (q : Nat) : Option (List Val × Nat) :=
   | _ => none
 
 /-- Run closure `l`. `uc` calls the user function `f`; `ho` is the `HashSet` iteration order. -/
-def call (ho : List Val → List Val) (uc : Nat → Val → View → UserResult) (l : PT) (arg : Val)
+def call (ho : List Val → List Val → List Val) (uc : Nat → Val → View → UserResult) (l : PT) (arg : Val)
     (v : View) : UserResult :=
   match l with
   | .newDeferred => { effects := [.allocDeferred], out := .ret (.deferred v.deferreds.length) }
@@ -620,7 +631,7 @@ def call (ho : List Val → List Val) (uc : Nat → Val → View → UserResult)
 
 /-- The environment of a program that uses `parTraverseN`: these closures, the `Bracket`, `Race`
 and `Timeout` mirrors, and user code `u` (even ids). -/
-def dispatch (ho : List Val → List Val) (u : UserEnv) (id : Nat) (arg : Val) (v : View) :
+def dispatch (ho : List Val → List Val → List Val) (u : UserEnv) (id : Nat) (arg : Val) (v : View) :
     UserResult :=
   match PT.ofId? id with
   | some l => call ho u.callV l arg v
@@ -645,7 +656,7 @@ def dispatch (ho : List Val → List Val) (u : UserEnv) (id : Nat) (arg : Val) (
           | none => u.callV id arg v
         else u.callV id arg v
 
-def env (ho : List Val → List Val) (u : UserEnv) : UserEnv where
+def env (ho : List Val → List Val → List Val) (u : UserEnv) : UserEnv where
   call id arg refs := dispatch ho u id arg { refs }
   callV := dispatch ho u
 

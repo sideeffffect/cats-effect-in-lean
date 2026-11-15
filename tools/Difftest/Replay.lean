@@ -352,7 +352,7 @@ def syncStepInit (p : Prog) (io : IO) (limit : Nat) : Except Summary (Sched RMas
 /-- Run case `tc` from the scheduler state `s0` (the root term on `Sched.init`, or
 `syncStepInit`) in replay mode with runtime thresholds `cfg` (case field `runtime`); the output
 fields (without `v`, `id`, `mode`). -/
-def replayFieldsH (ho : List Val → List Val) (cfg : Config) (p : Prog) (choices : List Choice)
+def replayFieldsH (ho : List Val → List Val → List Val) (cfg : Config) (p : Prog) (choices : List Choice)
     (maxSteps : Nat) (s0 : Sched RMask) : List (String × Json) :=
   let env := userEnvH ho p
   let r0 : RS := { s := s0, cs := choices }
@@ -375,7 +375,7 @@ def replayFieldsH (ho : List Val → List Val) (cfg : Config) (p : Prog) (choice
 /-- `replayFieldsH` with the insertion order as `HashSet` order. -/
 def replayFields (cfg : Config) (p : Prog) (choices : List Choice) (maxSteps : Nat) (s0 : Sched RMask) :
     List (String × Json) :=
-  replayFieldsH _root_.id cfg p choices maxSteps s0
+  replayFieldsH (fun _ xs => xs) cfg p choices maxSteps s0
 
 /-- All permutations of a list. -/
 def perms : List Nat → List (List Nat)
@@ -388,7 +388,7 @@ the real order is one of them, review 8). -/
 def replayAlternatives (k : Nat) (cfg : Config) (p : Prog) (choices : List Choice) (maxSteps : Nat)
     (s0 : Sched RMask) : List Json :=
   (perms (List.range k)).foldl (fun acc perm =>
-    let j := Json.mkObj (replayFieldsH (rankOrder k perm) cfg p choices maxSteps s0)
+    let j := Json.mkObj (replayFieldsH (rankOrder perm) cfg p choices maxSteps s0)
     if acc.contains j then acc else acc ++ [j]) []
 
 end Difftest

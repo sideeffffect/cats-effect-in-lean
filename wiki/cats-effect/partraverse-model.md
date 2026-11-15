@@ -1,7 +1,7 @@
 # parTraverseN model
 
 > Sources: Cats Effect v3.7.1 (`kernel/.../GenConcurrent.scala:113-249`, `MiniSemaphore.scala:17-92`, `Ref.scala:123-124`, `SyncRef.scala`, `IODeferred.scala:20-80`, `IO.scala:1593-1600`); cats-core 2.13.0 (`list.scala`, `Traverse.scala`, `FlatMap.scala`, `Parallel.scala`); own Phase 6 batch 6.3 work and scala-cli runs, 2026-11-14
-> Raw: [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [parTraverseN notes](../../raw/cats-effect/2026-11-14-partraverse-notes.md); [review 7 fix notes](../../raw/cats-effect/2026-11-14-partraverse-review7.md); [deep Lib and limit notes](../../raw/cats-effect/2026-11-14-partraverse-deep-lib.md); [decision 58 notes](../../raw/cats-effect/2026-11-15-partraverse-decision58.md)
+> Raw: [Review batch 7 notes](../../raw/project-decisions/2026-11-14-review-batch-7-notes.md); [parTraverseN notes](../../raw/cats-effect/2026-11-14-partraverse-notes.md); [review 7 fix notes](../../raw/cats-effect/2026-11-14-partraverse-review7.md); [deep Lib and limit notes](../../raw/cats-effect/2026-11-14-partraverse-deep-lib.md); [decision 58 notes](../../raw/cats-effect/2026-11-15-partraverse-decision58.md); [rankOrder fix](../../raw/cats-effect/2026-11-15-partraverse-rankorder-fix.md)
 
 ## Overview
 
@@ -22,7 +22,7 @@ Phase 6, batch 6.3. `IO.parTraverseN(n)(ta)(f)` calls the kernel default `GenCon
 - `f(a)` runs inside the child fiber (`F.unit >> f(a)`), via the user function call.
 - Scala precedence: `update *> tryGet flatMap {...}` is `(update *> tryGet) flatMap {...}`. The first mirror got this wrong; the difftest with small runtime thresholds found it.
 - Check of term shapes: printing the real `IO` tree by reflection (raw note).
-- Scala `Set`: `Set4 + new` gives a `HashSet`; `HashSet - x` stays a `HashSet`. Only `cancelAll` and the final `joinAll` read the order (`toList`). The model encodes a `HashSet` as `.right (listV xs)` and reads it as `ho xs`. Any `ho` over-approximates: a real `HashSet` order is also consistent between a set and its subsets.
+- Scala `Set`: `Set4 + new` gives a `HashSet`; `HashSet - x` stays a `HashSet`. Only `cancelAll` and the final `joinAll` read the order (`toList`). The model encodes a `HashSet` as `.right (.pair (listV all) (listV xs))` and reads it as `ho all xs`; `all` is ghost state (every element the set held, insertion order), not observable, used only to name a total order of the children in the difftest. Any `ho` with `(ho all xs).Perm xs` over-approximates: a real `HashSet` order depends only on the elements and is consistent between a set and its subsets.
 - A model limit must not be a hypothesis of a statement (review 7). The first version had `as.length ≤ 4`; it is gone.
 
 ## Properties
@@ -52,7 +52,7 @@ Op `parTraverseN` (format v2). Fixed cases `partraverse.jsonl` (74, all agree). 
 ## See Also
 
 - [Race, both and fiber leaks](race-both-model.md)
-- [Semaphore and Mutex model](semaphore-mutex-model.md) (`MiniSemaphore` and `Semaphore` share the lazy cancelation of PR #4648; a track S difftest case found a gap of `rankOrder`: it assumes consecutive child fiber ids, which fails when `f` starts fibers)
+- [Semaphore and Mutex model](semaphore-mutex-model.md) (`MiniSemaphore` and `Semaphore` share the lazy cancelation of PR #4648; a track S difftest case found a gap of `rankOrder`: it assumed consecutive child fiber ids, which fails when `f` starts fibers; fixed with the ghost list `all` of the `HashSet`, see [Difftest program format](../methodology/difftest-program-format.md))
 - [guarantee and bracket model](bracket-model.md)
 - [Difftest program format](../methodology/difftest-program-format.md)
 - [Outcome sets, Eqv and the IO laws](../semantics/outcome-equivalence.md)
