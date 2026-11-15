@@ -60,6 +60,22 @@ output:
   series/3.7.x: |
     (same lines as v3.7.1)
     REPRODUCED CE-0060
+  # Independent re-run by track L (batch 7.1 gate, condition C3), 2026-11-15T23:50+01:00:
+  # scripts/run_reproducers.sh CE-0060 with scala-cli. v3.7.1 from Maven Central. series/3.x: own
+  # publishLocal (version 3.7.1-trackL-de84c01) of the GitHub tarball of origin/series/3.x head
+  # de84c01f76b2f42fcee9d43aba66c82992add103 (head checked with gh api on 2026-11-15; built in a
+  # scratch directory, ~/Projects/cats-effect not touched; track S's 3.7.1-89-de84c01 artifacts
+  # not used). Both runs exit 0. The reproducer has no fixed copy.
+  v3.7.1-rerun-trackL: |
+    A TestControl: results (-1,0,-1); count != available in 100/100 seeds
+    A default runtime: results (-1,0,-1); count != available in 200/200 runs
+    B TestControl: (count while held, count after release) (-1,1) (expected (0,1))
+    REPRODUCED CE-0060
+  series/3.x-rerun-trackL: |
+    A TestControl: results (-1,0,-1); count != available in 100/100 seeds
+    A default runtime: results (-1,0,-1); count != available in 200/200 runs
+    B TestControl: (count while held, count after release) (-1,1) (expected (0,1))
+    REPRODUCED CE-0060
 expected: |
   After both waiters are canceled nobody waits, so `count` = `available` = 0 (program A), and
   `count` = 0 while another fiber holds the only permit (program B). The reproducer then prints

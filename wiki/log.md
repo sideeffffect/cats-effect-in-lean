@@ -444,3 +444,7 @@
 ## [2026-11-15] update | Track S: batch 7.1 gate review items (B1 sequential specs, C3-C5)
 - Updated: Semaphore and Mutex model (statements 9, 10; honest-drop battery rows; CE-0060 re-run)
 - Raw: raw/cats-effect/2026-11-15-semaphore-mutex-review14.md
+
+## [2026-11-15] ingest | CE-0060 independent re-run (track L, gate C3)
+- Updated: bug record CE-0060 (output: v3.7.1 and series/3.x de84c01 re-run, both REPRODUCED)
+- Raw: raw/project-decisions/2026-11-15-ce0060-rerun-track-l.md
