@@ -325,3 +325,9 @@
 
 ## [2026-11-15] update | Phase 6 gate: reproducers re-run
 - CE-0005, CE-0020, CE-0030: reproducers re-run on v3.7.1 and series/3.x (de84c01f76b2, head unchanged since 2026-09-28): last line REPRODUCED on both; fixed copies of CE-0020/CE-0030 do not reproduce (0 seeds, 0/200). Bug records: output and duplicate queries (no new upstream issue or PR).
+
+## [2026-11-15] review | Review batch 10: R1 fix, Race/Memoize source references, Phase 6 gate
+- Created: Phase 6 gate report (draft; gate PASS with conditions)
+- Updated: Agent workflow (review log), Project plan (Phase 6 gate line), index
+- Raw: raw/project-decisions/2026-11-15-review-batch-10-notes.md
+- Review: review/2026-11-15-review-batch-10.md
