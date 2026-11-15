@@ -1,6 +1,6 @@
 id: CE-0060
 title: "Semaphore#count counts canceled waiters: after all waiters are canceled, nobody waits, but count stays negative until the next release"
-status: draft  # found in Phase 7 track S (2026-11-15); not reviewed yet
+status: draft  # found in Phase 7 track S (2026-11-15); FAITHFUL in review/2026-11-15-review-batch-11b.md, review/2026-11-15-review-batch-13.md and the batch 7.1 gate review review/2026-11-15-review-batch-14.md; Q5 (QUESTIONS.md) unanswered, default kept (low, maybe_intended: likely)
 priority: low
 kind: doc-mismatch
 area: std
@@ -41,7 +41,7 @@ maybe_intended: >
   be no next release. Maintainers may accept it and update the Scaladoc instead.
 reproducer: reproducers/CE-0060/Repro.scala
 output:
-  # v3.7.1, scala-cli, 2026-11-15
+  # v3.7.1, scala-cli, 2026-11-15; re-run 2026-11-15T21:33Z for the batch 7.1 gate (review 14, C3): same output
   v3.7.1: |
     A TestControl: results (-1,0,-1); count != available in 100/100 seeds
     A default runtime: results (-1,0,-1); count != available in 200/200 runs
@@ -50,6 +50,7 @@ output:
   # series/3.x = 3.7.1-89-de84c01 (publishLocal snapshot of origin/series/3.x head
   # de84c01f76b2f42fcee9d43aba66c82992add103; head checked unchanged with `gh api` on 2026-11-15;
   # Semaphore.scala last changed on series/3.x by 643ba33566, PR #4648, which is in v3.7.1)
+  # Re-run 2026-11-15T21:33Z for the batch 7.1 gate (review 14, C3): head still de84c01 (gh api), same output
   series/3.x: |
     A TestControl: results (-1,0,-1); count != available in 100/100 seeds
     A default runtime: results (-1,0,-1); count != available in 200/200 runs

@@ -52,6 +52,9 @@ inductive Var where
   /-- A read that is right when nobody waits and wrong while the waiter queue is not empty
   (`available` returns one more, `count` one less; review batch 13, O1). -/
   | contended
+  /-- Rule (a) of review batch 13: the honest drop of a try-operation answers `false` and has no
+  effect (review batch 14, B1). -/
+  | honestDrop
   deriving DecidableEq, Repr
 
 def E9 : Err := { code := 9 }
@@ -174,10 +177,15 @@ def badOf (var : Var) (io drop dbl : IO) : IO :=
   | .hangs => hangIO
   | .drops => drop
   | .doubles => dbl
-  | .wrongValue | .contended => io
+  | .wrongValue | .contended | .honestDrop => io
 
 /-- The replacement of a library term for the operations `available`, `count`, `permit`, `lock`. -/
 def repl (op : Op) (var : Var) : IO → Option IO
+  | .delay (.user t) =>
+    match SL.ofId? t, var with
+    | some (.modTry _ n), .honestDrop =>
+      if (op == .tryAcquire && n == 1) || (op == .tryAcquireN && 2 ≤ n) then some (.pure (.bool false)) else none
+    | _, _ => none
   | io@(.map (.delay (.user g)) (.user k)) =>
     match SL.ofId? g, SL.ofId? k, op with
     | some (.getThunk _), some .availK, .available =>
@@ -276,7 +284,15 @@ def fifoBase : UserEnv where
 
 def wrongFifo (op : Op) (var : Var) : UserEnv := outer op var (Mutex.env (inner fifoBase))
 
+/-- The sequential root (statements 9 and 10) with a wrong function. -/
+def wrongSeq (op : Op) (var : Var) : UserEnv := outer op var (Mutex.env (inner seqU))
+
 /-! ## The claims of the statements as tests (on one observation) -/
+
+/-- The conclusion of `semSeqSpec` (statement 9). -/
+def c9 (k : Nat) (ops : List SOp) (o : Obs) : Bool :=
+  o.out.reverse == (semSpec k ops).1 &&
+    o.summary == (if (semSpec k ops).2 then .blocked else .done (.succeeded .unit))
 
 /-- `OkJoined` as a test. -/
 def okJoinedB (bus : List BUse) (as : List Act) (i : Nat) : Bool :=

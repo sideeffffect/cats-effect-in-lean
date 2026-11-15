@@ -320,4 +320,53 @@ theorem mutexSemaphoreTwin_satisfiable :
       simp only [us3, List.mem_cons, List.not_mem_nil, or_false] at hx
       rcases hx with h | h <;> exact ⟨2, .inr h⟩
 
+/-! ## Statements 9 and 10 (sequential specifications; review batch 14) -/
+
+def ops9 : List SOp := [.tryAcq 1, .tryAcq 1, .avail, .count, .rel 1, .permit, .acq 1, .acq 1]
+
+theorem run9_ok : (runObsP {} counterMaskModel seqEnv 3000 [] (semSeqRoot 1 ops9)).map
+    (fun o => o.out.reverse == (semSpec 1 ops9).1 && o.summary == .blocked) = some true := by
+  decide +kernel
+
+/-- The interesting case: `tryAcquireN` answers both `true` and `false`, and the script blocks at
+the last `acquireN` (the spec says so: no permit is left). -/
+theorem semSeqSpec_satisfiable :
+    ∃ (k : Nat) (ops : List SOp), (∀ op ∈ ops, op ≠ .lock ∧ op ≠ .lockNested) ∧
+      (semSpec k ops).1.take 2 = [.pair (.nat 3) (.bool true), .pair (.nat 3) (.bool false)] ∧
+      (semSpec k ops).2 = true ∧
+      ∃ o, outcomesP {} counterMaskModel seqEnv (semSeqRoot k ops) o ∧
+        o.out.reverse = (semSpec k ops).1 ∧ o.summary = .blocked := by
+  have h := run9_ok
+  cases hr : runObsP {} counterMaskModel seqEnv 3000 [] (semSeqRoot 1 ops9) with
+  | none => rw [hr] at h; simp at h
+  | some o =>
+    rw [hr] at h
+    simp only [Option.map_some, Option.some.injEq, Bool.and_eq_true, beq_iff_eq] at h
+    refine ⟨1, ops9, ?_, by decide, by decide, o, ⟨3000, [], hr⟩, h.1, h.2⟩
+    intro op hop
+    simp only [ops9, List.mem_cons, List.not_mem_nil, or_false] at hop
+    rcases hop with h | h | h | h | h | h | h | h <;> subst h <;> decide
+
+def ops10 : List SOp := [.lock, .lock, .lockNested]
+
+theorem run10_ok : (runObsP {} counterMaskModel seqEnv 3000 [] (mutexSeqRoot ops10)).map
+    (fun o => o.out.reverse == (mutexSpec ops10).1 && o.summary == .blocked) = some true := by
+  decide +kernel
+
+/-- The interesting case: two `lock.use` succeed, the nested one deadlocks. -/
+theorem mutexSeqSpec_satisfiable :
+    ∃ ops : List SOp, (∀ op ∈ ops, op = .lock ∨ op = .lockNested) ∧ (mutexSpec ops).1.length = 2 ∧
+      ∃ o, outcomesP {} counterMaskModel seqEnv (mutexSeqRoot ops) o ∧
+        o.out.reverse = (mutexSpec ops).1 ∧ o.summary = .blocked := by
+  have h := run10_ok
+  cases hr : runObsP {} counterMaskModel seqEnv 3000 [] (mutexSeqRoot ops10) with
+  | none => rw [hr] at h; simp at h
+  | some o =>
+    rw [hr] at h
+    simp only [Option.map_some, Option.some.injEq, Bool.and_eq_true, beq_iff_eq] at h
+    refine ⟨ops10, ?_, by decide, o, ⟨3000, [], hr⟩, h.1, h.2⟩
+    intro op hop
+    simp only [ops10, List.mem_cons, List.not_mem_nil, or_false] at hop
+    rcases hop with h | h | h <;> subst h <;> simp
+
 end CatsEffectInLean.Proofs.Phase7.SemaphoreWitness

@@ -738,4 +738,183 @@ def mutexSemaphoreTwin : Prop :=
     ∀ o, outcomesP {} counterMaskModel (env u) (lockRoot .mutex gs as) o →
       ∃ o', outcomesP {} counterMaskModel (env u) (lockRoot .semMutex gs as) o' ∧ core o' = core o
 
+/-! ### Sequential specifications (statements 9 and 10, namespace 67; review batch 14, B1)
+
+One fiber (the root) runs a script of operations on one lock and records each answer in the trace
+(`pair (nat tag) answer`). With one fiber there is no race, so the answers are fixed by the
+Scaladoc: `Semaphore` (`S:28-117`): `acquireN(n)` takes `n` permits when `n ≤ available` and else
+blocks the fiber (`S:31-34`); `releaseN(n)` adds `n`; `tryAcquireN(n)` "Acquires `n` permits now and
+returns `true`, or returns `false` immediately" (`S:79-80`), so `true` exactly when `n ≤ available`
+(and for `n = 0`); `available` is the number of permits; `count` equals `available` when nobody waits
+(`S:47-53`); `permit.use(f)` holds one permit while `f` runs (`S:105-109`). `Mutex`
+(`Mutex.scala:24-48`): `lock.use(f)` runs `f` when the lock is free; the lock "is not reentrant,
+thus this `mutex.lock.surround(mutex.lock.use_)` will deadlock" (`Mutex.scala:41-42`).
+
+The claim: the recorded answers are exactly the specification's, and the run ends `Succeeded(())`,
+or `blocked` exactly where the specification blocks. An operation that answers wrongly, takes no
+effect (also the honest `tryAcquireN` drop that answers `false`), raises or hangs breaks it on some
+script. No user code. -/
+
+def sqns : Nat := 67
+
+/-- One operation of a sequential script. -/
+inductive SOp where
+  | acq (n : Nat)
+  | rel (n : Nat)
+  | tryAcq (n : Nat)
+  | avail
+  | count
+  /-- `s.permit.use(_ => s.available)`: records `available` inside the permit. -/
+  | permit
+  /-- `m.lock.use(_ => IO.unit)`. -/
+  | lock
+  /-- `m.lock.use(_ => m.lock.use(_ => IO.unit))`: the documented non-reentrant deadlock. -/
+  | lockNested
+  deriving DecidableEq, Repr
+
+def SOp.tag : SOp → Nat
+  | .acq _ => 1 | .rel _ => 2 | .tryAcq _ => 3 | .avail => 4 | .count => 5 | .permit => 6
+  | .lock => 7 | .lockNested => 8
+
+def SOp.toVal : SOp → Val
+  | .acq n => .pair (.nat 1) (.nat n)
+  | .rel n => .pair (.nat 2) (.nat n)
+  | .tryAcq n => .pair (.nat 3) (.nat n)
+  | .avail => .pair (.nat 4) .unit
+  | .count => .pair (.nat 5) .unit
+  | .permit => .pair (.nat 6) .unit
+  | .lock => .pair (.nat 7) .unit
+  | .lockNested => .pair (.nat 8) .unit
+
+def SOp.ofVal : Val → Option SOp
+  | .pair (.nat 1) (.nat n) => some (.acq n)
+  | .pair (.nat 2) (.nat n) => some (.rel n)
+  | .pair (.nat 3) (.nat n) => some (.tryAcq n)
+  | .pair (.nat 4) .unit => some .avail
+  | .pair (.nat 5) .unit => some .count
+  | .pair (.nat 6) .unit => some .permit
+  | .pair (.nat 7) .unit => some .lock
+  | .pair (.nat 8) .unit => some .lockNested
+  | _ => none
+
+def sopsV (ops : List SOp) : Val := listV (ops.map SOp.toVal)
+def sopsOf (v : Val) : List SOp := ((unlistV v).getD []).filterMap SOp.ofVal
+
+/-- The sequential harness closures. `l` is the lock object (`Val.fn l`). -/
+inductive SQ where
+  /-- `l => run the script`. -/
+  | go (ops : Val)
+  /-- `x => record(tag, x) *> the rest`. -/
+  | record (l : Nat) (tag : Nat) (rest : Val)
+  /-- `_ => s.available` (the `use` function of `permit`). -/
+  | inner (l : Nat)
+  /-- `_ => IO.unit` (the `use` function of `lock`). -/
+  | unitF
+  /-- `_ => m.lock.use(_ => IO.unit)` (the outer `use` function of `lockNested`). -/
+  | nest (l : Nat)
+  deriving DecidableEq, Repr
+
+def SQ.toVal : SQ → Val
+  | .go ops => cloVal sqns 0 [ops]
+  | .record l t rest => cloVal sqns 1 [.fn l, .nat t, rest]
+  | .inner l => cloVal sqns 2 [.fn l]
+  | .unitF => cloVal sqns 3 []
+  | .nest l => cloVal sqns 4 [.fn l]
+
+def SQ.id (l : SQ) : Nat := 2 * valToNat l.toVal + 1
+def SQ.fn (l : SQ) : Fn := .user l.id
+
+def SQ.ofId? (id : Nat) : Option SQ :=
+  if isLibId id then
+    match (cloOfId id).bind ofCloVal with
+    | some (67, 0, [ops]) => some (.go ops)
+    | some (67, 1, [.fn l, .nat t, rest]) => some (.record l t rest)
+    | some (67, 2, [.fn l]) => some (.inner l)
+    | some (67, 3, []) => some .unitF
+    | some (67, 4, [.fn l]) => some (.nest l)
+    | _ => none
+  else none
+
+/-- The term of one operation on lock `l`. -/
+def sopIO (l : Nat) : SOp → IO
+  | .acq n => acquireNIO l n
+  | .rel n => releaseNIO l n
+  | .tryAcq n => tryAcquireNIO l n
+  | .avail => availableIO l
+  | .count => countIO l
+  | .permit => permitUseIO l (SQ.inner l).id
+  | .lock => lockUseIO l SQ.unitF.id
+  | .lockNested => lockUseIO l (SQ.nest l).id
+
+def seqStepIO (l : Nat) : List SOp → IO
+  | [] => .pure .unit
+  | op :: rest => .flatMap (sopIO l op) (SQ.record l op.tag (sopsV rest)).fn
+
+def SQ.call (h : SQ) (arg : Val) : UserResult :=
+  match h with
+  | .go ops =>
+    match arg with
+    | .fn l => { out := .prog (seqStepIO l (sopsOf ops)) }
+    | _ => illT
+  | .record l t rest => { effects := [.emit (.pair (.nat t) arg)], out := .prog (seqStepIO l (sopsOf rest)) }
+  | .inner l => { out := .prog (availableIO l) }
+  | .unitF => { out := .prog (.pure .unit) }
+  | .nest l => { out := .prog (lockUseIO l SQ.unitF.id) }
+
+/-- The sequential harness environment (no user code). -/
+def seqU : UserEnv where
+  call id a _ := match SQ.ofId? id with
+    | some h => h.call a
+    | none => illT
+  callV id a _ := match SQ.ofId? id with
+    | some h => h.call a
+    | none => illT
+
+def seqEnv : UserEnv := Mutex.env seqU
+
+/-- The roots. -/
+def semSeqRoot (k : Nat) (ops : List SOp) : IO := .flatMap (Semaphore.newIO k) (SQ.go (sopsV ops)).fn
+def mutexSeqRoot (ops : List SOp) : IO := .flatMap Mutex.newIO (SQ.go (sopsV ops)).fn
+
+/-- The `Semaphore` specification: the recorded answers (in order), and `true` if the fiber blocks. -/
+def semSpec : Nat → List SOp → List Val × Bool
+  | _, [] => ([], false)
+  | p, op :: rest =>
+    let ev (x : Val) : Val := .pair (.nat op.tag) x
+    match op with
+    | .acq n =>
+      if n ≤ p then let t := semSpec (p - n) rest; (ev .unit :: t.1, t.2) else ([], true)
+    | .rel n => let t := semSpec (p + n) rest; (ev .unit :: t.1, t.2)
+    | .tryAcq n =>
+      if n ≤ p then let t := semSpec (p - n) rest; (ev (.bool true) :: t.1, t.2)
+      else let t := semSpec p rest; (ev (.bool false) :: t.1, t.2)
+    | .avail => let t := semSpec p rest; (ev (.nat p) :: t.1, t.2)
+    | .count => let t := semSpec p rest; (ev (.int p) :: t.1, t.2)
+    | .permit =>
+      if 1 ≤ p then let t := semSpec p rest; (ev (.nat (p - 1)) :: t.1, t.2) else ([], true)
+    | .lock | .lockNested => ([], true)
+
+/-- The `Mutex` specification: `lock` succeeds, `lockNested` blocks. -/
+def mutexSpec : List SOp → List Val × Bool
+  | [] => ([], false)
+  | .lock :: rest => let t := mutexSpec rest; (.pair (.nat 7) .unit :: t.1, t.2)
+  | _ :: _ => ([], true)
+
+/-- Statement 9 (`std.Semaphore.seqSpec`): one fiber sees a sequential semaphore. Scripts of
+`acquireN`, `releaseN`, `tryAcquireN`, `available`, `count`, `permit` (the mutex ops `lock`,
+`lockNested` are outside the `Semaphore` API; the spec blocks on them and they are not used). -/
+def semSeqSpec : Prop :=
+  ∀ (k : Nat) (ops : List SOp), (∀ op ∈ ops, op ≠ .lock ∧ op ≠ .lockNested) →
+    ∀ o, outcomesP {} counterMaskModel seqEnv (semSeqRoot k ops) o →
+      o.out.reverse = (semSpec k ops).1 ∧
+      o.summary = (if (semSpec k ops).2 then .blocked else .done (.succeeded .unit))
+
+/-- Statement 10 (`std.Mutex.lock.seqSpec`): one fiber sees a sequential mutex: `lock.use` succeeds
+when the lock is free, and a nested `lock.use` deadlocks (`Mutex.scala:41-42`). -/
+def mutexSeqSpec : Prop :=
+  ∀ (ops : List SOp), (∀ op ∈ ops, op = .lock ∨ op = .lockNested) →
+    ∀ o, outcomesP {} counterMaskModel seqEnv (mutexSeqRoot ops) o →
+      o.out.reverse = (mutexSpec ops).1 ∧
+      o.summary = (if (mutexSpec ops).2 then .blocked else .done (.succeeded .unit))
+
 end CatsEffectInLean.Props.Phase7.Semaphore

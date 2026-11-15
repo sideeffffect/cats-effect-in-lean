@@ -1,13 +1,13 @@
 # Semaphore and Mutex model, CE-0060
 
 > Sources: Cats Effect v3.7.1 (`std/.../Semaphore.scala:28-298`, `std/.../Mutex.scala:24-112`, `std/.../LockQueue.scala:24-110`, `kernel/.../Resource.scala:156-208`, `:388-397`, `:879-880`, `:942-944`, `:1229-1234`, `kernel/jvm-native/.../SyncRef.scala:30-95`, `kernel/.../Ref.scala:123-124`, `:208-250`, `IO.scala:1715-1720`, `:1822-1830`, `:1996-2180`, `IODeferred.scala:62-79`, `docs/std/mutex.md:6-7`); cats-core 2.13.0 (`cats/instances/queue.scala:136-138`, `cats/Traverse.scala:299-309`, `cats/Foldable.scala:591-596`, `cats/instances/option.scala:145-149`); PR #4648; own Phase 7 track S work and scala-cli runs, 2026-11-15
-> Raw: [Review batch 13 notes](../../raw/project-decisions/2026-11-15-review-batch-13-notes.md); [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md); [Review 11b fixes](../../raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md); [Review 12 and battery](../../raw/cats-effect/2026-11-15-semaphore-mutex-review12-battery.md); [Review 13](../../raw/cats-effect/2026-11-15-semaphore-mutex-review13.md)
+> Raw: [Review batch 13 notes](../../raw/project-decisions/2026-11-15-review-batch-13-notes.md); [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md); [Review 11b fixes](../../raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md); [Review 12 and battery](../../raw/cats-effect/2026-11-15-semaphore-mutex-review12-battery.md); [Review 13](../../raw/cats-effect/2026-11-15-semaphore-mutex-review13.md); [Review 14](../../raw/cats-effect/2026-11-15-semaphore-mutex-review14.md)
 
 ## Overview
 
 Phase 7, batch 7.1, track S. Mirrors of `Semaphore[IO]` and `Mutex[IO]` (with `LockQueue`), nine
-difftest ops (format v2), eight registered statements. One is refuted: CE-0060, `count` counts
-canceled waiters. Seven are `open`, each with a kernel-checked satisfiability witness and a
+difftest ops (format v2), ten registered statements. One is refuted: CE-0060, `count` counts
+canceled waiters. Nine are `open`, each with a kernel-checked satisfiability witness and a
 random-schedule smoke test with wrong-function checks.
 
 ## Implementations and twins
@@ -76,6 +76,8 @@ cases.
 | `std.Semaphore.count.atRest` | refuted (CE-0060) | all fibers ended → `count = available` |
 | `std.Semaphore.acquireN.fifo` | open | strict FIFO: after `releaseN(r)` the longest prefix with sum ≤ r is served; every read while requests wait gives `available = 0` and the waiting sum as `count` (review batch 13, O1) |
 | `std.Mutex.lock.semaphoreTwin` | open | each (outcome, trace) of `Mutex` is one of `Semaphore(1)` (one direction; the converse is a different claim, not registered) |
+| `std.Semaphore.seqSpec` | open | one fiber, any script of `acquireN`, `releaseN`, `tryAcquireN`, `available`, `count`, `permit`: the answers equal the sequential spec (review batch 14) |
+| `std.Mutex.lock.seqSpec` | open | one fiber: `lock.use` succeeds on a free lock; a nested `lock.use` deadlocks (review batch 14) |
 
 Smoke (`lake exe semsmoke 40`): 13,920 stopped runs, 0 violations of the open statements; every
 wrong function ('leak a permit', 'release twice', 'skip a waiter', 'LIFO', 'no wait', 'lost
@@ -116,6 +118,13 @@ wrong only under contention passed. The FIFO root now reads `(available, count)`
 (requests wait then) and stops with `Left` on any value the Scaladoc does not allow; rows
 `available_contended` and `count_contended` (kernel) break it, and both variants are right at rest
 (`contended_ok_at_rest`). The battery has 46 rows now.
+
+Review batch 14 (batch 7.1 gate, 2026-11-15): B1 (blocker): an honest `tryAcquire`/`tryAcquireN`
+drop (answers `false`, takes nothing) broke no statement, because no statement read the answer.
+New sequential statements 9 (`std.Semaphore.seqSpec`) and 10 (`std.Mutex.lock.seqSpec`) record every
+answer of a one-fiber script; the honest drops break statement 9 (kernel rows
+`tryAcquire_honestDrop`, `tryAcquireN_honestDrop`; 48 battery rows). The other drops have no answer
+to lie about. Also: CE-0060 reproducer re-run (same output), inventory `registry` column filled.
 
 Why open: a proof for all schedules needs a state invariant over `Step`/`SchedP` (for example
 permits + held + sunk = k + released), as the open Phase 6 entries.

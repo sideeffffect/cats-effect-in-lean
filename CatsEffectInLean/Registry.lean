@@ -744,6 +744,29 @@ def registry : List Entry := [
       is a different claim and is not registered. v3.7.1 has no Mutex AsyncImpl any more (LockQueue, \
       commit 8deb2fdabe). Satisfiable (mutexSemaphoreTwin_satisfiable). semsmoke samples both sides. \
       Open." },
+  { id := "std.Semaphore.seqSpec"
+    rows := ["std.Semaphore.apply", "std.Semaphore.acquireN", "std.Semaphore.acquire", "std.Semaphore.releaseN",
+      "std.Semaphore.release", "std.Semaphore.tryAcquireN", "std.Semaphore.tryAcquire", "std.Semaphore.available",
+      "std.Semaphore.count", "std.Semaphore.permit"]
+    prop := ``Props.Phase7.Semaphore.semSeqSpec
+    status := .«open»
+    note := "Sequential specification (review batch 14, B1): one fiber runs any script of acquireN, \
+      releaseN, tryAcquireN, available, count, permit.use(_ => available) on Semaphore(k) and records \
+      every answer; the answers equal the spec semSpec (tryAcquireN true exactly when n <= available, \
+      S:79-80; available, count = permits; acquireN/permit block when not enough permits) and the run \
+      ends Succeeded(()) or blocked exactly where the spec blocks. All k, scripts and schedules; no \
+      user code. The model meets it on all 585 scripts of length <= 3 over 8 ops, for each k in {0, 1, 2} \
+      (eval). Satisfiable (semSeqSpec_satisfiable: true and false answers, blocks). Wrong functions: \
+      the honest tryAcquire/tryAcquireN drop (answers false, no effect) breaks it \
+      (SemaphoreBattery.tryAcquire_honestDrop, tryAcquireN_honestDrop, kernel). Open." },
+  { id := "std.Mutex.lock.seqSpec"
+    rows := ["std.Mutex.apply", "std.Mutex.lock", "std.Mutex.ConcurrentImpl.lock", "std.LockQueue.lock"]
+    prop := ``Props.Phase7.Semaphore.mutexSeqSpec
+    status := .«open»
+    note := "Sequential specification (review batch 14, B1): one fiber runs a script of lock.use(_ => ()) \
+      and lock.use(_ => lock.use(_ => ())); every lock.use on a free lock succeeds, and the nested one \
+      deadlocks as Mutex.scala:41-42 documents (blocked). All scripts and schedules; no user code. \
+      Satisfiable (mutexSeqSpec_satisfiable). Open." },
   { id := "std.CountDownLatch.awaitNotEarly"
     rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
     prop := ``Props.Phase7.CountDownLatch.cdlAwaitNotEarly

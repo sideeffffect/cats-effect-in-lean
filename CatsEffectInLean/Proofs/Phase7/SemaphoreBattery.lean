@@ -28,7 +28,10 @@ constant user code `cu`, whose `WellFormed` hypothesis holds for the wrong envir
 | `Semaphore[IO](k)` (apply) | stmt 2 | stmt 2 | n/a (factory) | n/a (factory) |
 | `Mutex[IO]` (apply) | stmt 5 | stmt 5 | n/a (factory) | n/a (factory) |
 
-Extra rows: `available`, `count` "contended" (wrong only while a fiber waits): stmt 7. A factory
+Extra rows: `available`, `count` "contended" (wrong only while a fiber waits): stmt 7;
+`tryAcquire`, `tryAcquireN` "honest drop" (answers `false`, no effect; rule (a) of review batch 13):
+stmt 9. For the other operations the drop has no answer to lie about (`acquire`, `release`,
+`permit`, `lock` return `()`), so their "drops" rows are already honest; reads have no drop. A factory
 has no effect besides making the object, so drops/doubles have no meaning for it. `mapK` and `in`
 are not mirrored (no row): `MapKSemaphore`/`TransformedMutex` only map each operation with a natural
 transformation, and `in` builds the same `impl` with `Ref.in`.
@@ -273,6 +276,27 @@ the claim (so only the reads under contention catch them). -/
 theorem contended_ok_at_rest :
     (runObsP {} counterMaskModel (wrongFifo .available .contended) 3000 [] (fifoRoot [] 1)).map (c7 [] 1) = some true ∧
     (runObsP {} counterMaskModel (wrongFifo .count .contended) 3000 [] (fifoRoot [] 1)).map (c7 [] 1) = some true := by
+  constructor <;> decide +kernel
+
+/-! ### Review batch 14 (B1): the honest drop of `tryAcquire`/`tryAcquireN`
+
+Rule (a) of review batch 13: the "drops" variant of a try-operation is the honest one: it answers
+`false` and takes nothing. The harness statements ignore the answer, so only the sequential
+statement 9 (`std.Semaphore.seqSpec`) reads it: with enough permits the answer must be `true`. -/
+
+theorem tryAcquire_honestDrop :
+    (runObsP {} counterMaskModel (wrongSeq .tryAcquire .honestDrop) 3000 [] (semSeqRoot 1 [.tryAcq 1, .avail])).map
+      (c9 1 [.tryAcq 1, .avail]) = some false := by
+  decide +kernel
+
+theorem tryAcquireN_honestDrop :
+    (runObsP {} counterMaskModel (wrongSeq .tryAcquireN .honestDrop) 3000 [] (semSeqRoot 2 [.tryAcq 2, .avail])).map
+      (c9 2 [.tryAcq 2, .avail]) = some false := by
+  decide +kernel
+
+theorem good_honestDrop_inputs :
+    (runObsP {} counterMaskModel seqEnv 3000 [] (semSeqRoot 1 [.tryAcq 1, .avail])).map (c9 1 [.tryAcq 1, .avail]) = some true ∧
+    (runObsP {} counterMaskModel seqEnv 3000 [] (semSeqRoot 2 [.tryAcq 2, .avail])).map (c9 2 [.tryAcq 2, .avail]) = some true := by
   constructor <;> decide +kernel
 
 /-- `availRaises` of review batch 12 (H2): `Semaphore#available` always raises. The root ends
