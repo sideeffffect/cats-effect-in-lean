@@ -445,6 +445,12 @@
 - Updated: Semaphore and Mutex model (statements 9, 10; honest-drop battery rows; CE-0060 re-run)
 - Raw: raw/cats-effect/2026-11-15-semaphore-mutex-review14.md
 
+## [2026-11-15] review | Review batch 15: re-check of the Phase 7 batch 7.1 gate
+- Updated: Phase 7 batch 7.1 gate report (gate PASS, open conditions C2 CI, C3 independent CE-0060 re-run; 35/35 FAITHFUL; all batteries complete)
+- Updated: Agent workflow and review protocol (review log), index
+- Raw: raw/project-decisions/2026-11-15-review-batch-15-notes.md
+- Review: review/2026-11-15-review-batch-15.md
+
 ## [2026-11-15] ingest | CE-0060 independent re-run (track L, gate C3)
 - Updated: bug record CE-0060 (output: v3.7.1 and series/3.x de84c01 re-run, both REPRODUCED)
 - Raw: raw/project-decisions/2026-11-15-ce0060-rerun-track-l.md
