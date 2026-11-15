@@ -262,3 +262,6 @@
 - Updated: Resource use/both (probe check, 2 defects fixed), Outcome sets (Lib fields check), index
 - Raw: raw/cats-effect/2026-11-14-lib-fields-probe-notes.md
 
+## [2026-11-15] ingest | Track Res: decision 58 core (Val.fn closure references)
+- Updated: Outcome sets (decision 58 rule), Resource use/both (harness, Private = S2), Bracket model (F1), Registry and audit (check 9 removed), Agent workflow
+- Raw: raw/cats-effect/2026-11-15-decision-58-core-notes.md
