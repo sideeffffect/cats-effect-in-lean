@@ -28,8 +28,11 @@ case "$kernel" in
     ;;
   lean-paranoid) run "$bin/leanchecker-paranoid" --silent --from-export "$export_file" ;;
   lean4lean) run "$bin/lean4lean" --import "$export_file" ;;
-  con-leche) run "$bin/con-leche" "$export_file" ;;
-  con-ron) run "$bin/con-ron" "$export_file" ;;
+  # con-leche and con-ron use one worker per hardware thread by default; on the heavy export that
+  # needed more than 48 GB locally and lost the 16 GB GitHub runner (paranoid run 43661358226).
+  # `--jobs` sets only the number of check threads (same checker, same verdict), so run one.
+  con-leche) run "$bin/con-leche" "--jobs=${CON_JOBS:-1}" "$export_file" ;;
+  con-ron) run "$bin/con-ron" "--jobs=${CON_JOBS:-1}" "$export_file" ;;
   nanoda)
     cfg=.lake/nanoda-config.json
     cat > "$cfg" <<EOF
