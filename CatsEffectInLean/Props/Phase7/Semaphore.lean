@@ -529,24 +529,26 @@ def OkJoined (bus : List BUse) (as : List Act) (i : Nat) : Prop :=
   ∃ b, bus[i]? = some b ∧ b.succeeds = true ∧ Act.join i ∈ as ∧ Act.cancel i ∉ as
 
 /-- Statement 2 (`std.Semaphore.noDeadlock`): with critical sections that end (behaviour tables)
-and requests that the permits can meet (`need ≤ k`), no run that stops is `blocked` (no deadlock,
-no lost wakeup); a run that ends `Succeeded` has `available = k + released` (no lost permit), and
-every joined, not canceled use whose own code succeeds ended `Succeeded` (the join records its
-outcome: a granted request is served, review batch 11b W1).
+and requests that the permits can meet (`need ≤ k`), every run that stops either ends `Succeeded`
+with `available = k + released` (no deadlock, no lost wakeup, no lost permit) and a `Succeeded`
+join record for every joined, not canceled use whose own code succeeds (a granted request is
+served, review batch 11b W1), or ends `fatal` (a critical section raised a fatal error).
 
-Review batch 11b (H1): the first form claimed that every stopped run ends `Succeeded`. A critical
-section that raises a fatal error stops the whole run with `Summary.fatal` (`Model/Sched.lean:120`;
-`IOFiber` `onFatalFailure`), for every implementation. The conclusion is now "not blocked" plus the
-claims on `Succeeded` runs, so fatal errors stay in the domain (regression:
-`Proofs/Phase7/SemaphoreWitness.lean`, `fatalRun`). -/
+History. Review batch 11b (H1): the first form ("every stopped run ends `Succeeded`") was false for
+every implementation, because a fatal error stops the whole run with `Summary.fatal`
+(`Model/Sched.lean:120`; `IOFiber` `onFatalFailure`). The 11b form ("not `blocked`" plus claims on
+`Succeeded` runs) let a root that ends `Errored` pass: an `available` that always raises met it
+(review batch 12, H2). This form rejects every summary except `Succeeded` and `fatal`. For a correct
+semaphore the root never raises: its own steps (`cancel`, `join`, `releaseN`, `cede`, `available`,
+`count`) do not raise, and a join returns the outcome. Regressions and the wrong-function battery
+(decision 63): `Proofs/Phase7/SemaphoreWitness.lean`, `Proofs/Phase7/SemaphoreBattery.lean`. -/
 def semNoDeadlock : Prop :=
   ∀ (k : Nat) (bus : List BUse) (as : List Act),
     AllEnded bus.length as → (∀ b ∈ bus, b.need ≤ k) →
     ∀ o, outcomesP {} counterMaskModel (env behaved) (lockRoot (.sem k) (bus.map BUse.toUse) as) o →
-      o.summary ≠ .blocked ∧
-      ∀ v, o.summary = .done (.succeeded v) →
-        availOf v = some (k + released as) ∧
-        ∀ i, OkJoined bus as i → ∃ x, joinRecV i (.ocSucceeded x) ∈ o.out
+      (∃ v, o.summary = .done (.succeeded v) ∧ availOf v = some (k + released as) ∧
+        ∀ i, OkJoined bus as i → ∃ x, joinRecV i (.ocSucceeded x) ∈ o.out) ∨
+      (∃ e, o.summary = .fatal e)
 
 /-- Statement 3 (`std.Semaphore.permit.atMostK`): at most `k` fibers hold a permit of
 `Semaphore(k)` at once (the counted fibers; other uses also take permits). -/
@@ -564,18 +566,19 @@ def mutexMutualExclusion : Prop :=
     ∀ o, outcomesP {} counterMaskModel (env u) (lockRoot .mutex us as) o →
       ∃ h, highest o = some h ∧ h ≤ 1
 
-/-- Statement 5 (`std.Mutex.lock.noDeadlock`): with critical sections that end, no run that stops
-is `blocked` (the last `lock.use` gets the lock, no waiter is lost); a run that ends `Succeeded`
-returns `()`, and every joined, not canceled use whose own code succeeds ended `Succeeded`. Only
-`permit` uses (a mutex has no `acquireN`). Review batch 11b (H1): as statement 2, the first form
-("every stopped run ends `Succeeded`") was false for every implementation with a fatal error. -/
+/-- Statement 5 (`std.Mutex.lock.noDeadlock`): with critical sections that end, every run that stops
+either ends `Succeeded(())` (the last `lock.use` gets the lock, no waiter is lost) with a `Succeeded`
+join record for every joined, not canceled use whose own code succeeds, or ends `fatal`. Only
+`permit` uses (a mutex has no `acquireN`). History as statement 2: review batch 11b (H1, the first
+form was false with a fatal error) and review batch 12 (W2, "not `blocked`" let a root `Errored`
+pass). -/
 def mutexNoDeadlock : Prop :=
   ∀ (bus : List BUse) (as : List Act),
     AllEnded bus.length as → (∀ b ∈ bus, ∃ k bb, b = .permit k bb) →
     ∀ o, outcomesP {} counterMaskModel (env behaved) (lockRoot .mutex (bus.map BUse.toUse) as) o →
-      o.summary ≠ .blocked ∧
-      ∀ v, o.summary = .done (.succeeded v) →
-        v = .unit ∧ ∀ i, OkJoined bus as i → ∃ x, joinRecV i (.ocSucceeded x) ∈ o.out
+      (o.summary = .done (.succeeded .unit) ∧
+        ∀ i, OkJoined bus as i → ∃ x, joinRecV i (.ocSucceeded x) ∈ o.out) ∨
+      (∃ e, o.summary = .fatal e)
 
 /-- Statement 6 (`std.Semaphore.count.atRest`): when every user fiber has ended, nobody waits, so
 `count` equals `available` (`S:48-52`: `count` is "Like [[available]] when permits are available but

@@ -26,8 +26,9 @@ Wrong-function tests (each must break its claim in some run):
 * "acquireN raises" (review batch 11b, W1): `acquireN(n)` raises for `n ≥ 2`: statement 2 (the join
   of a use that must succeed records `Errored`).
 
-Statements 2 and 5 use the review batch 11b form: not `blocked`, and claims on `Succeeded` runs
-(join outcomes recorded by the harness). Random behaviour tables include fatal errors (H1).
+Statements 2 and 5 use the review batch 12 form: `Succeeded` with the claims (join outcomes recorded
+by the harness) or `fatal`. The full decision-63 battery is kernel-checked in
+`Proofs/Phase7/SemaphoreBattery.lean`. Random behaviour tables include fatal errors (H1).
 
 Forgery: a user function whose closure value is the lock state `Ref` (it captured the cell) writes
 1000 permits. `WellFormed` rejects the root; when it runs, it breaks statement 1.
@@ -261,20 +262,20 @@ def joinsOk (bus : List BUse) (as : List Act) (o : Obs) : Bool :=
     | .pair (.nat 62) (.pair (.nat j) (.ocSucceeded _)) => j == i
     | _ => false
 
-/-- Statement 2 (review batch 11b form): not blocked; a `Succeeded` run has `available = k + r` and
+/-- Statement 2 (review batch 12 form): not blocked; a `Succeeded` run has `available = k + r` and
 the joins of the uses that must succeed recorded `Succeeded`. -/
 def claim2 (bus : List BUse) (as : List Act) (k r : Nat) (o : Obs) : Bool :=
-  o.summary != .blocked &&
   match o.summary with
   | .done (.succeeded v) => availOf v == some (k + r) && joinsOk bus as o
-  | _ => true
+  | .fatal _ => true
+  | _ => false
 
-/-- Statement 5 (review batch 11b form). -/
+/-- Statement 5 (review batch 12 form). -/
 def claim5 (bus : List BUse) (as : List Act) (o : Obs) : Bool :=
-  o.summary != .blocked &&
   match o.summary with
   | .done (.succeeded v) => v == .unit && joinsOk bus as o
-  | _ => true
+  | .fatal _ => true
+  | _ => false
 
 def claimHi (n : Nat) (o : Obs) : Bool :=
   match highest o with

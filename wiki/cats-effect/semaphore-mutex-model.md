@@ -1,7 +1,7 @@
 # Semaphore and Mutex model, CE-0060
 
 > Sources: Cats Effect v3.7.1 (`std/.../Semaphore.scala:28-298`, `std/.../Mutex.scala:24-112`, `std/.../LockQueue.scala:24-110`, `kernel/.../Resource.scala:156-208`, `:388-397`, `:879-880`, `:942-944`, `:1229-1234`, `kernel/jvm-native/.../SyncRef.scala:30-95`, `kernel/.../Ref.scala:123-124`, `:208-250`, `IO.scala:1715-1720`, `:1822-1830`, `:1996-2180`, `IODeferred.scala:62-79`, `docs/std/mutex.md:6-7`); cats-core 2.13.0 (`cats/instances/queue.scala:136-138`, `cats/Traverse.scala:299-309`, `cats/Foldable.scala:591-596`, `cats/instances/option.scala:145-149`); PR #4648; own Phase 7 track S work and scala-cli runs, 2026-11-15
-> Raw: [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md); [Review 11b fixes](../../raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md)
+> Raw: [Review batch 12 notes](../../raw/project-decisions/2026-11-15-review-batch-12-notes.md); [Track S notes](../../raw/cats-effect/2026-11-15-semaphore-mutex-track-s-notes.md); [Review 11b fixes](../../raw/cats-effect/2026-11-15-semaphore-mutex-review11b-fixes.md); [Review 12 and battery](../../raw/cats-effect/2026-11-15-semaphore-mutex-review12-battery.md)
 
 ## Overview
 
@@ -29,6 +29,7 @@ random-schedule smoke test with wrong-function checks.
 | `Props/Phase7/Semaphore.lean` | 8 statements; harness `HS` (62), behaviour tables `BH` (63), FIFO harness `FL` (64); `semLib` |
 | `Proofs/Phase7/SemaphoreWitness.lean` | Satisfiability witnesses (decision 53) |
 | `Proofs/Phase7/SemaphoreCount.lean` | `semCountAtRest_refuted` (CE-0060) |
+| `Proofs/Phase7/SemaphoreBattery*.lean` | Decision 63 wrong-function battery (closures `WL`, 66), 38 kernel rows |
 | `Proofs/Phase7/SemaphoreCountFixed*.lean` | Fixed twin (closures `FX`, 65) and its kernel check (`TwinChecks`) |
 | `tools/SemSmoke/Main.lean` | `lake exe semsmoke [runs]` |
 
@@ -68,10 +69,10 @@ cases.
 | Entry | Status | Claim |
 |---|---|---|
 | `std.Semaphore.noLostPermit` | open | all fibers ended → `available = k + released` (all `WellFormed` user code, cancels anywhere) |
-| `std.Semaphore.noDeadlock` | open | behaviour tables, `need ≤ k`: no stopped run is `blocked`; a `Succeeded` run has `available = k + released` and `Succeeded` join records for the uses that must succeed (review batch 11b form) |
+| `std.Semaphore.noDeadlock` | open | behaviour tables, `need ≤ k`: every stopped run is `Succeeded` with `available = k + released` and `Succeeded` join records for the uses that must succeed, or `fatal` (review batch 12 form) |
 | `std.Semaphore.permit.atMostK` | open | at most `k` counted holders at once |
 | `std.Mutex.lock.mutualExclusion` | open | at most one counted holder at once |
-| `std.Mutex.lock.noDeadlock` | open | behaviour tables: no stopped run is `blocked` (the lock is free at the end); a `Succeeded` run returns `()` with `Succeeded` join records (review batch 11b form) |
+| `std.Mutex.lock.noDeadlock` | open | behaviour tables: every stopped run is `Succeeded(())` with `Succeeded` join records (the lock is free at the end), or `fatal` (review batch 12 form) |
 | `std.Semaphore.count.atRest` | refuted (CE-0060) | all fibers ended → `count = available` |
 | `std.Semaphore.acquireN.fifo` | open | strict FIFO: after `releaseN(r)` the longest prefix with sum ≤ r is served |
 | `std.Mutex.lock.semaphoreTwin` | open | each (outcome, trace) of `Mutex` is one of `Semaphore(1)` (one direction; the converse is a different claim, not registered) |
@@ -92,6 +93,21 @@ Fix: the harness records each join outcome in the trace, and statement 2 claims 
 joined, not canceled uses whose own code succeeds; `w1_breaks` (kernel) and `semsmoke` show the wrong
 function fails. Lesson: a behaviour table that takes any `Err` includes fatal errors; claim "not
 blocked", not "Succeeded".
+
+Review batch 12 (2026-11-15): H2 (HOLLOW): the 11b form of `noDeadlock` ("not `blocked`") let a root
+that ends `Errored` pass, so an `available` that always raises met every `Semaphore` statement. Both
+`noDeadlock` statements now claim "`Succeeded` with the claims, or `fatal`". Decision 63: a
+kernel-checked wrong-function battery (`Proofs/Phase7/SemaphoreBattery.lean`, 38 rows, about 2 min,
+3 GB):
+
+| op | raises | hangs | drops | doubles |
+|---|---|---|---|---|
+| acquire, acquireN, release, releaseN, tryAcquire, tryAcquireN, permit | noDeadlock | noDeadlock | noDeadlock | noDeadlock |
+| available | noDeadlock | noDeadlock | n/a (read); wrong value: noDeadlock | n/a (read) |
+| count | noDeadlock | noDeadlock | n/a (read); wrong value: acquireN.fifo | n/a (read) |
+| lock | lock.noDeadlock | lock.noDeadlock | lock.mutualExclusion | lock.noDeadlock |
+
+Each row also has the v3.7.1 run of the same input, which meets the statement (`good_*`).
 
 Why open: a proof for all schedules needs a state invariant over `Step`/`SchedP` (for example
 permits + held + sunk = k + released), as the open Phase 6 entries.
