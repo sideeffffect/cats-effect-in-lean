@@ -3013,18 +3013,18 @@ std.Queue.UnboundedAsyncQueue.notifyOne,std,method,std/shared/src/main/scala/cat
 std.Queue.DroppingAsyncQueue.offer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,993,todo,,std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.twinSeq
 std.Queue.DroppingAsyncQueue.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,999,todo,,std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.twinSeq
 std.Queue.DroppingAsyncQueue.tryOfferUnsafe,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1002,excluded,internal: private helper; modelled as part of its public caller,
-std.Queue.UnsafeBounded.buffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1017,excluded,internal: private helper; modelled as part of its public caller,
-std.Queue.UnsafeBounded.sequenceBuffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1019,excluded,internal: private helper; modelled as part of its public caller,
-std.Queue.UnsafeBounded.head,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1020,excluded,internal: private helper; modelled as part of its public caller,
-std.Queue.UnsafeBounded.tail,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1021,excluded,internal: private helper; modelled as part of its public caller,
-std.Queue.UnsafeBounded.LookAheadStep,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1023,excluded,internal: private helper; modelled as part of its public caller,
+std.Queue.UnsafeBounded.buffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1017,excluded,"deferred: phase 9 (weak memory model): lock-free internals of UnsafeBounded/UnsafeUnbounded; the track Q model is a sequentially consistent list, not a mirror of this field (review batch 11a D2)",
+std.Queue.UnsafeBounded.sequenceBuffer,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1019,excluded,"deferred: phase 9 (weak memory model): lock-free internals of UnsafeBounded/UnsafeUnbounded; the track Q model is a sequentially consistent list, not a mirror of this field (review batch 11a D2)",
+std.Queue.UnsafeBounded.head,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1020,excluded,"deferred: phase 9 (weak memory model): lock-free internals of UnsafeBounded/UnsafeUnbounded; the track Q model is a sequentially consistent list, not a mirror of this field (review batch 11a D2)",
+std.Queue.UnsafeBounded.tail,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1021,excluded,"deferred: phase 9 (weak memory model): lock-free internals of UnsafeBounded/UnsafeUnbounded; the track Q model is a sequentially consistent list, not a mirror of this field (review batch 11a D2)",
+std.Queue.UnsafeBounded.LookAheadStep,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1023,excluded,"deferred: phase 9 (weak memory model): lock-free internals of UnsafeBounded/UnsafeUnbounded; the track Q model is a sequentially consistent list, not a mirror of this field (review batch 11a D2)",
 std.Queue.UnsafeBounded.FailureSignal,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1025,excluded,internal: private helper; modelled as part of its public caller,
 std.Queue.UnsafeBounded.debug,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1029,todo,,
-std.Queue.UnsafeBounded.size,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1032,todo,,std.Queue.twinSeq
-std.Queue.UnsafeBounded.put,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1049,todo,,std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness;std.Queue.twinSeq
-std.Queue.UnsafeBounded.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1082,todo,,std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness;std.Queue.twinSeq
+std.Queue.UnsafeBounded.size,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1032,todo,,
+std.Queue.UnsafeBounded.put,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1049,todo,,
+std.Queue.UnsafeBounded.take,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1082,todo,,
 std.Queue.UnsafeBounded.drain,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1116,todo,,
-std.Queue.UnsafeBounded.project,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1186,excluded,internal: private helper; modelled as part of its public caller,
+std.Queue.UnsafeBounded.project,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1186,excluded,"deferred: phase 9 (weak memory model): lock-free internals of UnsafeBounded/UnsafeUnbounded; the track Q model is a sequentially consistent list, not a mirror of this field (review batch 11a D2)",
 std.Queue.catsInvariantForQueue,std,method,std/shared/src/main/scala/cats/effect/std/Queue.scala,1190,todo,,
 std.QueueSink.offer,std,method,std/shared/src/main/scala/cats/effect/std/QueueSink.scala,32,todo,,
 std.QueueSink.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/QueueSink.scala,44,todo,,
@@ -3210,12 +3210,12 @@ std.UUIDGen.catsIorTUUIDGen,std,method,std/shared/src/main/scala/cats/effect/std
 std.UUIDGen.catsIndexedReaderWriterStateTUUIDGen,std,method,std/shared/src/main/scala/cats/effect/std/UUIDGen.scala,113,excluded,"out-of-scope: monad-transformer instance (OptionT, EitherT, Kleisli, ...); user decision Q1 (2026-11-10): ignore monad transformers",
 std.UUIDGen.fromSecureRandom,std,method,std/shared/src/main/scala/cats/effect/std/UUIDGen.scala,121,todo,,
 std.UUIDGen.TranslatedUUIDGen.randomUUID,std,method,std/shared/src/main/scala/cats/effect/std/UUIDGen.scala,143,todo,,
-std.UnsafeUnbounded.first,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,24,excluded,internal: private helper; modelled as part of its public caller,
-std.UnsafeUnbounded.last,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,25,excluded,internal: private helper; modelled as part of its public caller,
+std.UnsafeUnbounded.first,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,24,excluded,"deferred: phase 9 (weak memory model): lock-free internals of UnsafeBounded/UnsafeUnbounded; the track Q model is a sequentially consistent list, not a mirror of this field (review batch 11a D2)",
+std.UnsafeUnbounded.last,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,25,excluded,"deferred: phase 9 (weak memory model): lock-free internals of UnsafeBounded/UnsafeUnbounded; the track Q model is a sequentially consistent list, not a mirror of this field (review batch 11a D2)",
 std.UnsafeUnbounded.FailureSignal,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,26,excluded,internal: private helper; modelled as part of its public caller,
-std.UnsafeUnbounded.size,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,28,todo,,std.Queue.twinSeq
-std.UnsafeUnbounded.put,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,38,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement;std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness;std.Queue.twinSeq
-std.UnsafeUnbounded.take,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,52,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement;std.Queue.Async.noLoss;std.Queue.Async.noDup;std.Queue.Async.fifo;std.Queue.Async.noDeadlock;std.Queue.Async.takerLiveness;std.Queue.twinSeq
+std.UnsafeUnbounded.size,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,28,todo,,
+std.UnsafeUnbounded.put,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,38,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
+std.UnsafeUnbounded.take,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,52,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement
 std.UnsafeUnbounded.debug,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,88,todo,,
 std.UnsafeUnbounded.Cell.data,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,102,todo,,
 std.UnsafeUnbounded.Cell.apply,std,method,std/shared/src/main/scala/cats/effect/std/UnsafeUnbounded.scala,104,modelled,,std.Queue.UnboundedAsyncQueue.take.timeout.noLostElement

@@ -26,8 +26,9 @@ hypothesis is needed (as `parTraverseN` statements 5-7).
    `tests/shared/src/test/scala/cats/effect/std/QueueSuite.scala:793-850`):
    `IO.uncancelable(poll => poll(op).map(r => record(r)))`. `record` appends an event to the trace
    (`UserEffect.emit`): `offered x` after `offer(x)` returned, `took x` after `take`,
-   `tryTook r` after `tryTake`, `tryOffered (x, b)` after `tryOffer(x)`, `size n`. `cede` is
-   `IO.cede`.
+   `tryTook r` after `tryTake`, `tryOffered (x, b)` after `tryOffer(x)`, `size n`. An `offer`
+   also records `offerStart x` inside the masked region, before `poll(offer(x))`. Each event
+   carries the index of its script (review batch 11a). `cede` is `IO.cede`.
 3. The cancel plan: for each `(n, i)`, `IO.cede` `n` times, then `fiber_i.cancel`.
 4. Mode `cancelAll`: cancel every fiber (in start order); mode `join js`: join the fibers with
    index in `js` (in order), then cancel every fiber.
@@ -47,18 +48,24 @@ Per family (twins: the `Concurrent` and the `Async` implementations of the same 
    design, `Q:184-228`).
 2. `noDup` (no duplicated or invented element): every run that stops removes a sub-multiset of the
    elements that the scripts offer (all kinds).
-3. `fifo`: if at most one script takes (`take`/`tryTake`), then for every script its offered
-   elements are removed in its offer order (a `Sublist`), all kinds. Elements are distinct
+3. `fifo`: for every remover (each script, and the root drain) and every producing script, the
+   remover removes that script's elements in the script's offer order (a `Sublist`), all kinds.
+   The events of different fibers are recorded in record order, which is not the dequeue order, so
+   the order is stated per remover and per producer (review batch 11a F1: the old hypothesis "at
+   most one script takes" is gone). Elements are distinct
    (`Nodup`): the queue never inspects elements, so distinct values only make them traceable.
    Scaladoc: "insertion and retrieval of elements of type `A` in a first-in-first-out (FIFO)
    manner" (`Q:31-33`).
 4. `noDeadlock`: in mode `cancelAll` every run that stops ends `Succeeded`: canceling waiting
    offerers and takers never hangs, and nothing else blocks.
 5. `takerLiveness` (no lost wakeup): scripts are pure producers (`offer` only) and pure
-   consumers (`take` only), the plan cancels only consumers, the root joins all consumers, and
-   all consumers together take at most as many elements as the producers offer. Then every run
-   that stops ends `Succeeded`: a waiting taker is woken when an element is there. Kinds that
-   never drop. A run that stops `blocked` is a deadlock (a lost wakeup).
+   consumers (`take` only), the plan cancels only consumers, the root joins all consumers. Every
+   run that stops ends `Succeeded`, or stops `blocked` only when the queue has nothing to give
+   (`QuietBlock`: every recorded offered element was removed, and every started `offer` returned).
+   So a waiting taker is woken when an element is there or an offerer waits. No count hypothesis
+   (review batch 11a L1: it counted the takes of canceled consumers). Kinds that never drop.
+   `outcomesP` observes only runs that stop, so a livelock (a run that never stops) is not seen
+   (review batch 11a D5).
 
 Twin statement (one statement for both families):
 
@@ -131,6 +138,8 @@ def evTryTook : Nat := 2
 def evTryOffered : Nat := 3
 def evDrained : Nat := 4
 def evSize : Nat := 5
+/-- An `offer` started (recorded inside the masked region, before `poll(offer)`). -/
+def evOfferStart : Nat := 6
 
 /-! ## Closures (namespace `hns`) -/
 
@@ -151,16 +160,18 @@ inductive QH where
   | drainK (o : Nat)
   /-- `_ => drain` after a recorded element. -/
   | drainAgain (o : Nat)
-  /-- `_ => (rest of the script)`. -/
-  | next (o : Nat) (rest : Val)
-  /-- `poll => poll(op).map(record)`. -/
-  | opBody (o : Nat) (op : Val)
-  /-- `r => record (tag, r)`. -/
-  | recK (tag : Nat)
-  /-- `_ => record (tag, x)`. -/
-  | recC (tag : Nat) (x : Val)
-  /-- `b => record (tryOffered, (x, b))`. -/
-  | recTO (x : Val)
+  /-- `_ => (rest of script `i`)`. -/
+  | next (o i : Nat) (rest : Val)
+  /-- `poll => poll(op).map(record)` in script `i` (an `offer` first records `offerStart`). -/
+  | opBody (o i : Nat) (op : Val)
+  /-- `r => record (tag, i, r)`. -/
+  | recK (i tag : Nat)
+  /-- `_ => record (tag, i, x)`. -/
+  | recC (i tag : Nat) (x : Val)
+  /-- `b => record (tryOffered, i, (x, b))`. -/
+  | recTO (i : Nat) (x : Val)
+  /-- `_ => poll(q.offer(x)).map(record offered)` after the `offerStart` event. -/
+  | offerPoll (o i : Nat) (x : Val) (m p : Nat)
   /-- `_ => ()`: the end of a `cede` chain. -/
   | unitK
   deriving DecidableEq, Repr
@@ -174,11 +185,12 @@ def QH.toVal : QH → Val
   | .cancelNext o t => cloVal hns 5 [.fn o, t]
   | .drainK o => cloVal hns 6 [.fn o]
   | .drainAgain o => cloVal hns 7 [.fn o]
-  | .next o r => cloVal hns 8 [.fn o, r]
-  | .opBody o op => cloVal hns 9 [.fn o, op]
-  | .recK t => cloVal hns 10 [.nat t]
-  | .recC t x => cloVal hns 11 [.nat t, x]
-  | .recTO x => cloVal hns 12 [x]
+  | .next o i r => cloVal hns 8 [.fn o, .nat i, r]
+  | .opBody o i op => cloVal hns 9 [.fn o, .nat i, op]
+  | .recK i t => cloVal hns 10 [.nat i, .nat t]
+  | .recC i t x => cloVal hns 11 [.nat i, .nat t, x]
+  | .recTO i x => cloVal hns 12 [.nat i, x]
+  | .offerPoll o i x m p => cloVal hns 14 [.fn o, .nat i, x, .poll m p]
   | .unitK => cloVal hns 13 []
 
 def QH.ofFields : Nat → List Val → Option QH
@@ -190,11 +202,12 @@ def QH.ofFields : Nat → List Val → Option QH
   | 5, [.fn o, t] => some (.cancelNext o t)
   | 6, [.fn o] => some (.drainK o)
   | 7, [.fn o] => some (.drainAgain o)
-  | 8, [.fn o, r] => some (.next o r)
-  | 9, [.fn o, op] => some (.opBody o op)
-  | 10, [.nat t] => some (.recK t)
-  | 11, [.nat t, x] => some (.recC t x)
-  | 12, [x] => some (.recTO x)
+  | 8, [.fn o, .nat i, r] => some (.next o i r)
+  | 9, [.fn o, .nat i, op] => some (.opBody o i op)
+  | 10, [.nat i, .nat t] => some (.recK i t)
+  | 11, [.nat i, .nat t, x] => some (.recC i t x)
+  | 12, [.nat i, x] => some (.recTO i x)
+  | 14, [.fn o, .nat i, x, .poll m p] => some (.offerPoll o i x m p)
   | 13, [] => some .unitK
   | _, _ => none
 
@@ -213,20 +226,20 @@ def QH.ofId? (id : Nat) : Option QH :=
 /-- `IO.cede` `n` times (`IO.cede *> ... *> IO.unit`). -/
 def cedes : Nat → IO
   | 0 => .pure .unit
-  | n + 1 => .flatMap .cede (QH.next 0 (listV (List.replicate n (Op.toVal .cede)))).fn
+  | n + 1 => .flatMap .cede (QH.next 0 0 (listV (List.replicate n (Op.toVal .cede)))).fn
 
-/-- The program of one operation on queue `o`. -/
-def opIO (o : Nat) (op : Op) : IO :=
+/-- The program of one operation of script `i` on queue `o`. -/
+def opIO (o i : Nat) (op : Op) : IO :=
   match op with
   | .cede => .cede
-  | op => .uncancelable (QH.opBody o op.toVal).fn
+  | op => .uncancelable (QH.opBody o i op.toVal).fn
 
-/-- A script: its operations in sequence. -/
-def scriptIO (o : Nat) : List Val → IO
+/-- Script `i`: its operations in sequence. -/
+def scriptIO (o i : Nat) : List Val → IO
   | [] => .pure .unit
   | op :: rest =>
     match Op.ofVal? op with
-    | some op => .flatMap (opIO o op) (QH.next o (listV rest)).fn
+    | some op => .flatMap (opIO o i op) (QH.next o i (listV rest)).fn
     | none => .error { code := 999999, kind := .fatal }
 
 /-- Drain: `tryTake` until `None`. -/
@@ -266,8 +279,8 @@ private def ret (v : Val) (es : List UserEffect := []) : UserResult := { effects
 private def prog (p : IO) : UserResult := { out := .prog p }
 def illTyped : UserResult := { out := .throw { code := 999999, kind := .fatal } }
 
-/-- An event value. -/
-def ev (tag : Nat) (x : Val) : Val := .pair (.nat tag) x
+/-- An event value: tag, script index (`0` for the drain), value. -/
+def ev (tag i : Nat) (x : Val) : Val := .pair (.nat tag) (.pair (.nat i) x)
 
 /-- Run one harness closure. -/
 def QH.call (l : QH) (arg : Val) (v : View) : UserResult :=
@@ -276,14 +289,14 @@ def QH.call (l : QH) (arg : Val) (v : View) : UserResult :=
     match arg, unlistV s with
     | .fn o, some [] => prog (planIO v o [] ((unlistV p).getD []) m)
     | .fn o, some (s0 :: rest) =>
-      prog (.flatMap (.start (scriptIO o ((unlistV s0).getD []))) (QH.startNext o (listV []) (listV rest) p m).fn)
+      prog (.flatMap (.start (scriptIO o 0 ((unlistV s0).getD []))) (QH.startNext o (listV []) (listV rest) p m).fn)
     | _, _ => illTyped
   | .startNext o fs r p m =>
     let fs' := (unlistV fs).getD [] ++ [arg]
     match unlistV r with
     | some [] => prog (planIO v o fs' ((unlistV p).getD []) m)
     | some (s :: rest) =>
-      prog (.flatMap (.start (scriptIO o ((unlistV s).getD []))) (QH.startNext o (listV fs') (listV rest) p m).fn)
+      prog (.flatMap (.start (scriptIO o fs'.length ((unlistV s).getD []))) (QH.startNext o (listV fs') (listV rest) p m).fn)
     | none => illTyped
   | .planCancel o fs i p m =>
     match ((unlistV fs).getD [])[i]? with
@@ -300,21 +313,23 @@ def QH.call (l : QH) (arg : Val) (v : View) : UserResult :=
   | .cancelNext o t => prog (cancelAllIO v o ((unlistV t).getD []))
   | .drainK o =>
     match arg with
-    | .some x => { effects := [.emit (ev evDrained x)], out := .prog (drainIO o) }
+    | .some x => { effects := [.emit (ev evDrained 0 x)], out := .prog (drainIO o) }
     | _ => prog (.pure .unit)
   | .drainAgain o => prog (drainIO o)
-  | .next o r => prog (scriptIO o ((unlistV r).getD []))
-  | .opBody o op =>
+  | .next o i r => prog (scriptIO o i ((unlistV r).getD []))
+  | .opBody o i op =>
     match arg, Op.ofVal? op with
-    | .poll m p, some (.offer x) => prog (.map (IO.applyPoll (offerIO o x) m p) (QH.recC evOffered x).fn)
-    | .poll m p, some (.tryOffer x) => prog (.map (IO.applyPoll (tryOfferIO o x) m p) (QH.recTO x).fn)
-    | .poll m p, some .take => prog (.map (IO.applyPoll (takeIO o) m p) (QH.recK evTook).fn)
-    | .poll m p, some .tryTake => prog (.map (IO.applyPoll (tryTakeIO o) m p) (QH.recK evTryTook).fn)
-    | .poll m p, some .size => prog (.map (IO.applyPoll (sizeIO o) m p) (QH.recK evSize).fn)
+    | .poll m p, some (.offer x) =>
+      prog (.flatMap (.delay (QH.recC i evOfferStart x).fn) (QH.offerPoll o i x m p).fn)
+    | .poll m p, some (.tryOffer x) => prog (.map (IO.applyPoll (tryOfferIO o x) m p) (QH.recTO i x).fn)
+    | .poll m p, some .take => prog (.map (IO.applyPoll (takeIO o) m p) (QH.recK i evTook).fn)
+    | .poll m p, some .tryTake => prog (.map (IO.applyPoll (tryTakeIO o) m p) (QH.recK i evTryTook).fn)
+    | .poll m p, some .size => prog (.map (IO.applyPoll (sizeIO o) m p) (QH.recK i evSize).fn)
     | _, _ => illTyped
-  | .recK t => ret .unit [.emit (ev t arg)]
-  | .recC t x => ret .unit [.emit (ev t x)]
-  | .recTO x => ret .unit [.emit (ev evTryOffered (.pair x arg))]
+  | .offerPoll o i x m p => prog (.map (IO.applyPoll (offerIO o x) m p) (QH.recC i evOffered x).fn)
+  | .recK i t => ret .unit [.emit (ev t i arg)]
+  | .recC i t x => ret .unit [.emit (ev t i x)]
+  | .recTO i x => ret .unit [.emit (ev evTryOffered i (.pair x arg))]
   | .unitK => ret .unit
 
 /-- The environment: queue closures, harness closures; any other id throws (no user code). -/
@@ -330,25 +345,39 @@ def henv : UserEnv :=
 
 /-! ## Reading the trace -/
 
-/-- The events of a trace in emission order. -/
-def events (out : List Val) : List (Nat × Val) :=
+/-- The events of a trace in emission order: (tag, script index, value). -/
+def events (out : List Val) : List (Nat × Nat × Val) :=
   out.reverse.filterMap fun
-    | .pair (.nat t) x => some (t, x)
+    | .pair (.nat t) (.pair (.nat i) x) => some (t, i, x)
     | _ => none
 
 /-- The elements that offers put in (`offer` returned, `tryOffer` returned `true`), in order. -/
 def offeredOf (out : List Val) : List Val :=
   (events out).filterMap fun
-    | (0, x) => some x
-    | (3, .pair x (.bool true)) => some x
+    | (0, _, x) => some x
+    | (3, _, .pair x (.bool true)) => some x
+    | _ => none
+
+/-- The elements of the `offer`s that started (`offerStart` events). -/
+def startedOf (out : List Val) : List Val :=
+  (events out).filterMap fun
+    | (6, _, x) => some x
     | _ => none
 
 /-- The elements that left the queue (`take`, `tryTake` with `Some`, drain), in order. -/
 def removedOf (out : List Val) : List Val :=
   (events out).filterMap fun
-    | (1, x) => some x
-    | (2, .some x) => some x
-    | (4, x) => some x
+    | (1, _, x) => some x
+    | (2, _, .some x) => some x
+    | (4, _, x) => some x
+    | _ => none
+
+/-- The remover of an element: script `i` (`take`, `tryTake`), or the root drain (`none`). -/
+def removedBy (out : List Val) (c : Option Nat) : List Val :=
+  (events out).filterMap fun
+    | (1, i, x) => if c = some i then some x else none
+    | (2, i, .some x) => if c = some i then some x else none
+    | (4, _, x) => if c = none then some x else none
     | _ => none
 
 /-- All elements that the scripts offer (`offer`, `tryOffer`). -/
@@ -411,26 +440,29 @@ def NoDup (fam : QKind → Prop) : Prop :=
   ∀ k scripts plan mode, fam k → ∀ o, runs k scripts plan mode o →
     SubMulti (removedOf o.out) (allOffers scripts)
 
-/-- Statement 3: FIFO per producer when at most one script takes. -/
+/-- Statement 3: FIFO per remover and per producer. -/
 def Fifo (fam : QKind → Prop) : Prop :=
   ∀ k scripts plan, fam k → (allOffers scripts).Nodup →
-    (scripts.filter takes).length ≤ 1 →
     ∀ o, runs k scripts plan .cancelAll o →
-      ∀ s ∈ scripts, ((removedOf o.out).filter (· ∈ offersOf s)).Sublist (offersOf s)
+      ∀ c : Option Nat, ∀ s ∈ scripts, ((removedBy o.out c).filter (· ∈ offersOf s)).Sublist (offersOf s)
 
 /-- Statement 4: canceling all fibers never hangs. -/
 def NoDeadlock (fam : QKind → Prop) : Prop :=
   ∀ k scripts plan, fam k → ∀ o, runs k scripts plan .cancelAll o → o.summary = .done (.succeeded .unit)
+
+/-- A run that stops `blocked` is allowed only when the queue has nothing to give: every recorded
+offered element was removed, and every started `offer` returned. -/
+def QuietBlock (o : Obs) : Prop :=
+  o.summary = .blocked ∧ SubMulti (offeredOf o.out) (removedOf o.out) ∧ SubMulti (startedOf o.out) (offeredOf o.out)
 
 /-- Statement 5: a waiting taker is woken when an element is there (no lost wakeup). -/
 def TakerLiveness (fam : QKind → Prop) : Prop :=
   ∀ k scripts plan, fam k →
     (∀ s ∈ scripts, producer s ∨ consumer s) →
     (∀ p ∈ plan, ∀ s, scripts[p.2]? = some s → consumer s) →
-    (scripts.map takeCount).sum ≤ (allOffers scripts).length →
     ∀ o, runs k scripts plan (.join ((List.range scripts.length).filter fun i =>
         match scripts[i]? with | some s => takes s | none => false)) o →
-      o.summary = .done (.succeeded .unit)
+      o.summary = .done (.succeeded .unit) ∨ QuietBlock o
 
 /-- The registered statements. -/
 def concNoLoss : Prop := NoLoss ConcKeep

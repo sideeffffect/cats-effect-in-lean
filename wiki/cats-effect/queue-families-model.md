@@ -43,9 +43,9 @@ Harness: `rootIO k scripts plan mode`. Fibers run scripts of `offer`, `tryOffer`
 |---|---|
 | `std.Queue.Concurrent.noLoss` / `Async.noLoss` | a run that ends `Succeeded` removes every recorded offered element (kinds that never drop) |
 | `...noDup` | removed elements are a sub-multiset of offered elements (all kinds) |
-| `...fifo` | with at most one taking script, each script's elements leave in offer order (Scaladoc `Q:31-33`) |
+| `...fifo` | every remover (each script, the drain) removes each producer's elements in offer order (Scaladoc `Q:31-33`); events carry the script index |
 | `...noDeadlock` | mode `cancelAll`: every run that stops ends `Succeeded` |
-| `...takerLiveness` | producers and consumers only, takes <= offers, consumers joined: every run that stops ends `Succeeded` (no lost wakeup) |
+| `...takerLiveness` | producers and consumers only, consumers joined: every run that stops ends `Succeeded`, or `blocked` with nothing to give (`QuietBlock`: every recorded offer removed, every started offer returned) |
 | `std.Queue.twinSeq` | `(boundedForConcurrent(cap), bounded(cap))`, `(droppingForConcurrent(cap), dropping(cap))`, `(unboundedForConcurrent, unbounded)` give the same (summary, trace) results for one fiber |
 
 Each entry: witness (`QueueWitness`), wrong function (`QueueWrongFunction`, kernel-checked; `qsmoke wrong`), smoke (`qsmoke`).
@@ -53,6 +53,14 @@ Each entry: witness (`QueueWitness`), wrong function (`QueueWrongFunction`, kern
 Scope of the quantification: the queue state is private (the object reference), and a queue never calls user code, so a user program acts on a queue only through method calls in fibers, canceled at any point; the harness quantifies over exactly these (all scripts, plans, schedules). Each call runs in the atomic pattern that the CE test suite checks (`QueueSuite.scala:793-850`); a plain `take` that is canceled after it returned loses its value by definition, and a `take` inside `timeout` or `race` is the CE-0003 shape (#4571), so these are not in the statements. The atomicity of `take` under cancel is not in the Scaladoc; its source is that test (an undisputed invariant).
 
 Review batch 11a ([review](../../review/2026-11-15-review-batch-11a.md)): `noLoss`, `noDup`, `noDeadlock`, `twinSeq` FAITHFUL as statements. `fifo` HOLLOW: the hypothesis "at most one taking script" is not documented; fix: tag removal events with the script index and state per-consumer, per-producer order. `takerLiveness` HOLLOW: the count hypothesis counts canceled consumers, so the cancel pass-on (`cleanup`, `notifyNextTaker`, `notifyAnyway`) is not tested for `AbstractQueue` and `unbounded`; fix: `blocked` only if every recorded offer is removed and every started offer returned. `takerLiveness` sees `blocked` runs only, not a livelock.
+
+Fixes of review batch 11a (2026-11-15):
+
+- F1 (`fifo`): each event carries its script index; `Fifo` states the order per remover (`removedBy`, the drain is its own remover) and per producer, with no "one taker" hypothesis. New wrong functions `wLastIfWaiters` (`AbstractQueue#take` takes the last element when another taker waits) and `wLastIfWaitersAsync`: three consumers, one producer, plan `[(1, 1)]`: consumer 0 removes `2` then `1` (kernel-checked; the mirror meets the claim on the same input). The old single-script inputs of `wLifo`/`wLifoConc` now take twice in one script.
+- L1 (`takerLiveness`): no count hypothesis. The harness records `offerStart x` before `poll(offer(x))`, and a `blocked` stop is allowed only as `QuietBlock`. New wrong functions `wNoPassOn` (no `cleanup`/`notifyNextTaker` pass-on) and `wNoAnywayU` (no `notifyAnyway`): `[[take], [take], [offer 1]]`, plan `[(1, 0)]`, join `[0, 1]`: blocked with element 1 in the queue (kernel-checked; the mirror ends `Succeeded`).
+- D1: `QC.getState` is not public any more (it returns the takers' `Deferred`s); user programs under `WellFormed` with `isPublic` cannot call the `Concurrent` `size` (no statement uses `isPublic`).
+- D2: the `UnsafeBounded`/`UnsafeUnbounded` `put`/`take`/`size` rows are out of the track Q entries (the model is a sequentially consistent list, a specification, not a mirror of the CAS code); the excluded helper rows (`buffer`, `sequenceBuffer`, `head`, `tail`, `LookAheadStep`, `project`, `first`, `last`) now have the reason `deferred: phase 9 (weak memory model)`. `std.UnsafeUnbounded.put`/`take` stay `modelled` through the older CE-0003 entry.
+- D3: the queue template has its own name base (40000; latch 20000, semaphore 30000). D4: `selftest.py` has a floor for the six queue ops. D5: livelock is not seen (registry notes and the statement doc).
 
 Open points: proofs need invariants over `SchedP` runs (as the Phase 6 entries). No linearizability statement yet (only the sequential twin and FIFO). `mapK` (`Q:51-58`, open issue #4483), `tryTakeN`/`tryOfferN`, `unsafeBounded`, `unsafeUnbounded` are not mirrored.
 

@@ -513,7 +513,7 @@ def registry : List Entry := [
       a consumer canceled while it waits). Wrong function: QueueWrongFunction.wDrop_breaks \
       (kernel-checked). Smoke: qsmoke. Open." },
   { id := "std.Queue.Async.noLoss"
-    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take"]
+    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake"]
     prop := ``Props.Phase7.Queue.asyncNoLoss
     status := .«open»
     note := "No lost element (Async twins: bounded(1 < cap < 65534) = BoundedAsyncQueue, unbounded = \
@@ -537,7 +537,7 @@ def registry : List Entry := [
       iterations). No user code, so no WellFormed hypothesis. Satisfiable \
       (QueueWitness.conc_any_satisfiable). Wrong function: wDup_breaks. Smoke: qsmoke. Open." },
   { id := "std.Queue.Async.noDup"
-    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take", "std.Queue.dropping", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer"]
+    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.dropping", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer"]
     prop := ``Props.Phase7.Queue.asyncNoDup
     status := .«open»
     note := "No duplicated or invented element (all Async kinds incl. DroppingAsyncQueue). Async family under \
@@ -552,25 +552,29 @@ def registry : List Entry := [
     rows := ["std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.synchronous", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.tryOffer", "std.Queue.Synchronous.take", "std.Queue.Synchronous.tryTake", "std.Queue.circularBuffer"]
     prop := ``Props.Phase7.Queue.concFifo
     status := .«open»
-    note := "FIFO (Queue.scala:31-33): with at most one taking script, each script's offered elements leave the \
-      queue in offer order (Sublist; distinct elements, the queue never inspects them). All Concurrent \
-      kinds. Harness (Props/Phase7/Queue.lean, namespace 54): fibers run scripts of \
+    note := "FIFO (Queue.scala:31-33): every remover (each script, and the root drain) removes the elements of \
+      every producing script in that script's offer order (Sublist; distinct elements, the queue never \
+      inspects them); events carry the script index. No \"at most one taker\" hypothesis (review batch \
+      11a F1). All Concurrent kinds. Harness (Props/Phase7/Queue.lean, namespace 54): fibers run scripts of \
       offer/tryOffer/take/tryTake/size/cede, each in uncancelable(poll => poll(op).map(record)) \
       (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
       plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
       iterations). No user code, so no WellFormed hypothesis. Satisfiable \
-      (QueueWitness.conc_any_satisfiable). Wrong function: wLifoConc_breaks. Smoke: qsmoke. Open." },
+      (QueueWitness.conc_any_satisfiable). Wrong functions: wLifoConc_breaks; wLastIfWaiters_breaks (a take \
+      that serves the last element when another taker waits; three consumers). Smoke: qsmoke. Open." },
   { id := "std.Queue.Async.fifo"
-    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take", "std.Queue.dropping", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer"]
+    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.dropping", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer"]
     prop := ``Props.Phase7.Queue.asyncFifo
     status := .«open»
-    note := "FIFO (Queue.scala:31-33), all Async kinds. Async family under sequential consistency (each thunk \
+    note := "FIFO (Queue.scala:31-33) per remover and per producer, as the Concurrent entry (review batch 11a \
+      F1), all Async kinds. Async family under sequential consistency (each thunk \
       atomic; QueueAsync module doc). Harness (Props/Phase7/Queue.lean, namespace 54): fibers run scripts \
       of offer/tryOffer/take/tryTake/size/cede, each in uncancelable(poll => poll(op).map(record)) \
       (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
       plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
       iterations). No user code, so no WellFormed hypothesis. Satisfiable \
-      (QueueWitness.async_any_satisfiable). Wrong function: wLifo_breaks. Smoke: qsmoke. Open." },
+      (QueueWitness.async_any_satisfiable). Wrong functions: wLifo_breaks; wLastIfWaitersAsync_breaks. Smoke: \
+      qsmoke. Open." },
   { id := "std.Queue.Concurrent.noDeadlock"
     rows := ["std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.synchronous", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.tryOffer", "std.Queue.Synchronous.take", "std.Queue.Synchronous.tryTake", "std.Queue.circularBuffer"]
     prop := ``Props.Phase7.Queue.concNoDeadlock
@@ -584,7 +588,7 @@ def registry : List Entry := [
       iterations). No user code, so no WellFormed hypothesis. Satisfiable \
       (QueueWitness.conc_any_satisfiable). Wrong function: wHangConc_breaks. Smoke: qsmoke. Open." },
   { id := "std.Queue.Async.noDeadlock"
-    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take", "std.Queue.dropping", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer"]
+    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.dropping", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer"]
     prop := ``Props.Phase7.Queue.asyncNoDeadlock
     status := .«open»
     note := "No deadlock (all Async kinds). Async family under sequential consistency (each thunk atomic; \
@@ -599,27 +603,32 @@ def registry : List Entry := [
     prop := ``Props.Phase7.Queue.concTakerLiveness
     status := .«open»
     note := "No lost wakeup: pure producers and pure consumers, the plan cancels only consumers, the root joins \
-      all consumers, total takes <= total offers: every run that stops ends Succeeded (a run that stops \
-      blocked is a deadlock). Concurrent kinds that never drop. Harness (Props/Phase7/Queue.lean, \
+      all consumers: every run that stops ends Succeeded, or stops blocked only with nothing to give \
+      (QuietBlock: every recorded offered element removed, every started offer returned). No count \
+      hypothesis (review batch 11a L1). Livelock is not seen: outcomesP observes only runs that stop \
+      (review batch 11a D5). Concurrent kinds that never drop. Harness (Props/Phase7/Queue.lean, \
       namespace 54): fibers run scripts of offer/tryOffer/take/tryTake/size/cede, each in \
       uncancelable(poll => poll(op).map(record)) (QueueSuite \"not lose data on canceled take\"); a plan \
       cancels fibers after cedes; all scripts, plans, elements, capacities and PChoice schedules (a cancel \
       can land between any two run-loop iterations). No user code, so no WellFormed hypothesis. \
-      Satisfiable (QueueWitness.conc_live_satisfiable). Wrong function: wNoWake_breaks. Smoke: qsmoke. \
-      Open." },
+      Satisfiable (QueueWitness.conc_live_satisfiable: the pass-on run and a QuietBlock run). Wrong \
+      functions: wNoWake_breaks; wNoPassOn_breaks (no cleanup/notifyNextTaker pass-on, \
+      [[take],[take],[offer 1]]). Smoke: qsmoke. Open." },
   { id := "std.Queue.Async.takerLiveness"
-    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take"]
+    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.take"]
     prop := ``Props.Phase7.Queue.asyncTakerLiveness
     status := .«open»
-    note := "No lost wakeup (Async twins). Async family under sequential consistency (each thunk atomic; \
+    note := "No lost wakeup (Async twins), as the Concurrent entry: Succeeded or QuietBlock, no count \
+      hypothesis (review batch 11a L1); a livelock is not seen (outcomesP observes only runs that stop, D5). Async family under sequential consistency (each thunk atomic; \
       QueueAsync module doc). Harness (Props/Phase7/Queue.lean, namespace 54): fibers run scripts of \
       offer/tryOffer/take/tryTake/size/cede, each in uncancelable(poll => poll(op).map(record)) \
       (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
       plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
       iterations). No user code, so no WellFormed hypothesis. Satisfiable \
-      (QueueWitness.async_live_satisfiable). Wrong function: wNoNotify_breaks. Smoke: qsmoke. Open." },
+      (QueueWitness.async_live_satisfiable). Wrong functions: wNoNotify_breaks; wNoAnywayU_breaks (no \
+      notifyAnyway). Smoke: qsmoke. Open." },
   { id := "std.Queue.twinSeq"
-    rows := ["std.Queue.bounded", "std.Queue.dropping", "std.Queue.unbounded", "std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.AbstractQueue.size", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BaseBoundedAsyncQueue.size", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnboundedAsyncQueue.size", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.Queue.UnsafeBounded.size", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take", "std.UnsafeUnbounded.size"]
+    rows := ["std.Queue.bounded", "std.Queue.dropping", "std.Queue.unbounded", "std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.AbstractQueue.size", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BaseBoundedAsyncQueue.size", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnboundedAsyncQueue.size"]
     prop := ``Props.Phase7.Queue.twinSeq
     status := .«open»
     note := "Twin (decision 59): the Concurrent and the Async implementation of one factory agree on \
