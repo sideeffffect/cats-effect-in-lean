@@ -41,3 +41,12 @@ The four self-test fixtures `fieldless_lib*` tested only that removed check.
 - All ops, `opcount.py --seeds 51 52 53 --n 20000` (ops rUse rAllocated rBoth bracket bracketCase bracketFull guarantee race both memoize parTraverseN): 60,000 cases, all agree, 0 unsupported.
 - Resource ops boosted, `--seeds 61 62 63 --n 60000 --boost rUse=40 rAllocated=40 tpl_resBoth=40 res_both=10`: 180,000 cases, all agree; plus seed 64, 15,000 cases, all agree. Agreeing cases over seeds 61-64: rUse 117,382, rAllocated 87,564, rBoth 52,386.
 - Smoke `test/Phase6/ResourceSmoke.lean` (CE-0020 600 + 1,500 schedules, the open statements on 900 schedules, decision 41): passes (27 min).
+
+## Twin modules split for memory (2026-11-15)
+
+Every `TwinChecks` module now peaks under 8 GB (`/usr/bin/time -v`, local), with the same inputs, schedules and conclusions:
+
+- CE-0002 `Fixed_childCancel` (13.0 GB) and `Old_childCancel` (10.7 GB): `checkEqvP` = exact outcome set of each side and the comparison, three modules each in `ResourceEvalFixedParts/ChildCancel/` (5.3-7.6 GB, 26-41 s); the old theorem names are proven from them.
+- `BracketSmoke` (12.5 GB): one module per check in `BracketSmokeParts/` (`Elab.async false`); `law_8_8` (12.5 GB alone) in three parts (`Half/`, 6.5-7.2 GB).
+- `MemoizeFixed` (10.0 GB, 23 min): one module per check; each 120-schedule list in two halves of 60 (`range_split`), each grid in two halves by `a` (`grid_split`); `MemoizeFixedParts/Half/` (4.1-5.3 GB, 20-26 s).
+- `scripts/check_twin_checks.sh` builds sub-part directories before their combining modules, one module at a time.

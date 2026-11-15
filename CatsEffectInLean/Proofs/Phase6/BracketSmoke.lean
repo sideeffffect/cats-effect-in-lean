@@ -1,12 +1,31 @@
-import CatsEffectInLean.Props.Phase6.Bracket
-import CatsEffectInLean.Model.BracketExamples
-import CatsEffectInLean.Model.EnumP
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeDefs
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law03
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law23
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law13
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law33
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law53
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law73
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law83
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law04
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law24
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law14
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law54
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law84
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law95
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.Law88
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.LawWrongfunction
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.TwinPureC7
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.TwinPureC2
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.TwinPureU5
+import CatsEffectInLean.Proofs.Phase6.BracketSmokeParts.TwinPureU8
+
 
 /-!
 # Smoke tests of the `guarantee`/`bracket` properties (Phase 6, track G)
 
 Not registered. Exact outcome sets (`EqvP`, `exploreP`, `decide +kernel`) on concrete programs
-of `Model/BracketExamples.lean`.
+of `Model/BracketExamples.lean`. Each check is one module in `BracketSmokeParts/` (memory; a
+parallel CI matrix); this module collects them.
 They support the `open` entries; they prove nothing for all programs.
 
 * `guaranteeIsGuaranteeCase`: holds for 14 pairs `(fa, fin)`; a broken `guarantee` that never
@@ -25,42 +44,6 @@ open CatsEffectInLean.Model.Codec
 open CatsEffectInLean.Model.Bracket
 open CatsEffectInLean.Model.BracketExamples
 open CatsEffectInLean.Props.Phase6.Bracket
-
-/-! ## The law `guaranteeIsGuaranteeCase` -/
-
-def lawL (s f : Nat) : IO := guaranteeIO (.ext (.nat s)) (.ext (.nat f))
-def lawR (s f : Nat) : IO := guaranteeCaseIO (.ext (.nat s)) (uid 0 [.nat f])
-
-theorem law_0_3 : checkEqvP {} counterMaskModel env 400 (lawL 0 3) (lawR 0 3) = true := by decide +kernel
-theorem law_2_3 : checkEqvP {} counterMaskModel env 400 (lawL 2 3) (lawR 2 3) = true := by decide +kernel
-theorem law_1_3 : checkEqvP {} counterMaskModel env 400 (lawL 1 3) (lawR 1 3) = true := by decide +kernel
-theorem law_3_3 : checkEqvP {} counterMaskModel env 400 (lawL 3 3) (lawR 3 3) = true := by decide +kernel
-theorem law_5_3 : checkEqvP {} counterMaskModel env 400 (lawL 5 3) (lawR 5 3) = true := by decide +kernel
-theorem law_7_3 : checkEqvP {} counterMaskModel env 400 (lawL 7 3) (lawR 7 3) = true := by decide +kernel
-theorem law_8_3 : checkEqvP {} counterMaskModel env 400 (lawL 8 3) (lawR 8 3) = true := by decide +kernel
-theorem law_0_4 : checkEqvP {} counterMaskModel env 400 (lawL 0 4) (lawR 0 4) = true := by decide +kernel
-theorem law_2_4 : checkEqvP {} counterMaskModel env 400 (lawL 2 4) (lawR 2 4) = true := by decide +kernel
-theorem law_1_4 : checkEqvP {} counterMaskModel env 400 (lawL 1 4) (lawR 1 4) = true := by decide +kernel
-theorem law_5_4 : checkEqvP {} counterMaskModel env 400 (lawL 5 4) (lawR 5 4) = true := by decide +kernel
-theorem law_8_4 : checkEqvP {} counterMaskModel env 400 (lawL 8 4) (lawR 8 4) = true := by decide +kernel
-theorem law_9_5 : checkEqvP {} counterMaskModel env 400 (lawL 9 5) (lawR 9 5) = true := by decide +kernel
-theorem law_8_8 : checkEqvP {} counterMaskModel env 400 (lawL 8 8) (lawR 8 8) = true := by decide +kernel
-
-/-- Wrong-function test: a `guarantee` that never runs the finalizer (`fa` alone). -/
-theorem law_wrongFunction : checkNotEqvP {} counterMaskModel env 400 (progOf (.nat 0)) (lawR 0 3) = true := by
-  decide +kernel
-
-/-! ## The `bracketFull` twin with a pure `use` -/
-
-theorem twin_pure_c_7 : checkEqvP {} counterMaskModel env 400 (bracketFullIO (uid 0 [.nat 1]) (uid 0 [.nat 7]) (uid 2 [.nat 9]))
-    (defaultBracketFullIO (uid 0 [.nat 1]) (uid 0 [.nat 7]) (uid 2 [.nat 9])) = true := by decide +kernel
-theorem twin_pure_c_2 : checkEqvP {} counterMaskModel env 400 (bracketFullIO (uid 0 [.nat 1]) (uid 0 [.nat 2]) (uid 2 [.nat 9]))
-    (defaultBracketFullIO (uid 0 [.nat 1]) (uid 0 [.nat 2]) (uid 2 [.nat 9])) = true := by decide +kernel
-theorem twin_pure_u_5 : checkEqvP {} counterMaskModel env 400 (bracketFullIO (uid 0 [.nat 6]) (uid 0 [.nat 5]) (uid 2 [.nat 9]))
-    (defaultBracketFullIO (uid 0 [.nat 6]) (uid 0 [.nat 5]) (uid 2 [.nat 9])) = true := by decide +kernel
-theorem twin_pure_u_8 : checkEqvP {} counterMaskModel env 400 (bracketFullIO (uid 0 [.nat 6]) (uid 0 [.nat 8]) (uid 2 [.nat 9]))
-    (defaultBracketFullIO (uid 0 [.nat 6]) (uid 0 [.nat 8]) (uid 2 [.nat 9])) = true := by decide +kernel
-
 
 /-- All checks of this module, for the axiom check of `scripts/check_twin_checks.sh`. -/
 theorem all_checks : True := by

@@ -1,18 +1,33 @@
 #!/usr/bin/env bash
 # Build the CE-0002, CE-0005 and CE-0030 fixed-twin checks and the track G smoke tests (lean_lib TwinChecks) one module at a time, so that only
-# one heavy Lean process runs at once (the largest needs about 13 GB), then check their axioms.
+# one heavy Lean process runs at once (each module peaks under 8 GB, measured 2026-11-15), then check their axioms.
 # Usage: scripts/check_twin_checks.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.elan/bin:$PATH"
 lake build --wfail CatsEffectInLean.Proofs.Calibration.ResourceEvalFixedChecks
-for f in CatsEffectInLean/Proofs/Calibration/ResourceEvalFixedParts/*.lean; do
+for f in CatsEffectInLean/Proofs/Calibration/ResourceEvalFixedParts/*/*.lean \
+    CatsEffectInLean/Proofs/Calibration/ResourceEvalFixedParts/*.lean; do
   m=${f%.lean}; m=${m//\//.}
   echo "== $m"
   lake build --wfail "$m"
 done
 lake build --wfail CatsEffectInLean.Proofs.Phase6.BracketFullFixed
+lake build --wfail CatsEffectInLean.Proofs.Phase6.BracketSmokeDefs
+for f in CatsEffectInLean/Proofs/Phase6/BracketSmokeParts/*/*.lean \
+    CatsEffectInLean/Proofs/Phase6/BracketSmokeParts/*.lean; do
+  m=${f%.lean}; m=${m//\//.}
+  echo "== $m"
+  lake build --wfail "$m"
+done
 lake build --wfail CatsEffectInLean.Proofs.Phase6.BracketSmoke
+lake build --wfail CatsEffectInLean.Proofs.Phase6.MemoizeFixedDefs
+for f in CatsEffectInLean/Proofs/Phase6/MemoizeFixedParts/*/*.lean \
+    CatsEffectInLean/Proofs/Phase6/MemoizeFixedParts/*.lean; do
+  m=${f%.lean}; m=${m//\//.}
+  echo "== $m"
+  lake build --wfail "$m"
+done
 lake build --wfail CatsEffectInLean.Proofs.Phase6.MemoizeFixed
 lake build --wfail CatsEffectInLean.Proofs.Phase6.ResourceBothFixedDefs
 for f in CatsEffectInLean/Proofs/Phase6/ResourceBothFixedParts/*.lean; do
