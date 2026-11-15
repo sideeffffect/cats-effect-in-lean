@@ -234,6 +234,13 @@ inductive Lam where
   | ptF
   /-- `parTraverseN`: `.map(bs => list)` (the model already holds the list encoding). -/
   | ptList
+  -- format v2 (Phase 7, track Q)
+  /-- `qNew`: `q => VQueue(h.newQueue(q))`; the queue is the object reference `Val.fn o`. -/
+  | qHandle
+  /-- `qTryOffer`: `b => VBool(b)` (the model already holds `Val.bool b`). -/
+  | qBool
+  /-- `qSize`: `n => VNat(n)` (the model already holds `Val.nat n`). -/
+  | qNat
   -- format v2 (Phase 7, track L): `std.CountDownLatch`, `std.CyclicBarrier` run on the mirrors
   -- `Std/CountDownLatch.lean`, `Std/CyclicBarrier.lean`
   /-- `cdlNew`: `l => VLatch(h.newLatch(l))` (the model value is the latch itself). -/
@@ -258,6 +265,7 @@ def Lam.all : List Lam :=
    .memoSrc, .memoHandle,
    .ruUse, .raK, .raRelAs, .ruRes, .rbA, .rbB, .rbPair,
    .ptF, .ptList,
+   .qHandle, .qBool, .qNat,
    .latchHandle, .barrierHandle]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l

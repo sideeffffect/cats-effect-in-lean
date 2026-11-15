@@ -16,6 +16,7 @@ import CatsEffectInLean.Proofs.Phase6.MemoizeStuck
 import CatsEffectInLean.Props.Phase6.Resource
 import CatsEffectInLean.Proofs.Phase6.ResourceBoth
 import CatsEffectInLean.Props.Phase6.ParTraverse
+import CatsEffectInLean.Props.Phase7.Queue
 import CatsEffectInLean.Props.Phase7.CountDownLatch
 import CatsEffectInLean.Props.Phase7.CyclicBarrier
 
@@ -494,6 +495,139 @@ def registry : List Entry := [
       rejected, and it breaks the claim when run). Satisfiable \
       (Limit.parTraverseNAtMostN_satisfiable: n = 1 reached). Wrong function: 1000 permits \
       reaches 2 > 1 (Limit.wideRun_breaks, kernel-checked; ptsmoke). Open." },
+  -- Phase 7, track Q: `Queue` (both families as twins)
+  { id := "std.Queue.Concurrent.noLoss"
+    rows := ["std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.synchronous", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.tryOffer", "std.Queue.Synchronous.take", "std.Queue.Synchronous.tryTake"]
+    prop := ``Props.Phase7.Queue.concNoLoss
+    status := .«open»
+    note := "No lost element (Concurrent family that never drops: boundedForConcurrent(cap >= 1), \
+      unboundedForConcurrent, synchronous; reached for IO by bounded(1), bounded(n >= 65534), bounded(0)): \
+      in mode cancelAll, every run that ends Succeeded removes every recorded offered element (SubMulti). \
+      Harness (Props/Phase7/Queue.lean, namespace 54): fibers run scripts of \
+      offer/tryOffer/take/tryTake/size/cede, each in uncancelable(poll => poll(op).map(record)) \
+      (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
+      plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
+      iterations). No user code, so no WellFormed hypothesis. Satisfiable (QueueWitness.conc_satisfiable: \
+      a consumer canceled while it waits). Wrong function: QueueWrongFunction.wDrop_breaks \
+      (kernel-checked). Smoke: qsmoke. Open." },
+  { id := "std.Queue.Async.noLoss"
+    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take"]
+    prop := ``Props.Phase7.Queue.asyncNoLoss
+    status := .«open»
+    note := "No lost element (Async twins: bounded(1 < cap < 65534) = BoundedAsyncQueue, unbounded = \
+      UnboundedAsyncQueue). Async family under sequential consistency (each thunk atomic; QueueAsync \
+      module doc). Harness (Props/Phase7/Queue.lean, namespace 54): fibers run scripts of \
+      offer/tryOffer/take/tryTake/size/cede, each in uncancelable(poll => poll(op).map(record)) \
+      (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
+      plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
+      iterations). No user code, so no WellFormed hypothesis. Satisfiable \
+      (QueueWitness.async_satisfiable). Wrong function: wDropAsync_breaks. Smoke: qsmoke. Open." },
+  { id := "std.Queue.Concurrent.noDup"
+    rows := ["std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.synchronous", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.tryOffer", "std.Queue.Synchronous.take", "std.Queue.Synchronous.tryTake", "std.Queue.circularBuffer"]
+    prop := ``Props.Phase7.Queue.concNoDup
+    status := .«open»
+    note := "No duplicated or invented element (all Concurrent kinds incl. droppingForConcurrent, \
+      circularBuffer): every run that stops removes a sub-multiset of the offered elements. Harness \
+      (Props/Phase7/Queue.lean, namespace 54): fibers run scripts of \
+      offer/tryOffer/take/tryTake/size/cede, each in uncancelable(poll => poll(op).map(record)) \
+      (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
+      plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
+      iterations). No user code, so no WellFormed hypothesis. Satisfiable \
+      (QueueWitness.conc_any_satisfiable). Wrong function: wDup_breaks. Smoke: qsmoke. Open." },
+  { id := "std.Queue.Async.noDup"
+    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take", "std.Queue.dropping", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer"]
+    prop := ``Props.Phase7.Queue.asyncNoDup
+    status := .«open»
+    note := "No duplicated or invented element (all Async kinds incl. DroppingAsyncQueue). Async family under \
+      sequential consistency (each thunk atomic; QueueAsync module doc). Harness (Props/Phase7/Queue.lean, \
+      namespace 54): fibers run scripts of offer/tryOffer/take/tryTake/size/cede, each in \
+      uncancelable(poll => poll(op).map(record)) (QueueSuite \"not lose data on canceled take\"); a plan \
+      cancels fibers after cedes; all scripts, plans, elements, capacities and PChoice schedules (a cancel \
+      can land between any two run-loop iterations). No user code, so no WellFormed hypothesis. \
+      Satisfiable (QueueWitness.async_any_satisfiable). Wrong function: wDupAsync_breaks. Smoke: qsmoke. \
+      Open." },
+  { id := "std.Queue.Concurrent.fifo"
+    rows := ["std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.synchronous", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.tryOffer", "std.Queue.Synchronous.take", "std.Queue.Synchronous.tryTake", "std.Queue.circularBuffer"]
+    prop := ``Props.Phase7.Queue.concFifo
+    status := .«open»
+    note := "FIFO (Queue.scala:31-33): with at most one taking script, each script's offered elements leave the \
+      queue in offer order (Sublist; distinct elements, the queue never inspects them). All Concurrent \
+      kinds. Harness (Props/Phase7/Queue.lean, namespace 54): fibers run scripts of \
+      offer/tryOffer/take/tryTake/size/cede, each in uncancelable(poll => poll(op).map(record)) \
+      (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
+      plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
+      iterations). No user code, so no WellFormed hypothesis. Satisfiable \
+      (QueueWitness.conc_any_satisfiable). Wrong function: wLifoConc_breaks. Smoke: qsmoke. Open." },
+  { id := "std.Queue.Async.fifo"
+    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take", "std.Queue.dropping", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer"]
+    prop := ``Props.Phase7.Queue.asyncFifo
+    status := .«open»
+    note := "FIFO (Queue.scala:31-33), all Async kinds. Async family under sequential consistency (each thunk \
+      atomic; QueueAsync module doc). Harness (Props/Phase7/Queue.lean, namespace 54): fibers run scripts \
+      of offer/tryOffer/take/tryTake/size/cede, each in uncancelable(poll => poll(op).map(record)) \
+      (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
+      plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
+      iterations). No user code, so no WellFormed hypothesis. Satisfiable \
+      (QueueWitness.async_any_satisfiable). Wrong function: wLifo_breaks. Smoke: qsmoke. Open." },
+  { id := "std.Queue.Concurrent.noDeadlock"
+    rows := ["std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.synchronous", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.tryOffer", "std.Queue.Synchronous.take", "std.Queue.Synchronous.tryTake", "std.Queue.circularBuffer"]
+    prop := ``Props.Phase7.Queue.concNoDeadlock
+    status := .«open»
+    note := "No deadlock: in mode cancelAll (the root cancels every fiber, then drains) every run that stops ends \
+      Succeeded: canceling waiting offerers and takers (incl. the Synchronous two-phase commit) never \
+      hangs. Harness (Props/Phase7/Queue.lean, namespace 54): fibers run scripts of \
+      offer/tryOffer/take/tryTake/size/cede, each in uncancelable(poll => poll(op).map(record)) \
+      (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
+      plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
+      iterations). No user code, so no WellFormed hypothesis. Satisfiable \
+      (QueueWitness.conc_any_satisfiable). Wrong function: wHangConc_breaks. Smoke: qsmoke. Open." },
+  { id := "std.Queue.Async.noDeadlock"
+    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take", "std.Queue.dropping", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer"]
+    prop := ``Props.Phase7.Queue.asyncNoDeadlock
+    status := .«open»
+    note := "No deadlock (all Async kinds). Async family under sequential consistency (each thunk atomic; \
+      QueueAsync module doc). Harness (Props/Phase7/Queue.lean, namespace 54): fibers run scripts of \
+      offer/tryOffer/take/tryTake/size/cede, each in uncancelable(poll => poll(op).map(record)) \
+      (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
+      plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
+      iterations). No user code, so no WellFormed hypothesis. Satisfiable \
+      (QueueWitness.async_any_satisfiable). Wrong function: wHangAsync_breaks. Smoke: qsmoke. Open." },
+  { id := "std.Queue.Concurrent.takerLiveness"
+    rows := ["std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.take", "std.Queue.synchronous", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.take"]
+    prop := ``Props.Phase7.Queue.concTakerLiveness
+    status := .«open»
+    note := "No lost wakeup: pure producers and pure consumers, the plan cancels only consumers, the root joins \
+      all consumers, total takes <= total offers: every run that stops ends Succeeded (a run that stops \
+      blocked is a deadlock). Concurrent kinds that never drop. Harness (Props/Phase7/Queue.lean, \
+      namespace 54): fibers run scripts of offer/tryOffer/take/tryTake/size/cede, each in \
+      uncancelable(poll => poll(op).map(record)) (QueueSuite \"not lose data on canceled take\"); a plan \
+      cancels fibers after cedes; all scripts, plans, elements, capacities and PChoice schedules (a cancel \
+      can land between any two run-loop iterations). No user code, so no WellFormed hypothesis. \
+      Satisfiable (QueueWitness.conc_live_satisfiable). Wrong function: wNoWake_breaks. Smoke: qsmoke. \
+      Open." },
+  { id := "std.Queue.Async.takerLiveness"
+    rows := ["std.Queue.bounded", "std.Queue.unbounded", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take"]
+    prop := ``Props.Phase7.Queue.asyncTakerLiveness
+    status := .«open»
+    note := "No lost wakeup (Async twins). Async family under sequential consistency (each thunk atomic; \
+      QueueAsync module doc). Harness (Props/Phase7/Queue.lean, namespace 54): fibers run scripts of \
+      offer/tryOffer/take/tryTake/size/cede, each in uncancelable(poll => poll(op).map(record)) \
+      (QueueSuite \"not lose data on canceled take\"); a plan cancels fibers after cedes; all scripts, \
+      plans, elements, capacities and PChoice schedules (a cancel can land between any two run-loop \
+      iterations). No user code, so no WellFormed hypothesis. Satisfiable \
+      (QueueWitness.async_live_satisfiable). Wrong function: wNoNotify_breaks. Smoke: qsmoke. Open." },
+  { id := "std.Queue.twinSeq"
+    rows := ["std.Queue.bounded", "std.Queue.dropping", "std.Queue.unbounded", "std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.AbstractQueue.size", "std.Queue.BaseBoundedAsyncQueue.take", "std.Queue.BaseBoundedAsyncQueue.tryTake", "std.Queue.BaseBoundedAsyncQueue.size", "std.Queue.BoundedAsyncQueue.offer", "std.Queue.BoundedAsyncQueue.tryOffer", "std.Queue.BoundedAsyncQueue.unsafeTryOffer", "std.Queue.DroppingAsyncQueue.offer", "std.Queue.DroppingAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.offer", "std.Queue.UnboundedAsyncQueue.unsafeOffer", "std.Queue.UnboundedAsyncQueue.tryOffer", "std.Queue.UnboundedAsyncQueue.take", "std.Queue.UnboundedAsyncQueue.tryTake", "std.Queue.UnboundedAsyncQueue.size", "std.Queue.UnsafeBounded.put", "std.Queue.UnsafeBounded.take", "std.Queue.UnsafeBounded.size", "std.UnsafeUnbounded.put", "std.UnsafeUnbounded.take", "std.UnsafeUnbounded.size"]
+    prop := ``Props.Phase7.Queue.twinSeq
+    status := .«open»
+    note := "Twin (decision 59): the Concurrent and the Async implementation of one factory agree on \
+      sequential use: for 2 <= cap < 65534 and the pairs (boundedForConcurrent(cap), bounded(cap)), \
+      (droppingForConcurrent(cap), dropping(cap)), (unboundedForConcurrent, unbounded), every script \
+      of offer/tryOffer/take/tryTake/size/cede run by one fiber that the root joins gives the same \
+      set of (summary, trace) results on both sides (all schedules). Async family under sequential \
+      consistency. Satisfiable (QueueWitness.twinSeq_satisfiable: full queue, tryOffer false, FIFO, \
+      size). Wrong function: wLifo on the Async side gives another trace (wLifo_twin_breaks). Smoke: \
+      qsmoke (twin loop). Open." },
   { id := "std.CountDownLatch.awaitNotEarly"
     rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
     prop := ``Props.Phase7.CountDownLatch.cdlAwaitNotEarly
