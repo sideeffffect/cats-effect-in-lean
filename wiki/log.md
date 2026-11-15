@@ -288,3 +288,8 @@
 - Updated: Agent workflow (closure references section)
 - Raw: raw/project-decisions/2026-11-15-decision-58-closure-refs.md
 - Difftest after decision 58 (generator with 5-input option): `opcount.py --seeds 51 52 --n 30000 --ops parTraverseN --boost tpl_parTraverse=8 tpl_parTraverseCancel=8`: 60,000 cases, all agree; 34,924 use `parTraverseN` (17,465 / 17,459 per seed). Fixed `hashcases/partraverse_hash.jsonl`: 32 agree (3 runs).
+
+## [2026-11-15] review | Review batch 9: decision 58 core, Bracket, Resource, parTraverseN
+- Updated: Agent workflow (review log, closure references), Resource use/both (batch 9 finding R1), index
+- Raw: raw/project-decisions/2026-11-15-review-batch-9-notes.md
+- Review: review/2026-11-15-review-batch-9.md
