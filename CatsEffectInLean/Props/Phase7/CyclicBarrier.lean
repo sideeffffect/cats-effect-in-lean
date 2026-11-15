@@ -68,6 +68,14 @@ status 1, `canceledIn` = status 3.
    every awaiter with status 3 left the count. Wrong function: a cleanup that does not
    re-increment (the canceled awaiter still counts, and the barrier trips early).
 
+5. `cbAwaitCompletes` (decision 63, item 3: the companion success claim): if the root is done
+   (it joined every awaiter), `waiting = 0`: every `await` that began returned or was canceled;
+   none ended with an error. Wrong function: an `await` that raises.
+
+Decision 63 battery (`Proofs/Phase7/LatchBattery.lean`): every wrong `await` (raises, hangs,
+drops, doubles; variants of `Std/CyclicBarrier.lean`) breaks one of the five statements.
+`cbXV v` below is statement X with mirror variant `v` (`cbX = cbXV 0`).
+
 Why the hypothesis of statement 4: with `as.length ≥ cap` a cancel can lose the race with a trip
 (the awaiter was released, but `poll` sees the cancel first); then it has status 3 and still
 counted for the trip, so the bound would be false for every correct barrier. That race is
@@ -235,6 +243,8 @@ def prog (cap : Nat) (as bs : List IO) (cancels : List Nat) (v : Nat := 0) : IO 
 def blamVariant : BLam → Nat
   | .mkBarrier _ v | .obj _ _ v | .gateK _ _ v | .fmfBody _ _ _ v | .modifyThunk _ _ _ _ _ v
   | .cleanupThunk _ _ v => v
+  -- not Cats Effect code (battery variant 6 only): never public
+  | .neverK => 1
   | _ => 0
 
 /-- The library of the statements: the mirror closures of Cats Effect v3.7.1 (variant 0). User
@@ -320,5 +330,29 @@ def cbCancelRemoved : Prop :=
     ∀ (fuel : Nat) (cs : List PChoice),
       passed (run as bs u cap cancels fuel cs) ≤
         cap * ((entered (run as bs u cap cancels fuel cs) - canceledIn (run as bs u cap cancels fuel cs)) / cap)
+
+/-- Statement 5 (decision 63, item 3): in a run whose root is done, no `await` is left open. -/
+def cbAwaitCompletes : Prop :=
+  ∀ (u : UserEnv) (cap : Nat) (as bs : List IO) (cancels : List Nat), AllWF as bs u →
+    ∀ (fuel : Nat) (cs : List PChoice) (oc : Outcome),
+      (run as bs u cap cancels fuel cs).halt = some (.done oc) → waiting (run as bs u cap cancels fuel cs) = 0
+
+/-! ## The statements with a mirror variant (decision 63 battery; `v = 0` gives the statements) -/
+
+def cbNoEarlyTripV (v : Nat) : Prop :=
+  ∀ (u : UserEnv) (cap : Nat) (as bs : List IO), AllWF as bs u →
+    ∀ (fuel : Nat) (cs : List PChoice),
+      passed (run as bs u cap [] fuel cs v) ≤ cap * (entered (run as bs u cap [] fuel cs v) / cap)
+
+def cbExactGenerationsV (v : Nat) : Prop :=
+  ∀ (u : UserEnv) (cap : Nat) (as bs : List IO), AllWF as bs u →
+    ∀ (fuel : Nat) (cs : List PChoice),
+      (run as bs u cap [] fuel cs v).halt = some .blocked →
+      passed (run as bs u cap [] fuel cs v) % cap = 0 ∧ waiting (run as bs u cap [] fuel cs v) < cap
+
+def cbAwaitCompletesV (v : Nat) : Prop :=
+  ∀ (u : UserEnv) (cap : Nat) (as bs : List IO) (cancels : List Nat), AllWF as bs u →
+    ∀ (fuel : Nat) (cs : List PChoice) (oc : Outcome),
+      (run as bs u cap cancels fuel cs v).halt = some (.done oc) → waiting (run as bs u cap cancels fuel cs v) = 0
 
 end CatsEffectInLean.Props.Phase7.CyclicBarrier

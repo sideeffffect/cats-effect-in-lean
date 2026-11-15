@@ -665,15 +665,16 @@ def registry : List Entry := [
     prop := ``Props.Phase7.Semaphore.semNoDeadlock
     status := .«open»
     note := "Behaviour tables (critical sections: cedes, then pure/raiseError (fatal too)/canceled; \
-      no user code, no WellFormed), need <= k: no stopped run is blocked (no deadlock, no lost \
-      wakeup); a Succeeded run has available = k + released and every joined, not canceled use \
-      whose own code succeeds recorded Succeeded (the harness records join outcomes). Review batch \
-      11b: the first form ('every stopped run ends Succeeded') was HOLLOW (H1: a fatal error stops \
-      the run with Summary.fatal for every implementation; regression \
-      SemaphoreWitness.fatal_regression), and 'acquireN(n >= 2) always raises' satisfied it (W1; now \
-      SemaphoreWitness.w1_breaks, kernel, and semsmoke). Satisfiable (semNoDeadlock_satisfiable: \
-      Succeeded with two Succeeded join records). semsmoke: 0 violations; wrong functions 'skip a \
-      waiter', 'leak', 'acquireN raises' break it. Open." },
+      no user code, no WellFormed), need <= k: every stopped run either ends Succeeded with \
+      available = k + released and a Succeeded join record for every joined, not canceled use whose \
+      own code succeeds, or ends fatal. History: first form 'every stopped run ends Succeeded' \
+      (HOLLOW, review 11b H1: a fatal error stops the run for every implementation; regression \
+      SemaphoreWitness.fatal_regression); 11b form 'not blocked' (HOLLOW, review 12 H2: an available \
+      that always raises made the root Errored and met it; now SemaphoreBattery.availRaises). \
+      Decision 63 battery (SemaphoreBattery.lean, kernel): every op x {raises, hangs, drops, \
+      doubles} of acquire, acquireN, release, releaseN, tryAcquire, tryAcquireN, permit, and \
+      {raises, hangs, wrong value} of available, count(raises, hangs) breaks this statement; v3.7.1 \
+      meets it on the same inputs (good_*). Satisfiable (semNoDeadlock_satisfiable). Open." },
   { id := "std.Semaphore.permit.atMostK"
     rows := ["std.Semaphore.permit", "std.Semaphore.acquireN", "std.Semaphore.releaseN"]
     prop := ``Props.Phase7.Semaphore.semAtMostK
@@ -696,13 +697,13 @@ def registry : List Entry := [
     rows := ["std.Mutex.apply", "std.Mutex.lock", "std.LockQueue.lock"]
     prop := ``Props.Phase7.Semaphore.mutexNoDeadlock
     status := .«open»
-    note := "Behaviour tables, every user fiber ended: no stopped run is blocked - the final \
-      lock.use(_ => IO.unit) gets the lock (no lost lock, no lost wakeup, canceled waiters hand on \
-      their predecessor's cell); a Succeeded run returns () and every joined, not canceled use whose \
-      section succeeds recorded Succeeded. Review batch 11b H1: the first form ('every stopped run \
-      ends Succeeded(())') was false for every implementation with a fatal error. Satisfiable \
-      (mutexNoDeadlock_satisfiable). semsmoke: 0 violations; wrong function 'lost wakeup' \
-      (awakeCell never completes the cell) breaks it. Open." },
+    note := "Behaviour tables, every user fiber ended: every stopped run either ends Succeeded(()) - \
+      the final lock.use(_ => IO.unit) gets the lock (no lost lock, no lost wakeup, canceled waiters \
+      hand on their predecessor's cell) - with a Succeeded join record for every joined, not canceled \
+      use whose section succeeds, or ends fatal. History: review 11b H1 (first form false with a \
+      fatal error), review 12 W2 ('not blocked' let a root Errored pass). Decision 63 battery: lock \
+      raises, hangs, doubles break this statement, lock drops breaks mutualExclusion \
+      (SemaphoreBattery.lean, kernel). Satisfiable (mutexNoDeadlock_satisfiable). Open." },
   { id := "std.Semaphore.count.atRest"
     rows := ["std.Semaphore.count", "std.Semaphore.acquireN", "std.Semaphore.acquire",
       "std.Semaphore.releaseN", "std.Semaphore.apply"]
@@ -802,6 +803,7 @@ def registry : List Entry := [
       await does not count for a trip. The hypothesis restricts the test program (a cancel that \
       loses the race with a trip is covered by cancelNoHang). Satisfiable (cancelRemoved_sat). \
       Wrong function: variant 2 does not re-increment (cancelRemoved_wrong; smoke 3 of 1500 random, 20 of 800 removal shape). Smoke: 0. Open." },
+<<<<<<< HEAD
   { id := "std.Queue.Concurrent.seqSpec"
     rows := ["std.Queue.AbstractQueue.offer", "std.Queue.AbstractQueue.tryOffer", "std.Queue.AbstractQueue.take", "std.Queue.AbstractQueue.tryTake", "std.Queue.AbstractQueue.size", "std.Queue.synchronous", "std.Queue.Synchronous.offer", "std.Queue.Synchronous.tryOffer", "std.Queue.Synchronous.take", "std.Queue.Synchronous.tryTake", "std.Queue.Synchronous.size", "std.Queue.circularBuffer"]
     prop := ``Props.Phase7.Queue.concSeqSpec
@@ -823,6 +825,27 @@ def registry : List Entry := [
       hangs, drops or doubles its effect breaks it. All Async kinds, under sequential consistency. Satisfiable \
       (QueueWitness.seqSpec_satisfiable). Battery: QueueBatteryAsync (BoundedAsyncQueue, 18 rows). Smoke: \
       qsmoke (every kind). Open." }
+=======
+  { id := "std.CountDownLatch.awaitCompletes"
+    rows := ["std.CountDownLatch.apply", "std.CountDownLatch.State.initial", "std.CountDownLatch.release", "std.CountDownLatch.await", "std.CountDownLatch.ConcurrentCountDownLatch.release", "std.CountDownLatch.ConcurrentCountDownLatch.await"]
+    prop := ``Props.Phase7.CountDownLatch.cdlAwaitCompletes
+    status := .«open»
+    note := "Phase 7, track L, decision 63 item 3 (companion success claim): if the root is done \
+      (it joined every fiber), no awaiter has status 1: every await that began returned or was \
+      canceled, none ended with an error. Same harness and quantifiers. Satisfiable \
+      (LatchBattery.CDL.awaitCompletes_sat). Wrong function: await raises (await_raises_breaks). \
+      Decision 63 battery (release/await x raises/hangs/drops/doubles): Proofs/Phase7/LatchBattery.lean, \
+      every row breaks one of the four latch statements. Open." },
+  { id := "std.CyclicBarrier.awaitCompletes"
+    rows := ["std.CyclicBarrier.apply", "std.CyclicBarrier.await"]
+    prop := ``Props.Phase7.CyclicBarrier.cbAwaitCompletes
+    status := .«open»
+    note := "Phase 7, track L, decision 63 item 3 (companion success claim): if the root is done, \
+      waiting = 0: every await that began returned or was canceled. Same harness, any cancels. \
+      Satisfiable (LatchBattery.CB.awaitCompletes_sat). Wrong function: await raises \
+      (await_raises_breaks). Decision 63 battery (await x raises/hangs/drops/doubles): \
+      Proofs/Phase7/LatchBattery.lean, every row breaks one of the five barrier statements. Open." }
+>>>>>>> origin/main
 ]
 
 end CatsEffectInLean

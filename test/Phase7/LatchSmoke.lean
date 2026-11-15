@@ -154,6 +154,19 @@ def stats (v : Nat) : Nat × Nat × Nat × Nat × Nat × Nat := Id.run do
 #eval (stats 3).2.2.2.1
 #guard (stats 3).2.2.2.1 > 0
 
+/-! Statement 4 (`cdlAwaitCompletes`, decision 63): a done root leaves no awaiter at status 1.
+Variant 8 (`await` raises) breaks it. -/
+def isDone (s : Sched CounterMask) : Bool := match s.halt with | some (.done _) => true | _ => false
+def bad4 (s : Sched CounterMask) : Bool := isDone s && (List.range 4).any (fun j => status s j == 1)
+def viol4 (v : Nat) : Nat × Nat := Id.run do
+  let mut r := (0, 0)
+  for i in [0:nRuns] do
+    let last := (runOf i v).2.getLastD (Sched.init counterMaskModel (.pure .unit))
+    r := (r.1 + (if bad4 last then 1 else 0), r.2 + (if isDone last then 1 else 0))
+  return r
+#eval (viol4 0, viol4 8)
+#guard (viol4 0).1 == 0 && (viol4 0).2 > 0 && (viol4 8).1 > 0
+
 end C
 
 /-! ## `CyclicBarrier` -/
@@ -245,6 +258,18 @@ def removalCanceled : Nat :=
 #eval (raceViol 0, raceViol 3, removalViol 0, removalViol 2, removalCanceled)
 #guard raceViol 0 == 0 && removalViol 0 == 0
 #guard raceViol 3 > 0 && removalViol 2 > 0 && removalCanceled > 0
+
+/-! Statement 5 (`cbAwaitCompletes`, decision 63): a done root leaves `waiting = 0`. Variant 5
+(`await` raises) breaks it. -/
+def isDone (s : Sched CounterMask) : Bool := match s.halt with | some (.done _) => true | _ => false
+def viol5 (v : Nat) : Nat × Nat := Id.run do
+  let mut r := (0, 0)
+  for i in [0:nRuns] do
+    let last := (runOf i v false).2.2.getLastD (Sched.init counterMaskModel (.pure .unit))
+    r := (r.1 + (if isDone last && waiting last != 0 then 1 else 0), r.2 + (if isDone last then 1 else 0))
+  return r
+#eval (viol5 0, viol5 5)
+#guard (viol5 0).1 == 0 && (viol5 0).2 > 0 && (viol5 5).1 > 0
 
 end B
 

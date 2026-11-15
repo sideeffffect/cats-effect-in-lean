@@ -65,6 +65,14 @@ the user programs (self-cancel).
 3. `cdlReleaseTotal`: if the run is blocked or the root is done, then `completed = started`:
    every `release` returned, also the ones after the count reached 0. Wrong function: a
    `release` that raises after `Done`.
+4. `cdlAwaitCompletes` (decision 63, item 3: the companion success claim): if the root is done
+   (it joined every fiber), no awaiter has status 1: every `await` that began returned
+   (status 2) or was canceled (status 3); none ended with an error. Wrong function: an `await`
+   that raises.
+
+Decision 63 battery (`Proofs/Phase7/LatchBattery.lean`): every wrong `release` and `await`
+(raises, hangs, drops, doubles; variants of `Std/CountDownLatch.lean`) breaks one of the four
+statements. `cdlXV v` below is statement X with mirror variant `v` (`cdlX = cdlXV 0`).
 
 No hypothesis except `WellFormed`. `n` is any natural number (for `n = 0` the harness root fails
 with `IllegalArgumentException` before any fiber starts, so the statements hold trivially).
@@ -172,7 +180,7 @@ def HLam.ofId? (id : Nat) : Option HLam :=
 /-- `l.await` of a latch value (the mirror's `await`). -/
 def awaitOf (l : Val) : IO :=
   match CatsEffectInLean.Std.CountDownLatch.latchOf? l with
-  | some (r, _) => CatsEffectInLean.Std.CountDownLatch.awaitIO r
+  | some (r, v) => CatsEffectInLean.Std.CountDownLatch.awaitIO r v
   | none => .error CatsEffectInLean.Std.CountDownLatch.illErr
 
 /-- `l.release` of a latch value. -/
@@ -347,5 +355,40 @@ def cdlReleaseTotal : Prop :=
       ((run ws us u n cancels fuel cs).halt = some .blocked ∨
         ∃ oc, (run ws us u n cancels fuel cs).halt = some (.done oc)) →
       completed (run ws us u n cancels fuel cs) = started (run ws us u n cancels fuel cs)
+
+/-- Statement 4 (decision 63, item 3): in a run whose root is done, every `await` that began
+returned or was canceled. -/
+def cdlAwaitCompletes : Prop :=
+  ∀ (u : UserEnv) (n : Nat) (ws us : List IO) (cancels : List Nat), AllWF ws us u →
+    ∀ (fuel : Nat) (cs : List PChoice) (oc : Outcome),
+      (run ws us u n cancels fuel cs).halt = some (.done oc) →
+      ∀ j, status (run ws us u n cancels fuel cs) j ≠ 1
+
+/-! ## The statements with a mirror variant (decision 63 battery; `v = 0` gives the statements) -/
+
+def cdlAwaitNotEarlyV (v : Nat) : Prop :=
+  ∀ (u : UserEnv) (n : Nat) (ws us : List IO) (cancels : List Nat), AllWF ws us u →
+    ∀ (fuel : Nat) (cs : List PChoice) (j : Nat),
+      status (run ws us u n cancels fuel cs v) j = 2 → n ≤ started (run ws us u n cancels fuel cs v)
+
+def cdlNoLostWakeupV (v : Nat) : Prop :=
+  ∀ (u : UserEnv) (n : Nat) (ws us : List IO) (cancels : List Nat), AllWF ws us u →
+    ∀ (fuel : Nat) (cs : List PChoice),
+      (run ws us u n cancels fuel cs v).halt = some .blocked →
+      n ≤ started (run ws us u n cancels fuel cs v) →
+      ∀ j, status (run ws us u n cancels fuel cs v) j ≠ 1
+
+def cdlReleaseTotalV (v : Nat) : Prop :=
+  ∀ (u : UserEnv) (n : Nat) (ws us : List IO) (cancels : List Nat), AllWF ws us u →
+    ∀ (fuel : Nat) (cs : List PChoice),
+      ((run ws us u n cancels fuel cs v).halt = some .blocked ∨
+        ∃ oc, (run ws us u n cancels fuel cs v).halt = some (.done oc)) →
+      completed (run ws us u n cancels fuel cs v) = started (run ws us u n cancels fuel cs v)
+
+def cdlAwaitCompletesV (v : Nat) : Prop :=
+  ∀ (u : UserEnv) (n : Nat) (ws us : List IO) (cancels : List Nat), AllWF ws us u →
+    ∀ (fuel : Nat) (cs : List PChoice) (oc : Outcome),
+      (run ws us u n cancels fuel cs v).halt = some (.done oc) →
+      ∀ j, status (run ws us u n cancels fuel cs v) j ≠ 1
 
 end CatsEffectInLean.Props.Phase7.CountDownLatch

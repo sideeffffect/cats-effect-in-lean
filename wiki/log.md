@@ -398,6 +398,14 @@
 - Seeds 81-83 (30,000 each, parTraverseN boosted): 90,000 cases, all agree; 52,428 parTraverseN. The 2 unsupported cases of drive check are the old testcontrol cases two-fibers-tc-seed1/2 (decision 15), not new.
 - Raw: raw/cats-effect/2026-11-15-partraverse-boosted-difftest.md
 
+## [2026-11-15] update | Track L: decision 63 battery
+- Updated: CountDownLatch and CyclicBarrier model (battery table, companion claims, harness guard)
+- Raw: raw/cats-effect/2026-11-15-track-l-decision63-battery.md
+
+## [2026-11-15] update | Track S: review batch 12 (H2, W2) and the decision-63 battery
+- Updated: Semaphore and Mutex model (noDeadlock: Succeeded or fatal; battery table, 38 kernel rows)
+- Raw: raw/cats-effect/2026-11-15-semaphore-mutex-review12-battery.md
+
 ## [2026-11-15] ingest | Track Q: review batch 12 H3 fix, SeqSpec, decision 63 battery
 - Updated: Queue families model (join outcomes in TakerLiveness, SeqSpec entries, battery, FailureSignal rows)
 - Raw: raw/cats-effect/2026-11-15-queue-review12-battery.md

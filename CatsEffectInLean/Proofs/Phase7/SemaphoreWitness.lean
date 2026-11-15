@@ -142,7 +142,8 @@ theorem semNoDeadlock_satisfiable :
 
 H1: a fatal error in a critical section stops the whole run with `Summary.fatal` (as `IOFiber`
 `onFatalFailure` does). The first form of statement 2 ("every stopped run ends `Succeeded`") was
-false on this input for every implementation; the new form ("not blocked") holds on it.
+false on this input for every implementation; the current form ("`Succeeded …` or `fatal`",
+review batch 12) holds on it through its `fatal` part.
 
 W1: the wrong function "`acquireN(n)` always raises for `n ≥ 2`" satisfied every first-form
 `Semaphore` statement. On `Semaphore(2)` with one joined `acqRel 2`, it records `Errored` for the
@@ -159,18 +160,18 @@ theorem fatalRun_ok : fatalRun.map Obs.summary = some (.fatal fatalErr) := by
   decide +kernel
 
 /-- The fatal input meets the hypotheses of statement 2, and a run of it ends `fatal`: it refutes the
-first form, and it is not `blocked` (the new form holds on it). -/
+first form, and it meets the `fatal` part of the current form (so it is not `blocked`). -/
 theorem fatal_regression :
     AllEnded busF.length asF ∧ (∀ b ∈ busF, b.need ≤ 1) ∧
     ∃ o, outcomesP {} counterMaskModel (env behaved) (lockRoot (.sem 1) (busF.map BUse.toUse) asF) o ∧
-      (¬ ∃ v, o.summary = .done (.succeeded v)) ∧ o.summary ≠ .blocked := by
+      (¬ ∃ v, o.summary = .done (.succeeded v)) ∧ (∃ e, o.summary = .fatal e) ∧ o.summary ≠ .blocked := by
   have h := fatalRun_ok
   cases hr : fatalRun with
   | none => rw [hr] at h; simp at h
   | some o =>
     rw [hr] at h
     simp only [Option.map_some, Option.some.injEq] at h
-    refine ⟨?_, by decide, o, ⟨3000, [], hr⟩, ?_, ?_⟩
+    refine ⟨?_, by decide, o, ⟨3000, [], hr⟩, ?_, ⟨_, h⟩, ?_⟩
     · intro i hi
       simp only [busF, List.length_cons, List.length_nil] at hi
       match i, hi with

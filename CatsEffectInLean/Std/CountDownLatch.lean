@@ -75,6 +75,12 @@ def initial[F[_]](n: Int)(implicit F: GenConcurrent[F, ?]): F[State[F]] =       
 (`wiki/methodology/agent-workflow.md`, review rubric): `1` releases the waiters one `release`
 early (`n > 2`), `2` never completes `signal` ("never wake"), `3` raises on `release` after
 `Done` ("release beyond 0 fails").
+
+Decision 63 battery (wrong functions, one per public operation and failure kind): `4` `release`
+always raises, `5` `release` never returns, `6` `release` drops its effect (returns `()`, no
+decrement), `7` `release` doubles its effect (decrements by 2), `8` `await` always raises, `9`
+`await` never returns, `10` `await` drops its effect (returns `()` at once). `await` has no effect
+on the state, so "doubles" is meaningless for it (two `await`s return at the same time as one).
 -/
 
 namespace CatsEffectInLean.Std.CountDownLatch
@@ -92,6 +98,9 @@ def iaeErr : Err := { code := 7000001 }
 
 /-- An argument of the wrong shape: impossible in a well-typed Scala program. -/
 def illErr : Err := { code := 999999, kind := .fatal }
+
+/-- The error of the battery variants that raise (not Cats Effect code). -/
+def battErr : Err := { code := 7000010 }
 
 /-! ## State -/
 
@@ -215,11 +224,25 @@ def apply? (n : Nat) (v : Nat := 0) : Option IO :=
 /-- The latch object with state cell `r` (a closure reference). -/
 def latchVal (r : Nat) (v : Nat := 0) : Val := .fn (CLam.obj r v).id
 
-/-- `release` (`CDL:71-76`) = `state.flatModify(f)` = `Uncancelable(_ => flatten(modify(f)))`. -/
-def releaseIO (r : Nat) (v : Nat := 0) : IO := .uncancelable (CLam.relBody r v).fn
+/-- A program that never returns (battery variants only): a new `Deferred`, read with the
+`await` selector of `Awaiting(1, d)`. -/
+def neverIO : IO := .flatMap (.map (.delay CLam.newDeferred.fn) (CLam.awaitingK 1).fn) CLam.awaitSel.fn
 
-/-- `await` (`CDL:78-82`) = `state.get.flatMap { … }`. -/
-def awaitIO (r : Nat) : IO := .flatMap (.delay (CLam.stateGet r).fn) CLam.awaitSel.fn
+/-- `release` (`CDL:71-76`) = `state.flatModify(f)` = `Uncancelable(_ => flatten(modify(f)))`.
+Variants 4-6 replace the whole operation (battery, not Cats Effect code). -/
+def releaseIO (r : Nat) (v : Nat := 0) : IO :=
+  if v == 4 then .error battErr
+  else if v == 5 then neverIO
+  else if v == 6 then .pure .unit
+  else .uncancelable (CLam.relBody r v).fn
+
+/-- `await` (`CDL:78-82`) = `state.get.flatMap { … }`. Variants 8-10 replace the whole operation
+(battery, not Cats Effect code). -/
+def awaitIO (r : Nat) (v : Nat := 0) : IO :=
+  if v == 8 then .error battErr
+  else if v == 9 then neverIO
+  else if v == 10 then .pure .unit
+  else .flatMap (.delay (CLam.stateGet r).fn) CLam.awaitSel.fn
 
 /-- The state cell and variant of a latch value. -/
 def latchOf? (l : Val) : Option (Nat × Nat) :=
@@ -258,14 +281,18 @@ def call (l : CLam) (arg : Val) (w : View) : UserResult :=
   | .obj r v =>
     match arg with
     | .nat 0 => prog (releaseIO r v)
-    | .nat 1 => prog (awaitIO r)
+    | .nat 1 => prog (awaitIO r v)
     | _ => illTyped
   | .relBody r v => prog (.flatMap (.delay (CLam.relModify r v).fn) CLam.flattenK.fn)
   | .relModify r v =>
     match St.ofVal (w.refs.getD r .unit) with
     -- `case Awaiting(n, signal) => if (n > 1) (Awaiting(n - 1, signal), F.unit) else (Done(), …)`
     | .awaiting n d =>
-      if (if v == 1 then n > 2 else n > 1) then
+      if v == 7 then
+        -- variant 7 (not Cats Effect code): the decrement is applied twice
+        if n > 2 then { effects := [.writeRef r (awaitingVal (n - 2) d)], out := .ret Eff.unit.toVal }
+        else { effects := [.writeRef r doneVal], out := .ret (Eff.complete d).toVal }
+      else if (if v == 1 then n > 2 else n > 1) then
         { effects := [.writeRef r (awaitingVal (n - 1) d)], out := .ret Eff.unit.toVal }
       else if v == 2 then
         -- variant 2 (not Cats Effect code): never completes `signal`

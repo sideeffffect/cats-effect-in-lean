@@ -72,6 +72,10 @@ state and has no effect, so the model builds it at each call (`awaitIO`): the sa
 `v = 0` is Cats Effect v3.7.1. Wrong functions for the wrong-function tests: `1` trips one
 `await` early (`awaitingNow ≤ 1`), `2` does not re-increment on cancel (the cleanup keeps the
 state), `3` re-increments without the epoch check, `4` never completes `unblock` ("never wake").
+
+Decision 63 battery for `await` (the only public operation): `5` always raises, `6` never returns,
+`7` drops its effect (returns `()` at once, no count), `8` doubles its effect (decrements the count
+by 2).
 -/
 
 namespace CatsEffectInLean.Std.CyclicBarrier
@@ -89,6 +93,9 @@ def iaeErr : Err := { code := 7000003 }
 
 /-- An argument of the wrong shape: impossible in a well-typed Scala program. -/
 def illErr : Err := { code := 999999, kind := .fatal }
+
+/-- The error of the battery variant that raises (not Cats Effect code). -/
+def battErr : Err := { code := 7000011 }
 
 /-! ## State -/
 
@@ -169,6 +176,8 @@ inductive BLam where
   | flattenK
   /-- The thunk of `cleanup` = `state.update { s => … }` (`CB:79-82`, `SyncRef.scala:65-73`). -/
   | cleanupThunk (r e v : Nat)
+  /-- Not Cats Effect code (battery variant 6): `d => d.get` on a new `Deferred` (never returns). -/
+  | neverK
   deriving DecidableEq, Repr
 
 def BLam.toVal : BLam → Val
@@ -183,6 +192,7 @@ def BLam.toVal : BLam → Val
   | .modifyThunk r cap g m p v => cloVal ns 8 [.ref r, .nat cap, .deferred g, .poll m p, .nat v]
   | .flattenK => cloVal ns 9 []
   | .cleanupThunk r e v => cloVal ns 10 [.ref r, .nat e, .nat v]
+  | .neverK => cloVal ns 11 []
 
 def BLam.ofFields : Nat → List Val → Option BLam
   | 0, [] => some .newDeferred
@@ -196,6 +206,7 @@ def BLam.ofFields : Nat → List Val → Option BLam
   | 8, [.ref r, .nat cap, .deferred g, .poll m p, .nat v] => some (.modifyThunk r cap g m p v)
   | 9, [] => some .flattenK
   | 10, [.ref r, .nat e, .nat v] => some (.cleanupThunk r e v)
+  | 11, [] => some .neverK
   | _, _ => none
 
 /-- The closure id (odd: a library closure). -/
@@ -224,8 +235,13 @@ def apply? (cap : Nat) (v : Nat := 0) : Option IO :=
 /-- The barrier object with state cell `r` (a closure reference). -/
 def barrierVal (r cap : Nat) (v : Nat := 0) : Val := .fn (BLam.obj r cap v).id
 
-/-- `await` (`CB:67-88`) = `F.deferred[Unit].flatMap { gate => … }`. -/
-def awaitIO (r cap : Nat) (v : Nat := 0) : IO := .flatMap (.delay BLam.newDeferred.fn) (BLam.gateK r cap v).fn
+/-- `await` (`CB:67-88`) = `F.deferred[Unit].flatMap { gate => … }`. Variants 5-7 replace the
+whole operation (battery, not Cats Effect code). -/
+def awaitIO (r cap : Nat) (v : Nat := 0) : IO :=
+  if v == 5 then .error battErr
+  else if v == 6 then .flatMap (.delay BLam.newDeferred.fn) BLam.neverK.fn
+  else if v == 7 then .pure .unit
+  else .flatMap (.delay BLam.newDeferred.fn) (BLam.gateK r cap v).fn
 
 /-- `cleanup` (`CB:79-82`). -/
 def cleanupIO (r e v : Nat) : IO := .delay (BLam.cleanupThunk r e v).fn
@@ -281,10 +297,10 @@ def call (l : BLam) (arg : Val) (w : View) : UserResult :=
   | .modifyThunk r cap g m p v =>
     match St.ofVal (w.refs.getD r .unit) with
     | .mk a e d =>
-      -- `val awaitingNow = awaiting - 1`
-      let now := a - 1
+      -- `val awaitingNow = awaiting - 1` (variant 8, not Cats Effect code: `- 2`)
+      let now := if v == 8 then a - 2 else a - 1
       -- `if (awaitingNow == 0)` (variant 1, not Cats Effect code: `awaitingNow ≤ 1`)
-      if (if v == 1 then now ≤ 1 else now == 0) then
+      if (if v == 1 then now ≤ 1 else if v == 8 then now ≤ 0 else now == 0) then
         -- `State(capacity, epoch + 1, gate) -> unblock.complete(()).void`
         { effects := [.writeRef r (stateVal cap (e + 1) g)],
           out := .ret (if v == 4 then Eff.unit.toVal else (Eff.trip d).toVal) }
@@ -305,6 +321,10 @@ def call (l : BLam) (arg : Val) (w : View) : UserResult :=
       else if v == 3 || e' == e then { effects := [.writeRef r (stateVal (a + 1) e' d)], out := .ret .unit }
       else { effects := [.writeRef r (stateVal a e' d)], out := .ret .unit }
     | .bad => illTyped
+  | .neverK =>
+    match arg with
+    | .deferred d => prog (IO.deferredGetOf d (w.deferred d))
+    | _ => illTyped
 
 /-- The closures of this mirror (`WellFormed`: user code may name them; their captured handles
 must be available). -/
