@@ -7,7 +7,7 @@
 //   sbt -Dce.version=3.7-abcdef0-SNAPSHOT test
 val ceVersion = sys.props.getOrElse("ce.version", "3.7.1")
 
-ThisBuild / scalaVersion := "3.3.7"
+ThisBuild / scalaVersion := "3.3.9"
 ThisBuild / organization := "cats-effect-in-lean"
 
 lazy val difftest = (project in file("."))
