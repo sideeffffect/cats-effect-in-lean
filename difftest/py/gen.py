@@ -876,7 +876,10 @@ class Gen:
         body = {'op': 'seq', 'ps': core + [mark(2)]}
         if self.r.random() < 0.5:
             body = self.tag({'op': 'onCancel', 'e': body, 'fin': mark(3)})
-        if depth < 1 and self.r.random() < 0.25:
+        # at most 5 `supervise` per scenario: the Lean side lists every map order of at most 5
+        # entries (`Main.lean`); with 6 the Scala order (identity hashes) can be outside the list
+        if depth < 1 and self.sup_left > 0 and self.r.random() < 0.25:
+            self.sup_left -= 1
             sub = {'op': 'supervise', 's': sv, 'e': self.sup_child(j + 50, env, size, ctx, sv, depth + 1)}
             body = {'op': 'seq', 'ps': [body, {'op': 'attempt', 'e': sub}, mark(4)]}
         return body
@@ -898,6 +901,7 @@ class Gen:
         cedes = lambda: [{'op': 'cede'} for _ in range(self.pick([(3, 0), (2, 1), (1, 2), (1, 4)]))]
         k = self.pick([(3, 1), (3, 2)] if rs else [(3, 1), (3, 2), (2, 3), (1, 4)])
         fs = [self.fresh('x') for _ in range(k)]
+        self.sup_left = 5 - k
         tail = cedes()
         for f in fs:
             r = self.r.random()

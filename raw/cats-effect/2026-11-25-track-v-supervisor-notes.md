@@ -65,3 +65,13 @@ Source: own reading of `std/shared/src/main/scala/cats/effect/std/Supervisor.sca
 hangs, 7 release drops (sets `doneR`, no cancel/join), 8 `await = false` joins, 9 `add` ignores the
 close, 10 `remove` never removes, 11 restart ignores `canceled`/`done`, 12 `await = true` cancels.
 First smoke: variant 9 was not wired for the `Async` state (only `modAdd`); fixed.
+
+## Difftest runs
+
+- Run 1 (seeds 81-83 × 18,400, `--boost tpl_sup=12`, 12 processes): 55,200 cases, 48,227 agreeing
+  per op (`supUse`, `supervise`), 12 mismatches (`steps`, `schedule`, `trace`). All 12 have 6-8
+  `supervise` calls on one supervisor (nested children). Cause: the Lean side lists every map
+  order of at most 5 entries; the Scala order comes from identity hashes, so with 6 or more entries
+  it can be outside the list. Evidence: a rerun of the 12 cases gave 5 agreements (the Scala output
+  varies from run to run with the identity hashes). Not a model bug. Fix: the generator makes at
+  most 5 `supervise` per scenario (`sup_left`); run 2 uses the fixed generator.
