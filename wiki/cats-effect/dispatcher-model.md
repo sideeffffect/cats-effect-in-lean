@@ -1,7 +1,7 @@
 # Dispatcher model, CE-0090 and CE-0091
 
 > Sources: Cats Effect v3.7.1 (`std/shared/src/main/scala/cats/effect/std/Dispatcher.scala`, `Supervisor.scala`, `UnsafeUnbounded.scala`, `kernel/.../Resource.scala:156-208`, `:826-920`, `core/.../IO.scala`, `tests/shared/src/test/scala/cats/effect/std/DispatcherSuite.scala`); cats-core 2.13.0; read-only `gh` searches; own Lean, difftest, smoke and scala-cli runs, 2026-11-25
-> Raw: [Track P7D notes (part 1)](../../raw/cats-effect/2026-11-25-track-p7d-dispatcher-notes.md); [Track P7D mirror notes (part 2)](../../raw/cats-effect/2026-11-25-track-p7d-mirror-notes.md)
+> Raw: [Track P7D notes (part 1)](../../raw/cats-effect/2026-11-25-track-p7d-dispatcher-notes.md); [Track P7D mirror notes (part 2)](../../raw/cats-effect/2026-11-25-track-p7d-mirror-notes.md); [Cpus shim](../../raw/cats-effect/2026-11-25-track-p7d-cpus-shim.md)
 
 ## Overview
 
@@ -23,7 +23,7 @@ Phase 7 batch 7.2, track P7D (decision 66: after track V's `Supervisor`). Mirror
 
 ## Difftest
 
-Ops `dUse`, `dSubmit`, `dForget`, `dCancel`, `dPoll` ([format](../methodology/difftest-program-format.md)); JVM with `-XX:ActiveProcessorCount=1`; template `tpl_disp` (own RNG `p_disp`; at most 3 accepted submissions and 2 cancels per scenario: Lean replay cost of the map orders, k!, not an agreement limit). Fixed cases `dispatcher.jsonl`: 68, all agree. Random run (`opcount.py --seeds 91 92 93`, cases 0-36,000 each, `--boost tpl_disp=12`): see "Results".
+Ops `dUse`, `dSubmit`, `dForget`, `dCancel`, `dPoll` ([format](../methodology/difftest-program-format.md)); `Cpus` = 1 by `DispatcherShim` (a JVM flag `-XX:ActiveProcessorCount=1`, used for the first 114,000 cases, also moved the identity-hash order of a track V case in the self-test); template `tpl_disp` (own RNG `p_disp`; at most 3 accepted submissions and 2 cancels per scenario: Lean replay cost of the map orders, k!, not an agreement limit). Fixed cases `track_p7d_dispatcher.jsonl`: 68, all agree (the name sorts after `supervisor.jsonl`: `CasesSuite` runs all files in one JVM, and the identity-hash sequence would change track V's expected schedules). Random run (`opcount.py --seeds 91 92 93`, cases 0-36,000 each, `--boost tpl_disp=12`): see "Results".
 
 ## Properties (`Props/Phase7/Dispatcher.lean`)
 

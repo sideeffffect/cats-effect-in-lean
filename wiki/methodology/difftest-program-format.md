@@ -232,12 +232,12 @@ New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decod
 | `dCancel` | `f`: atom | `IO(futOf(⟦f⟧)._2()).map(c => fut(h.newFut((c, null))))` |
 | `dPoll` | `f`: atom | `IO(futOf(⟦f⟧)._1.value).map(pollVal)`: `None` → `left(unit)`; `Success(v)` → `right(right(v))`; `Failure(UserError(c))` → `right(left(nat c))`; another failure → `right(left(unit))` |
 
-- `run.sh` starts the JVM with `-XX:ActiveProcessorCount=1`: `Cpus` = 1, so the worker choice (`ThreadLocalRandom.nextInt(Cpus)`) is fixed; `dUse` raises a harness error otherwise.
+- `Cpus` = 1: `DispatcherShim.oneCpu` sets the `static final` field once (`sun.misc.Unsafe`), so the worker choice (`ThreadLocalRandom.nextInt(Cpus)`) is fixed; `dUse` raises a harness error otherwise. (Not a JVM flag: `-XX:ActiveProcessorCount=1` changes the JVM for every op and moved a track V map order.)
 - Values `{"t":"disp","id":n}`, `{"t":"fut","id":n}` (output only). A literal is a decode error. `dCancel` of a cancel future is ill-typed (`typecheck.py`: `fut` vs `cfut`).
 - Lean side: `Std/Dispatcher.lean` (`useIO'`, `submitIO`, `cancelIO`, `dispOf?`, `cancelOf?`); lambdas `dUseK`, `dSrc` (snapshot, `Env.srcIO`, `Env.bracketSrcIO`), `dFutHandle`, `dPollThunk`, `dPollVal`. The mirror's closures are dispatched in `Env.dispatch`, `Env.dispatchSup` and `Env.dispatchRes`; its descriptors in `Env.srcIO`/`bracketSrcIO`.
 - `IllegalStateException: Dispatcher already closed` prints as an exception (`Prog.userCodeV?`, `Replay.errText`, `drive.py` `LIB_EXNS`).
 - Alternatives: `dSubmit`, `dForget`, `dCancel` count as `supervise` for the map-order alternatives (`Env.dispCount`).
-- Fixed cases `cases/dispatcher.jsonl` (`cases/gen_dispatcher.py`, 68). Generator: `tpl_disp`, appended by `gen_case` with its own RNG (`p_disp`). See [Dispatcher model](../cats-effect/dispatcher-model.md).
+- Fixed cases `cases/track_p7d_dispatcher.jsonl` (`cases/gen_dispatcher.py`, 68; named to sort after `supervisor.jsonl`, see the generator doc). Generator: `tpl_disp`, appended by `gen_case` with its own RNG (`p_disp`). See [Dispatcher model](../cats-effect/dispatcher-model.md).
 
 ## User function table
 

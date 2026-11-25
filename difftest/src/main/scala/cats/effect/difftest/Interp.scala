@@ -1,7 +1,7 @@
 package cats.effect.difftest
 
 import cats.effect.{Deferred, Fiber, IO, Outcome, Poll, Ref, Resource}
-import cats.effect.std.{CountDownLatch, CyclicBarrier, Dispatcher, Mutex, Queue, Semaphore, Supervisor, SupervisorShim}
+import cats.effect.std.{CountDownLatch, CyclicBarrier, Dispatcher, DispatcherShim, Mutex, Queue, Semaphore, Supervisor, SupervisorShim}
 
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
@@ -389,11 +389,12 @@ final class Interp(h: Harness):
     case Prog.SupUse(aw, rs, cv, x, k) =>
       SupervisorShim(aw, rs, cv).use(s => run(k, env + (x -> Bound.V(VSup(h.newSup(s))))))
     case Prog.Supervise(s, e) => supOf(atom(s, env)).supervise(run(e, env)).map(f => VFiber(h.fiberHandle(f)))
-    // ---- format v2 (Phase 7, track P7D): std.Dispatcher (Dispatcher.scala:60-381). The JVM runs
-    // with -XX:ActiveProcessorCount=1 (run.sh), so `Cpus` = 1 and the worker choice is fixed.
+    // ---- format v2 (Phase 7, track P7D): std.Dispatcher (Dispatcher.scala:60-381). `Cpus` is set
+    // to 1 (`DispatcherShim`), so the worker choice is fixed.
     case Prog.DUse(par, aw, x, k) =>
-      if Runtime.getRuntime.availableProcessors() != 1 then
-        throw new IllegalStateException("difftest: dUse needs -XX:ActiveProcessorCount=1")
+      DispatcherShim.oneCpu
+      if DispatcherShim.cpus != 1 then
+        throw new IllegalStateException("difftest: Dispatcher Cpus is not 1")
       (if par then Dispatcher.parallel[IO](aw) else Dispatcher.sequential[IO](aw))
         .use(d => run(k, env + (x -> Bound.V(VDisp(h.newDisp(d))))))
     case Prog.DSubmit(d, e) =>

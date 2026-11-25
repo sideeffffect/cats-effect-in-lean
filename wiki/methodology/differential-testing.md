@@ -156,7 +156,7 @@ Ops `supUse`, `supervise` (`std.Supervisor`). Template `tpl_sup` with its own RN
 
 ## Format v2, track P7D (Phase 7, 2026-11-25)
 
-Ops `dUse`, `dSubmit`, `dForget`, `dCancel`, `dPoll` (`std.Dispatcher`). Template `tpl_disp` with its own RNG (`p_disp`). Lessons: (1) a nondeterministic library choice (`ThreadLocalRandom` worker) can be fixed with a JVM flag (`-XX:ActiveProcessorCount=1`) and kept as a model input; (2) never wait on a Scala `Future` with `IO.fromFuture` in the harness (not cancelable: a lost Future hangs the case); poll `Future#value`; (3) the map-order alternatives cost k! replays: keep the map counters of a template small (cost limit; record it); (4) a bug can show first as an *agreeing* generated case (CE-0091: both sides dropped the effect). Counts: [Dispatcher model](../cats-effect/dispatcher-model.md).
+Ops `dUse`, `dSubmit`, `dForget`, `dCancel`, `dPoll` (`std.Dispatcher`). Template `tpl_disp` with its own RNG (`p_disp`). Lessons: (1) a nondeterministic library choice (`ThreadLocalRandom` worker) is fixed by setting the library's `Cpus` field in a shim, and kept as a model input; a JVM flag (`-XX:ActiveProcessorCount=1`) also works but changes the JVM for every op (it moved a track V identity-hash order and failed the self-test); (2) never wait on a Scala `Future` with `IO.fromFuture` in the harness (not cancelable: a lost Future hangs the case); poll `Future#value`; (3) the map-order alternatives cost k! replays: keep the map counters of a template small (cost limit; record it); (4) a bug can show first as an *agreeing* generated case (CE-0091: both sides dropped the effect). Counts: [Dispatcher model](../cats-effect/dispatcher-model.md).
 
 ## See Also
 

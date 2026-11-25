@@ -9,8 +9,13 @@ a gate); an effect that cancels itself (its Future stays empty); an effect that 
 CE-0091 (submit, then leave the scope at once); a follow-up submission from inside an effect;
 small runtime thresholds; some pick choices.
 
-Usage: python3 difftest/cases/gen_dispatcher.py   (writes dispatcher.jsonl; then
-difftest/run.sh difftest/cases/dispatcher.jsonl > difftest/cases/dispatcher.expected.jsonl)
+The file name sorts after `supervisor.jsonl` on purpose: `CasesSuite` (sbt test) runs all case
+files in one JVM in name order, and the `Supervisor` map order follows HotSpot identity hashes, a
+per-thread sequence. These cases hash `Supervisor` tokens too, so run before `supervisor.jsonl`
+they change that file's expected schedules (seen 2026-11-25).
+
+Usage: python3 difftest/cases/gen_dispatcher.py   (writes track_p7d_dispatcher.jsonl; then
+difftest/run.sh difftest/cases/track_p7d_dispatcher.jsonl > difftest/cases/track_p7d_dispatcher.expected.jsonl)
 """
 import json
 from pathlib import Path
@@ -110,5 +115,5 @@ for par, aw in MODES:
                           seq(CEDE, CEDE, bind("c", cancel("f"), seq(CEDE, CEDE, poll("c"))), gate_open(), pure(UNIT))))),
          choices=[0, 1, 1, 0, 2, 1, 0, 0, 1, 2])
 
-(HERE / "dispatcher.jsonl").write_text("".join(json.dumps(c) + "\n" for c in cases))
+(HERE / "track_p7d_dispatcher.jsonl").write_text("".join(json.dumps(c) + "\n" for c in cases))
 print(f"{len(cases)} cases")
