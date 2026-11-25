@@ -56,6 +56,10 @@ Harness: `Supervisor.use(s => save s; supervise the root children; b.attempt)`, 
 | `std.Supervisor.removed` | blocked ⇒ no terminated fiber in the map | 10 |
 | `std.Supervisor.cancels` | `aw = false`, sleeping children, body pure/cede: no child finished its sleep | 8 |
 
+## Smoke (`lake exe supsmoke 100`, 6 min)
+
+v3.7.1: 0 violations of all 7 statements, 0 hypothesis failures (100 runs per statement group; 82 done, 6 blocked). Each wrong variant breaks its statement: v1 → 4 (100 runs), v2 → 5 (100), v3 → 4 (100), v4 → 3 (93), v5 → 4 (100), v6 → 5 (100), v7 → 1 (34), v8 → 7 (93), v9 → 2 (17), v10 → 6 (11), v11 → 1 (8), v12 → 4 (40).
+
 ## Decision 63 battery
 
 | Operation | raises | hangs | drops | doubles |
