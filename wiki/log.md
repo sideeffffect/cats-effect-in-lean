@@ -488,3 +488,7 @@
 ## [2026-11-25] update | difftest: identity hashes all equal (-XX:hashCode=2); Dispatcher Cpus shim
 - Updated: cats-effect/dispatcher-model.md, methodology/differential-testing.md, methodology/difftest-program-format.md
 - Raw: raw/cats-effect/2026-11-25-track-p7d-identity-hash.md
+
+## [2026-11-25] ingest | Track P7D merged (CE-0090, CE-0091 refuted in Lean); decision 67 (difftest JVM hashCode=2)
+- Updated: methodology/differential-testing.md
+- Raw: raw/project-decisions/2026-11-25-decision-67-jvm-hashcode.md
