@@ -69,6 +69,10 @@ V2L_MIN = 0.015
 # 8 %; it uses every queue op); opcount.py with `--boost tpl_queue2=11` gives the 50,000-case runs
 V2Q_OPS = ('qNew', 'qOffer', 'qTryOffer', 'qTake', 'qTryTake', 'qSize')
 V2Q_MIN = 0.03
+# Format v2 (Phase 7, track V): the `Supervisor` scenario appended with its own RNG (`p_sup`, about
+# 8 %; it uses both ops); opcount.py with `--boost tpl_sup=12` gives the 50,000-case runs
+V2V_OPS = ('supUse', 'supervise')
+V2V_MIN = 0.03
 
 
 def check(cond, msg):
@@ -81,7 +85,7 @@ def main():
     t0 = time.time()
     # 1. type checker
     basic = [json.loads(x) for f in ('basic', 'syncstep', 'resource', 'queue', 'race', 'bracket', 'memoize', 'resuse', 'partraverse',
-                                            'semaphore', 'latch', 'queue2')
+                                            'semaphore', 'latch', 'queue2', 'supervisor')
              for x in (drive.REPO / f'difftest/cases/{f}.jsonl').read_text().splitlines() if x.strip()]
     check(all(well_typed(c['prog']) for c in basic), f"type checker accepts all {len(basic)} golden cases")
     N1 = {'t': 'nat', 'v': 1}
@@ -92,6 +96,9 @@ def main():
         # format v2 (track L): `cdlAwait` on a barrier; a count of 0
         {'op': 'bind', 'x': 'b', 'e': {'op': 'cbNew', 'n': 2}, 'k': {'op': 'cdlAwait', 'l': {'t': 'var', 'x': 'b'}}},
         {'op': 'cdlNew', 'n': 0},
+        # format v2 (track V): `supervise` on a `Ref`; a non-boolean `aw`
+        {'op': 'bind', 'x': 'r', 'e': {'op': 'refNew', 'v': N1}, 'k': {'op': 'supervise', 's': {'t': 'var', 'x': 'r'}, 'e': {'op': 'cede'}}},
+        {'op': 'supUse', 'aw': 1, 'rs': False, 'cv': False, 'x': 's', 'k': {'op': 'cede'}},
         # format v2 (track M): `memoGet` on a `Ref`
         {'op': 'bind', 'x': 'r', 'e': {'op': 'refNew', 'v': N1}, 'k': {'op': 'memoGet', 'm': {'t': 'var', 'x': 'r'}}},
         {'op': 'bind', 'x': 'r', 'e': {'op': 'refNew', 'v': N1}, 'k': {'op': 'refModify', 'r': {'t': 'var', 'x': 'r'}, 'fn': 0}},
@@ -162,6 +169,9 @@ def main():
     v2lcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2L_OPS}
     lowl = {op: f for op, f in v2lcov.items() if f < V2L_MIN}
     check(not lowl, f"each format v2 op of track L in >= {V2L_MIN:.1%} of {N} cases {lowl}")
+    v2vcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2V_OPS}
+    lowv = {op: f for op, f in v2vcov.items() if f < V2V_MIN}
+    check(not lowv, f"each format v2 op of track V in >= {V2V_MIN:.1%} of {N} cases {lowv}")
     v2qcov = {op: sum(1 for c in a if drive._has_op(c['prog'], (op,))) / N for op in V2Q_OPS}
     lowq = {op: f for op, f in v2qcov.items() if f < V2Q_MIN}
     check(not lowq, f"each format v2 op of track Q (Queue) in >= {V2Q_MIN:.0%} of {N} cases {lowq}")

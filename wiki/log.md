@@ -462,3 +462,8 @@
 ## [2026-11-25] ingest | Phase 7 batch 7.2 start (decisions 64–65)
 - Updated: methodology/project-plan.md
 - Raw: raw/project-decisions/2026-11-25-phase7-batch2-start.md
+
+## [2026-11-25] ingest | Phase 7 track V: Supervisor model
+- Created: cats-effect/supervisor-model.md
+- Updated: methodology/difftest-program-format.md, methodology/differential-testing.md, cats-effect/latch-barrier-model.md, index.md
+- Raw: raw/cats-effect/2026-11-25-track-v-supervisor-notes.md
