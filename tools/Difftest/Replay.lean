@@ -102,6 +102,9 @@ def errText (e : Err) : String :=
   if e.code == supIseCode then "IllegalStateException: supervisor already shutdown" else
   if e.code == supIseCode + 1 then "AssertionError: supervised fiber couldn't cancel (this is a bug in Supervisor)" else
   if e.code == supIseCode + 2 then "AssertionError: unexpected fiber (this is a bug in Supervisor)" else
+  -- Phase 7, track P7D (`Std/Dispatcher.lean`)
+  if e.code == dispIseCode then "IllegalStateException: Dispatcher already closed" else
+  if e.code == dispIseCode + 2 then "IllegalStateException: Promise already completed." else
   match userCodeV? e with
   | some c => s!"UserError: UserError({c})"
   | none => if e == typeErr then "TypeError: ?" else s!"ModelError: code {e.code}"

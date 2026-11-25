@@ -1,0 +1,118 @@
+id: CE-0091
+title: "Dispatcher.parallel(await = true) drops an effect that was submitted before the scope exits but not yet taken by a worker; its Future never completes"
+status: draft  # found in Phase 7 batch 7.2, track P7D (2026-11-25) by the Lean model (difftest case, then a property); reproduced on v3.7.1, series/3.x, series/3.7.x; refuted in Lean
+priority: medium
+kind: lost-effect
+area: std
+files:
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:254-285  # resource order: workers are released before the executor
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:417       # the worker calls executor(action) when it takes a registration
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:461-469   # PoisonPill: the worker stops
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:487       # Worker finalizer: offers the PoisonPill, does not wait for the worker
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:615-621   # Executor.parallel = Supervisor(await): supervise on a closed supervisor raises
+  - std/shared/src/main/scala/cats/effect/std/Supervisor.scala:320-323   # IllegalStateException("supervisor already shutdown")
+functions:
+  - Dispatcher.parallel (await = true)
+  - Dispatcher#unsafeRunAndForget, unsafeToFutureCancelable, unsafeToFuture, unsafeRunSync
+summary: >
+  `Dispatcher.parallel(await = true).use(d => IO(d.unsafeRunAndForget(fa)))` usually never runs
+  `fa`. The submission puts a `Primary` registration on a worker queue and wakes the worker. If
+  the scope exits before the worker fiber takes the registration, the release runs the finalizers
+  in reverse order: the `Worker` finalizer offers a `PoisonPill` behind the registration
+  (Dispatcher.scala:487) and returns at once; then the executor `Supervisor(await = true)` is
+  released (:615-621): it sets its done flag and joins the fibers it holds, which are none. When
+  the worker then takes the registration it calls `executor(action)` =
+  `supervisor.supervise(task)` (:417, :619) on the closed supervisor, which raises
+  `IllegalStateException("supervisor already shutdown")` (Supervisor.scala:320-323). The worker
+  fiber fails with it (the runtime prints it), the outer Supervisor does not restart it, the
+  effect never runs and its `Future` is never completed (a caller blocked in `unsafeRunSync`
+  hangs). `sequential(await = true)` runs the same effect: its executor is in place, and the worker
+  drains the queue before the pill (the Cats Effect test "await work queue drain on shutdown"
+  checks this for `sequential` only).
+likelihood: >
+  Medium to high. The shape is the example of issue #3506 (closed as fixed in 3.4.9): submit and
+  leave the scope at once with await = true. Any code that submits work just before a graceful
+  shutdown (a callback that fires during shutdown, a last `unsafeRunAndForget` in a `use`) can lose
+  it. The reproducer shows it in 50/50 TestControl seeds and in about 190/200 runs on the default
+  runtime (the worker usually loses the race); `unsafeToFuture` gives a Future that stays `None`.
+maybe_intended: >
+  Unlikely. Issue #3506 ("Dispatcher#unsafeRunAndForget seems not to await despite (await = true)")
+  reported this program shape and was closed as fixed ("I confirmed that the given example prints
+  as expected using CE 3.4.9"). The current test for #3506 (DispatcherSuite.scala:639-647) waits
+  until the effect has started (`latch.get`) before it leaves the scope, so it does not cover a
+  registration that is still in the queue; the rewrite of Dispatcher (PR #3923) brought the present
+  release order. The `sequential` twin drains the queue (its test), so the two modes disagree.
+  Scaladoc of `parallel(await)` (:130-133, :160-163): "all active effects will be ... awaited";
+  "true - wait for the completion of the active fibers". A maintainer can argue that an effect that
+  has not started is not "active"; then it should at least fail or be canceled, not stay pending
+  forever, and the worker should not die with IllegalStateException.
+reproducer: reproducers/CE-0091/Repro.scala
+output:
+  # v3.7.1, scripts/run_reproducers.sh CE-0091 (scala-cli), 2026-11-25 (stderr lines
+  # "java.lang.IllegalStateException: supervisor already shutdown" of the failed workers omitted)
+  v3.7.1: |
+    parallel(await = true) TestControl: effect ran in 0/50 seeds
+    sequential(await = true) TestControl: effect ran in 50/50 seeds
+    parallel(await = true) default runtime: effect ran in 10/200 runs
+    sequential(await = true) default runtime: effect ran in 200/200 runs
+    unsafeToFuture after the scope (TestControl seed 0): parallel None, sequential Some(Success(42))
+    REPRODUCED CE-0091
+  # series/3.x = 3.7.1-89-de84c01 (publishLocal snapshot of origin/series/3.x head
+  # de84c01f76b2f42fcee9d43aba66c82992add103, head checked with gh api on 2026-11-25)
+  series/3.x: |
+    parallel(await = true) TestControl: effect ran in 0/50 seeds
+    sequential(await = true) TestControl: effect ran in 50/50 seeds
+    parallel(await = true) default runtime: effect ran in 17/200 runs
+    sequential(await = true) default runtime: effect ran in 200/200 runs
+    unsafeToFuture after the scope (TestControl seed 0): parallel None, sequential Some(Success(42))
+    REPRODUCED CE-0091
+  # series/3.7.x = 3.7.1-15-2f94201 (publishLocal, 2026-11-10)
+  series/3.7.x: |
+    parallel(await = true) TestControl: effect ran in 0/50 seeds
+    sequential(await = true) TestControl: effect ran in 50/50 seeds
+    parallel(await = true) default runtime: effect ran in 10/200 runs
+    sequential(await = true) default runtime: effect ran in 200/200 runs
+    unsafeToFuture after the scope (TestControl seed 0): parallel None, sequential Some(Success(42))
+    REPRODUCED CE-0091
+  # Found first in a generated difftest case (Lean and Scala agreed: no emit of the dispatched
+  # effect, failure "IllegalStateException: supervisor already shutdown"), then checked here.
+expected: |
+  With await = true the effect submitted before the scope exits runs before `use` returns (as for
+  `sequential`, and as issue #3506 was closed), so P(true) is true in every seed and the Future is
+  `Some(Success(42))`. The reproducer then prints 50/50 for both modes and NOT REPRODUCED CE-0091.
+promised_by:
+  - "Scaladoc of Dispatcher.parallel(await) (Dispatcher.scala:130-133, :160-163): 'Once the resource scope exits, depending on the termination policy all active effects will be canceled or awaited'; 'true - wait for the completion of the active fibers'."
+  - "Issue #3506 (closed as fixed in 3.4.9) with this exact program shape."
+  - "Twin: Dispatcher.sequential(await = true) drains the queue (DispatcherSuite 'await work queue drain on shutdown')."
+cause: >
+  The workers are released before the executor (they are acquired after it, Dispatcher.scala:273-279),
+  and the Worker finalizer only offers the PoisonPill (:487); it does not wait until the worker has
+  handed the registrations before the pill to the executor. So the executor Supervisor can close
+  while registrations are still queued; the worker then calls supervise on a closed supervisor.
+possible_fix: >
+  In the Worker finalizer, after offering the PoisonPill, wait until the worker has taken it (for
+  example complete a Deferred in the PoisonPill branch, :461-462, and `get` it in the finalizer).
+  The worker then hands every earlier registration to the executor while the executor is still
+  open, and `Supervisor(await = true)` joins them. (For `sequential` the effects run in place, so
+  only `parallel` needs the wait; with await = false the executor cancels them.) The Lean fixed twin
+  (variant 31 of Std/Dispatcher.lean) waits for the worker's doneR flag after the pill: on the
+  refuting input the effect runs (DispatcherBattery.awaitDrains_twin31).
+duplicates:
+  upstream: []
+  related:
+    - "typelevel/cats-effect#3506 (closed) Dispatcher#unsafeRunAndForget seems not to await despite (await = true): same program shape; closed as fixed in 3.4.9; regressed (current test waits for the start)"
+    - "typelevel/cats-effect#3923 (merged) Rewrote Dispatcher: the present release order"
+    - "typelevel/cats-effect#3981 (closed) Dispatcher sequential runs queued tasks concurrently when closing"
+    - "CE-0090 (this repository): same root cause family (the release stops the workers before it drains or rejects the queued registrations)"
+  queries:
+    - "gh search issues 'supervisor already shutdown' -R typelevel/cats-effect (2026-11-25): no result"
+    - "gh search issues 'Dispatcher await unsafeRunAndForget' / 'Dispatcher parallel await true not run' / 'Dispatcher submitted effect not executed' -R typelevel/cats-effect (2026-11-25): no result"
+    - "gh search prs 'Dispatcher' -R typelevel/cats-effect --limit 30 (2026-11-25): #4698, #4052, #4167, #3923, #3878, #3900, #3972, #3701, #3579, ...; none about a queued registration at release"
+    - "gh issue view 3506 (comments): 'I confirmed that the given example prints as expected using CE 3.4.9'"
+lean:
+  property: CatsEffectInLean.Props.Phase7.Dispatcher.dispAwaitDrains
+  theorem: CatsEffectInLean.Proofs.Phase7.DispatcherBattery.dispAwaitDrains_refuted
+  registry: CatsEffectInLean/RegistryHeavy.lean (std.Dispatcher.awaitDrains, refuted; heavy, decision 55)
+  run: "Proofs/Phase7/DispatcherRuns/R15*.lean: parallel(await = true), one pure effect submitted by the use body, FIFO schedule, 216 micro-steps (kernel, 2 chunks): the root is done Succeeded(()), the effect never ran."
+  fixed_twin: "variant 31 of Std/Dispatcher.lean (not Cats Effect code): same input, 269 micro-steps, the effect runs (DispatcherBattery.awaitDrains_twin31, run R16)."
+  ordinary_inputs: "The input is ordinary (one submission, then the scope exits). sequential meets the statement on the same input (awaitDrains_sat, run R01); parallel meets it on a schedule where the worker takes the registration first (awaitDrains_v0_par_sched14, run R17)."

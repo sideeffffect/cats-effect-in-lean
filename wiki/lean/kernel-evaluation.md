@@ -1,7 +1,7 @@
 # Kernel evaluation of the model
 
 > Sources: own spike `spikes/kernel_eval/` (toy fiber interpreter), Lean v4.35.0, 2026-11-10; Lean reference manual (decide, cbv, decide_cbv); Lean source `Lean/Meta/Tactic/Cbv/Main.lean`, `Lean/Meta/Sym/Simp/SimpM.lean` at v4.35.0
-> Raw: [Kernel-eval spike notes](../../raw/lean-tooling/2026-11-10-kernel-eval-spike-notes.md); [decide / cbv / vcgen](../../raw/lean-tooling/lean-reference-tactics-decide-cbv-vcgen.md); [Local experiments](../../raw/lean-tooling/2026-11-10-local-experiments-lean-v4-35-0.md)
+> Raw: [Kernel-eval spike notes](../../raw/lean-tooling/2026-11-10-kernel-eval-spike-notes.md); [decide / cbv / vcgen](../../raw/lean-tooling/lean-reference-tactics-decide-cbv-vcgen.md); [Local experiments](../../raw/lean-tooling/2026-11-10-local-experiments-lean-v4-35-0.md); [Track P7D mirror notes](../../raw/cats-effect/2026-11-25-track-p7d-mirror-notes.md)
 
 ## Overview
 
@@ -48,6 +48,17 @@ Unbounded properties (all schedules, all depths, liveness) still need proofs by 
 - **Options in proof files**: `maxRecDepth` for long runs; `cbv.maxSteps` for `decide_cbv`. Do not change `maxHeartbeats` globally in the library; set it per declaration if needed.
 - **Avoid in checkers**: explicit deduplication by `DecidableEq` (slow in the kernel); `decide_cbv` does the sharing for free.
 - **Out of fuel** stays a separate `Result` case; checkers must treat it as "no claim", never as a CE outcome.
+
+## Long runs in chunks (track P7D, 2026-11-25)
+
+A `decide +kernel` check of a long scheduler run costs memory per micro-step (Dispatcher: 25-60 MB;
+a 389-step run: 10 GB, over the 8 GB limit). Split the run: the state between two tasks
+(`Sched.cur = none`) prints with `Repr` as a parsable term (a state inside a task does not parse);
+one module per chunk proves `runSchedStateP … d cs S_i = S_{i+1}` from a literal `S_i`, and
+`runP_add` (`runSchedStateP (a + b) cs s = runSchedStateP b (cs.drop a) (runSchedStateP a cs s)`,
+`Proofs/Phase7/DispatcherCommon.lean`) composes them. The first chunk is the expensive one (resource
+allocation); from a literal state 200 steps cost 2.9 GB. Generator: `tools/DispRuns/gen.py`. Also:
+`decide +kernel` on a statement with a `let` timed out in the elaborator; repeat the term instead.
 
 ## Open points
 

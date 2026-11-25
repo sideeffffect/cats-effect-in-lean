@@ -55,7 +55,7 @@ object Json:
       case "succeeded" => only("v"); Val.VSucceeded(decodeVal(field(o, "v", t)))
       case "errored" => only("code"); Val.VErrored(Err.User(nat(field(o, "code", t), "errored.code")))
       case "canceled" => only(); Val.VCanceled
-      case "fiber" | "ref" | "deferred" | "queue" | "memo" | "sem" | "mutex" | "latch" | "barrier" | "sup" => fail(s"value '$t': handles cannot be literals")
+      case "fiber" | "ref" | "deferred" | "queue" | "memo" | "sem" | "mutex" | "latch" | "barrier" | "sup" | "disp" | "fut" => fail(s"value '$t': handles cannot be literals")
       case _ => fail(s"unknown value tag '$t'")
 
   def encodeErr(e: Err): ujson.Obj = e match
@@ -82,6 +82,8 @@ object Json:
     case Val.VLatch(i) => ujson.Obj("t" -> "latch", "id" -> i)
     case Val.VBarrier(i) => ujson.Obj("t" -> "barrier", "id" -> i)
     case Val.VSup(i) => ujson.Obj("t" -> "sup", "id" -> i)
+    case Val.VDisp(i) => ujson.Obj("t" -> "disp", "id" -> i)
+    case Val.VFut(i) => ujson.Obj("t" -> "fut", "id" -> i)
 
   // --------------------------------------------------------------- programs
 
@@ -116,7 +118,9 @@ object Json:
     // Phase 7, track L
     "cdlNew", "cdlRelease", "cdlAwait", "cbNew", "cbAwait",
     // Phase 7, track V
-    "supUse", "supervise")
+    "supUse", "supervise",
+    // Phase 7, track P7D
+    "dUse", "dSubmit", "dForget", "dCancel", "dPoll")
 
   /** The queue kinds of `qNew` (format v2, track Q); `Prog.qKinds` in `tools/Difftest/Prog.lean`. */
   val QKinds: List[String] = List("bounded", "dropping", "circularBuffer", "synchronous", "unbounded",
@@ -323,6 +327,17 @@ object Json:
           case _ => fail(s"$ctx.$k: expected a boolean")
         Prog.SupUse(flag("aw"), flag("rs"), flag("cv"), x, p("k", scope + (x -> Kind.V)))
       case "supervise" => only("s", "e"); Prog.Supervise(a("s"), p("e"))
+      // ---- format v2 (Phase 7, track P7D)
+      case "dUse" =>
+        only("par", "aw", "x", "k"); val x = s("x")
+        def flag(k: String): Boolean = field(o, k, ctx) match
+          case ujson.Bool(b) => b
+          case _ => fail(s"$ctx.$k: expected a boolean")
+        Prog.DUse(flag("par"), flag("aw"), x, p("k", scope + (x -> Kind.V)))
+      case "dSubmit" => only("d", "e"); Prog.DSubmit(a("d"), p("e"))
+      case "dForget" => only("d", "e"); Prog.DForget(a("d"), p("e"))
+      case "dCancel" => only("f"); Prog.DCancel(a("f"))
+      case "dPoll" => only("f"); Prog.DPoll(a("f"))
       case "syncStep" => fail(s"$ctx: only at the root of a program")
       case r if ResOps.contains(r) => fail(s"$ctx: a resource op outside a resource position")
       case _ => fail(s"unknown op '$op'")

@@ -30,6 +30,8 @@ enum Val:
   case VLatch(id: Int) // v2 (Phase 7, track L): a `CountDownLatch`
   case VBarrier(id: Int) // v2 (Phase 7, track L): a `CyclicBarrier`
   case VSup(id: Int) // v2 (Phase 7, track V): a `Supervisor[IO]`
+  case VDisp(id: Int) // v2 (Phase 7, track P7D): a `Dispatcher[IO]`
+  case VFut(id: Int) // v2 (Phase 7, track P7D): a `Future` (and the cancel action, if any) of a submission
 
 /** An argument position: a literal value or a bound variable. */
 enum Atom:
@@ -158,6 +160,17 @@ enum Prog:
   case SupUse(aw: Boolean, rs: Boolean, cv: Boolean, x: String, k: Prog)
   /** `supOf(s).supervise(e).map(f => VFiber(h.fiberHandle(f)))`. */
   case Supervise(s: Atom, e: Prog)
+  // ---- format v2 (Phase 7, track P7D)
+  /** `(if par Dispatcher.parallel[IO](aw) else Dispatcher.sequential[IO](aw)).use(d => k[x := VDisp(h.newDisp(d))])`. */
+  case DUse(par: Boolean, aw: Boolean, x: String, k: Prog)
+  /** `{ val fa = I(e); IO(dispOf(d).unsafeToFutureCancelable(fa)).map(p => VFut(h.newFut(p))) }`. */
+  case DSubmit(d: Atom, e: Prog)
+  /** `{ val fa = I(e); IO(dispOf(d).unsafeRunAndForget(fa)).as(VUnit) }`. */
+  case DForget(d: Atom, e: Prog)
+  /** `IO(futOf(f)._2()).map(c => VFut(h.newFut((c, null))))`. */
+  case DCancel(f: Atom)
+  /** `IO(futOf(f)._1.value).map(pollVal)`. */
+  case DPoll(f: Atom)
 
 /** A `Resource[IO, Val]` (format v1). It occurs only under `AllocatedCase`. */
 enum Res:

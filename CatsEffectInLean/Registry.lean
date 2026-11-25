@@ -22,6 +22,7 @@ import CatsEffectInLean.Proofs.Phase7.SemaphoreCount
 import CatsEffectInLean.Props.Phase7.CountDownLatch
 import CatsEffectInLean.Props.Phase7.CyclicBarrier
 import CatsEffectInLean.Props.Phase7.Supervisor
+import CatsEffectInLean.Props.Phase7.Dispatcher
 
 /-!
 # Property registry
@@ -941,7 +942,37 @@ def registry : List Entry := [
     rows := ["std.Supervisor.apply", "std.Supervisor.apply#3", "std.Supervisor.State.cancelAll", "std.Supervisor.supervise"]
     prop := ``Props.Phase7.Supervisor.supCancels
     status := .«open»
-    note := "Phase 7, track V: await = false, children that sleep (d >= 1), body IO.pure(()) or IO.cede, no restart: when the root is done no child finished its sleep (the close canceled it, Scaladoc SV:121-127). Satisfiable (cancels_sat). Wrong function: await = false joins (cancels_v8, kernel). Open." }
+    note := "Phase 7, track V: await = false, children that sleep (d >= 1), body IO.pure(()) or IO.cede, no restart: when the root is done no child finished its sleep (the close canceled it, Scaladoc SV:121-127). Satisfiable (cancels_sat). Wrong function: await = false joins (cancels_v8, kernel). Open." },
+  { id := "std.Dispatcher.runsOnce"
+    rows := ["std.Dispatcher.apply", "std.Dispatcher.parallel", "std.Dispatcher.sequential", "std.Dispatcher.parallel#2", "std.Dispatcher.sequential#2", "std.Dispatcher.unsafeToFutureCancelable", "std.Dispatcher.unsafeToFuture", "std.Dispatcher.unsafeRunCancelable", "std.Dispatcher.unsafeRunAndForget", "std.Dispatcher.Worker.run", "std.Dispatcher.Worker.apply", "std.Dispatcher.Executor.apply", "std.Dispatcher.Executor.inplace", "std.Dispatcher.Executor.parallel", "std.Dispatcher.UnsafeAsyncQueue.unsafeOffer", "std.Dispatcher.UnsafeAsyncQueue.take"]
+    prop := ``Props.Phase7.Dispatcher.dispRunsOnce
+    status := .«open»
+    note := "Phase 7, track P7D: in every state each submitted effect started its user code at most once and its finalizer ran at most once. parallel or sequential, any await, any number of workers and worker choices (ThreadLocalRandom), submissions from the use body, a concurrent fiber and after the close, both submission modes, cancels, any user programs, all PChoice schedules, any Supervisor map order. Satisfiable (DispatcherBattery.runsOnce_sat, kernel run R01). Wrong functions: unsafeToFutureCancelable doubles (runsOnce_v4), unsafeRunAndForget doubles (runsOnce_v12). Open." },
+  { id := "std.Dispatcher.closedRejects"
+    rows := ["std.Dispatcher.apply", "std.Dispatcher.parallel", "std.Dispatcher.sequential", "std.Dispatcher.parallel#2", "std.Dispatcher.sequential#2", "std.Dispatcher.unsafeToFutureCancelable", "std.Dispatcher.unsafeToFuture", "std.Dispatcher.unsafeRunCancelable", "std.Dispatcher.unsafeRunAndForget", "std.Dispatcher.Worker.run", "std.Dispatcher.Worker.apply", "std.Dispatcher.Executor.apply", "std.Dispatcher.Executor.inplace", "std.Dispatcher.Executor.parallel", "std.Dispatcher.UnsafeAsyncQueue.unsafeOffer", "std.Dispatcher.UnsafeAsyncQueue.take"]
+    prop := ``Props.Phase7.Dispatcher.dispClosedRejects
+    status := .«open»
+    note := "Phase 7, track P7D: in every state a submission that threw IllegalStateException never started; when the root is done Succeeded(()), every submission made after use returned threw (Scaladoc DP:130-133, :168-171). Satisfiable (closedRejects_sat, R23). Wrong functions: no closed check (closedRejects_v19), parallel release drops (closedRejects_v15). Open." },
+  { id := "std.Dispatcher.seqFifo"
+    rows := ["std.Dispatcher.sequential", "std.Dispatcher.sequential#2", "std.Dispatcher.unsafeToFutureCancelable", "std.Dispatcher.unsafeRunAndForget", "std.Dispatcher.Executor.inplace", "std.Dispatcher.Worker.run", "std.Dispatcher.UnsafeAsyncQueue.unsafeOffer", "std.Dispatcher.UnsafeAsyncQueue.take"]
+    prop := ``Props.Phase7.Dispatcher.dispSeqFifo
+    status := .«open»
+    note := "Phase 7, track P7D: sequential, effects submitted by the use body: in every state the start order is increasing (submission order) and at most one effect runs (Scaladoc DP:173-177). Any await, any user programs, both modes, all schedules. Satisfiable (seqFifo_sat, R25: order [0, 1]). Wrong function: sequential takes the parallel executor (seqFifo_v18, schedule sched 50 300: two effects at once). Open." },
+  { id := "std.Dispatcher.cancels"
+    rows := ["std.Dispatcher.apply", "std.Dispatcher.parallel", "std.Dispatcher.sequential", "std.Dispatcher.parallel#2", "std.Dispatcher.sequential#2", "std.Dispatcher.unsafeToFutureCancelable", "std.Dispatcher.unsafeToFuture", "std.Dispatcher.unsafeRunCancelable", "std.Dispatcher.unsafeRunAndForget", "std.Dispatcher.Executor.parallel", "std.Dispatcher.Executor.inplace", "std.Dispatcher.Worker.run", "std.Dispatcher.Worker.apply"]
+    prop := ``Props.Phase7.Dispatcher.dispCancels
+    status := .«open»
+    note := "Phase 7, track P7D: await = false, effects that sleep (d >= 1), use body IO.pure(()) or IO.cede, no cancel: when the root is done, no effect finished its sleep (the release canceled it, Scaladoc DP:163, :199). Satisfiable (cancels_sat, R27: the effect canceled, status 3). Wrong function: the factory always awaits (cancels_v20). Open." },
+  { id := "std.Dispatcher.noDeadlock"
+    rows := ["std.Dispatcher.apply", "std.Dispatcher.parallel", "std.Dispatcher.sequential", "std.Dispatcher.parallel#2", "std.Dispatcher.sequential#2", "std.Dispatcher.unsafeToFutureCancelable", "std.Dispatcher.unsafeToFuture", "std.Dispatcher.unsafeRunCancelable", "std.Dispatcher.unsafeRunAndForget", "std.Dispatcher.Worker.run", "std.Dispatcher.Worker.apply", "std.Dispatcher.Executor.apply", "std.Dispatcher.Executor.inplace", "std.Dispatcher.Executor.parallel", "std.Dispatcher.UnsafeAsyncQueue.unsafeOffer", "std.Dispatcher.UnsafeAsyncQueue.take"]
+    prop := ``Props.Phase7.Dispatcher.dispNoDeadlock
+    status := .«open»
+    note := "Phase 7, track P7D: pure effects submitted by the use body, any cancels, any await: the run is never blocked. Satisfiable (noDeadlock_sat, R21, with a cancel). Wrong functions: unsafeToFutureCancelable, unsafeRunAndForget, the cancel action, parallel and sequential never return (noDeadlock_v2, _v10, _v6, _v14_par, _v14_seq); sequential release drops (noDeadlock_v15). Open." },
+  { id := "std.Dispatcher.cancelStops"
+    rows := ["std.Dispatcher.parallel", "std.Dispatcher.parallel#2", "std.Dispatcher.unsafeToFutureCancelable", "std.Dispatcher.unsafeRunCancelable", "std.Dispatcher.Executor.parallel", "std.Dispatcher.Worker.run", "std.Dispatcher.UnsafeAsyncQueue.unsafeOffer", "std.Dispatcher.UnsafeAsyncQueue.take"]
+    prop := ``Props.Phase7.Dispatcher.dispCancelStops
+    status := .«open»
+    note := "Phase 7, track P7D: parallel, effects that sleep (d >= 1); the use body waits until each effect started, calls its cancel action and waits until the cancel's Future completed: when the root is done every effect was canceled (status 3) (Scaladoc DP:62-66: the cancelation token cancels the effect). Any await, all schedules. Satisfiable (cancelStops_sat, R29). Wrong functions: the cancel action raises or drops (cancelStops_v5, cancelStops_v7). Doubling the cancel is not observable (idempotent: a second cancel of a CancelRequested or Completed registration returns the same Future; a second Finalizer cancels an ended fiber). Open." }
 ]
 
 end CatsEffectInLean

@@ -36,7 +36,7 @@ Only non-obvious questions that agents cannot decide alone. Answers: `raw/projec
 - Context: no permit is lost; only `count` is wrong. `bugs/CE-0060.yaml` has priority low and `maybe_intended: likely`. AGENTS.md: "Known deliberate behavior is not a bug".
 - Default until you answer: keep CE-0060 as a low-priority record with `maybe_intended: likely`, because the state is not transient without a later release and the Scaladoc still promises the old meaning. Nothing is filed upstream.
 
-## Q6 (2026-11-25): Track P7D (Dispatcher): finish the Lean mirror after track V, in a new session?
+## Q6 (2026-11-25): Track P7D (Dispatcher): finish the Lean mirror after track V, in a new session? — ANSWERED by the orchestrator (decision 66): yes; done the same day
 
 - Question: Track P7D found and reproduced CE-0090 (a parallel `Dispatcher` loses a submission made while its release runs; v3.7.1 and series/3.x). The Lean mirror, difftest ops, properties, witnesses and battery are not written yet. Should the track go on in a later session, after track V's `Supervisor` mirror is on `main`?
 - Context: an exact replay difftest of `Dispatcher` needs an exact mirror of `Supervisor` (both `checkRestart` paths); a stand-in would not match the Scala schedules. The mirror is large (Supervisor, Resource release order, worker loop, `cont`-based queue, Promise/Future). You asked to limit quota use. `bugs/CE-0090.yaml` has `lean.status: pending`.

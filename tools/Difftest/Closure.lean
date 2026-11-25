@@ -270,6 +270,17 @@ inductive Lam where
   | supFiberHandle
   /-- `checkRestart = Some(_ => true)` of `SupervisorShim` (Dispatcher's `always`). -/
   | alwaysTrue
+  -- format v2 (Phase 7, track P7D): `std.Dispatcher` runs on the mirror `Std/Dispatcher.lean`
+  /-- `dUse`: `d => I(k)` with `x = VDisp(h.newDisp(d))` (the `use` function). `vals = env`. -/
+  | dUseK
+  /-- `dSubmit`/`dForget`: source code of `I(e)` (built with the op). `vals = snap :: env`. -/
+  | dSrc
+  /-- `dSubmit`/`dCancel`: `p => VFut(h.newFut(p))`. -/
+  | dFutHandle
+  /-- `dPoll`: the thunk of `futOf(f)._1.value`. `vals = [ref res]`. -/
+  | dPollThunk
+  /-- `dPoll`: `o => pollVal(o)`. -/
+  | dPollVal
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -291,7 +302,8 @@ def Lam.all : List Lam :=
    .qHandle, .qBool, .qNat,
    .semHandle, .semUse, .semVal, .semCountMap, .mutexHandle, .mutexUse,
    .latchHandle, .barrierHandle,
-   .supUseK, .supSrc, .supFiberHandle, .alwaysTrue]
+   .supUseK, .supSrc, .supFiberHandle, .alwaysTrue,
+   .dUseK, .dSrc, .dFutHandle, .dPollThunk, .dPollVal]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?

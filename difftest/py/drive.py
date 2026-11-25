@@ -156,7 +156,9 @@ def run_lean(lean_cmd, cases):
 # --------------------------------------------------------------- comparing
 
 # Library exceptions that a well-typed program can raise (they are compared like any outcome).
-LIB_EXNS = ('IllegalStateException: supervisor already shutdown',)
+LIB_EXNS = ('IllegalStateException: supervisor already shutdown',
+            # Phase 7, track P7D: `unsafeToFutureCancelable` after the close (`Dispatcher.scala:293-295`)
+            'IllegalStateException: Dispatcher already closed')
 
 
 def scala_problem(s):

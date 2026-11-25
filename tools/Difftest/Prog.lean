@@ -66,9 +66,16 @@ def userCode? (e : Err) : Option Nat :=
 `raise 7999998` would print the same code; generated codes are small). -/
 def supIseCode : Nat := 8000001
 
+/-- Phase 7, track P7D: the model code of the `Dispatcher` `IllegalStateException`
+(`Std/Dispatcher.lean`, `iseErr`); the next three are `aeErr`, `promErr`, `signalErr`. -/
+def dispIseCode : Nat := 9000001
+
 /-- `userCode?` without the library exceptions of the Phase 7 mirrors (track V). -/
 def userCodeV? (e : Err) : Option Nat :=
-  if supIseCode ≤ e.code && e.code ≤ supIseCode + 2 then none else userCode? e
+  if supIseCode ≤ e.code && e.code ≤ supIseCode + 2 then none
+  -- Phase 7, track P7D: the library exceptions of `Std/Dispatcher.lean` (9000001..9000004)
+  else if dispIseCode ≤ e.code && e.code ≤ dispIseCode + 3 then none
+  else userCode? e
 
 /-! ## AST -/
 
@@ -236,6 +243,18 @@ inductive Prog where
   | supUse (aw rs cv : Bool) (k : Prog)
   /-- `supOf(⟦s⟧).supervise(I(e)).map(f => VFiber(h.fiberHandle(f)))`. -/
   | supervise (s : Atom) (e : Prog)
+  -- format v2 (Phase 7, track P7D): `std.Dispatcher`
+  /-- `(if par Dispatcher.parallel[IO](aw) else Dispatcher.sequential[IO](aw)).use(d =>
+  I(k)[x := VDisp(h.newDisp(d))])`; `k` binds the dispatcher. -/
+  | dUse (par aw : Bool) (k : Prog)
+  /-- `{ val fa = I(e); IO(dispOf(⟦d⟧).unsafeToFutureCancelable(fa)).map(p => VFut(h.newFut(p))) }`. -/
+  | dSubmit (d : Atom) (e : Prog)
+  /-- `{ val fa = I(e); IO(dispOf(⟦d⟧).unsafeRunAndForget(fa)).as(VUnit) }`. -/
+  | dForget (d : Atom) (e : Prog)
+  /-- `IO(futOf(⟦f⟧)._2()).map(c => VFut(h.newFut((c, null))))`. -/
+  | dCancel (f : Atom)
+  /-- `IO(futOf(⟦f⟧)._1.value).map(pollVal)`. -/
+  | dPoll (f : Atom)
   deriving DecidableEq, Repr
 
 /-- Number of nodes. Nodes are numbered in pre-order from 0; the children of a node with
@@ -248,7 +267,8 @@ def Prog.size : Prog → Nat
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
   | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e
-  | .supUse _ _ _ e | .supervise _ e => 1 + e.size
+  | .supUse _ _ _ e | .supervise _ e
+  | .dUse _ _ e | .dSubmit _ e | .dForget _ e => 1 + e.size
   | .guarantee e k _ => 1 + e.size + k.size
   | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => 1 + a.size + u.size + r.size
   | _ => 1
@@ -266,7 +286,8 @@ def Prog.at? : Prog → Nat → Option Prog
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
     | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e
-    | .supUse _ _ _ e | .supervise _ e => e.at? i
+    | .supUse _ _ _ e | .supervise _ e
+    | .dUse _ _ e | .dSubmit _ e | .dForget _ e => e.at? i
     | .guarantee e k _ => if i < e.size then e.at? i else k.at? (i - e.size)
     | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
       if i < a.size then a.at? i
@@ -306,6 +327,8 @@ def Prog.opName : Prog → String
   | .cdlNew .. => "cdlNew" | .cdlRelease .. => "cdlRelease" | .cdlAwait .. => "cdlAwait"
   | .cbNew .. => "cbNew" | .cbAwait .. => "cbAwait"
   | .supUse .. => "supUse" | .supervise .. => "supervise"
+  | .dUse .. => "dUse" | .dSubmit .. => "dSubmit" | .dForget .. => "dForget"
+  | .dCancel .. => "dCancel" | .dPoll .. => "dPoll"
 
 /-- The two sub-programs of a v2 combinator (`race`, `raceOutcome`, `both`, `bothOutcome`). -/
 def Prog.combArgs? : Prog → Option (Prog × Prog)
@@ -322,7 +345,8 @@ def Prog.ops (p : Prog) : List String :=
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
     | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e
-    | .supUse _ _ _ e | .supervise _ e => e.ops
+    | .supUse _ _ _ e | .supervise _ e
+    | .dUse _ _ e | .dSubmit _ e | .dForget _ e => e.ops
     | .guarantee e k _ => e.ops ++ k.ops
     | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => a.ops ++ u.ops ++ r.ops
     | _ => []
@@ -349,6 +373,8 @@ def Prog.eagerReads : Prog → Bool
   | .rBoth e k => e.eagerReads || k.eagerReads
   -- Phase 7, track V: `supervise` builds `e` at once (`use` builds `k` when it calls the function)
   | .supervise _ e => e.eagerReads
+  -- Phase 7, track P7D: `dSubmit`/`dForget` build `e` at once
+  | .dSubmit _ e | .dForget _ e => e.eagerReads
   | _ => false
 
 /-- The resource restriction: no `IO` program inside a resource node reads state when it is
@@ -364,7 +390,8 @@ def Prog.resViewFree : Prog → Bool
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .memoize e
   | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e
-  | .supUse _ _ _ e | .supervise _ e => e.resViewFree
+  | .supUse _ _ _ e | .supervise _ e
+  | .dUse _ _ e | .dSubmit _ e | .dForget _ e => e.resViewFree
   | .guarantee e k _ => e.resViewFree && k.resViewFree
   | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
     a.resViewFree && u.resViewFree && r.resViewFree
@@ -416,7 +443,9 @@ def v2Ops : List String := ["race", "raceOutcome", "both", "bothOutcome", "guara
   -- Phase 7, track L
   "cdlNew", "cdlRelease", "cdlAwait", "cbNew", "cbAwait",
   -- Phase 7, track V
-  "supUse", "supervise"]
+  "supUse", "supervise",
+  -- Phase 7, track P7D
+  "dUse", "dSubmit", "dForget", "dCancel", "dPoll"]
 /-- The queue kinds of `qNew` (format v2, track Q), by index: the public factories, then the
 `Concurrent` factories that `IO` reaches only through `bounded(1)`, `bounded(n >= 65534)`,
 `dropping(1)` (`Queue.scala:93-110`). -/
@@ -488,7 +517,7 @@ partial def decodeVal (j : Json) : D Val := do
   | "succeeded" => only ["v"]; pure (.ocSucceeded (← decodeVal (← field o "v" t)))
   | "errored" => only ["code"]; pure (.ocErrored (userErr (← nat (← field o "code" t) "errored.code")))
   | "canceled" => only []; pure .ocCanceled
-  | "fiber" | "ref" | "deferred" | "queue" | "memo" | "sem" | "mutex" | "latch" | "barrier" | "sup" => fail s!"value '{t}': handles cannot be literals"
+  | "fiber" | "ref" | "deferred" | "queue" | "memo" | "sem" | "mutex" | "latch" | "barrier" | "sup" | "disp" | "fut" => fail s!"value '{t}': handles cannot be literals"
   | _ => fail s!"unknown value tag '{t}'"
 
 /-- The kind of a bound name. -/
@@ -618,6 +647,18 @@ partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .i
       | _ => fail s!"{ctx}.{k}: expected a boolean"
     pure (.supUse (← flag "aw") (← flag "rs") (← flag "cv") (← p "k" ((x, .v) :: scope)))
   else if op == "supervise" then do only ["s", "e"]; pure (.supervise (← a "s") (← p "e"))
+  -- format v2 (Phase 7, track P7D)
+  else if op == "dUse" then do
+    only ["par", "aw", "x", "k"]; let x ← s "x"
+    let flag (k : String) : Except String Bool :=
+      match get? o k with
+      | some (.bool b) => pure b
+      | _ => fail s!"{ctx}.{k}: expected a boolean"
+    pure (.dUse (← flag "par") (← flag "aw") (← p "k" ((x, .v) :: scope)))
+  else if op == "dSubmit" then do only ["d", "e"]; pure (.dSubmit (← a "d") (← p "e"))
+  else if op == "dForget" then do only ["d", "e"]; pure (.dForget (← a "d") (← p "e"))
+  else if op == "dCancel" then do only ["f"]; .dCancel <$> a "f"
+  else if op == "dPoll" then do only ["f"]; .dPoll <$> a "f"
   else
     match op with
     | "pure" => only ["v"]; .pure <$> a "v"

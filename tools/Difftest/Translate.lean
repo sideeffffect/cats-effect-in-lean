@@ -13,6 +13,7 @@ import CatsEffectInLean.Model.Mutex
 import CatsEffectInLean.Std.CountDownLatch
 import CatsEffectInLean.Std.CyclicBarrier
 import CatsEffectInLean.Std.Supervisor
+import CatsEffectInLean.Std.Dispatcher
 
 /-!
 # Translation: difftest program → `Model.IO` + user environment
@@ -628,6 +629,40 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
       pure (.map (CatsEffectInLean.Std.Supervisor.superviseIO sp
         (.nat (Clo.encode { node, lam := .supSrc, vals := snapVal vw :: env }))) (clo node .supFiberHandle []))
     | none => throw .typeError
+  -- format v2 (Phase 7, track P7D): the mirror `Std/Dispatcher.lean`; one worker (`Cpus = 1`)
+  | .dUse par aw _, node, env, _ =>
+    -- `(if par Dispatcher.parallel[IO](aw) else Dispatcher.sequential[IO](aw)).use(d => run(k, ...))`
+    pure (CatsEffectInLean.Std.Dispatcher.useIO' par aw 1 0 (cloId node .dUseK env))
+  | .dSubmit d e, node, env, vw => do
+    -- `val fa = run(e, env)` is built now (the source captures the snapshot);
+    -- `IO(dispOf(d).unsafeToFutureCancelable(fa)).map(p => VFut(h.newFut(p)))`
+    let _ ← tr R e (node + 1) env vw
+    match CatsEffectInLean.Std.Dispatcher.dispOf? (← atomVal env d) with
+    | some dc =>
+      pure (.map (CatsEffectInLean.Std.Dispatcher.submitIO dc
+        (.nat (Clo.encode { node, lam := .dSrc, vals := snapVal vw :: env })) false) (clo node .dFutHandle []))
+    | none => throw .typeError
+  | .dForget d e, node, env, vw => do
+    -- `val fa = run(e, env)`; `IO(dispOf(d).unsafeRunAndForget(fa)).as(VUnit)`
+    let _ ← tr R e (node + 1) env vw
+    match CatsEffectInLean.Std.Dispatcher.dispOf? (← atomVal env d) with
+    | some dc =>
+      pure (.map (CatsEffectInLean.Std.Dispatcher.submitIO dc
+        (.nat (Clo.encode { node, lam := .dSrc, vals := snapVal vw :: env })) true) (clo node .asUnit []))
+    | none => throw .typeError
+  | .dCancel f, node, env, _ => do
+    -- `IO(futOf(f)._2()).map(c => VFut(h.newFut((c, null))))`
+    match ← atomVal env f with
+    | .pair (.ref _) c =>
+      match CatsEffectInLean.Std.Dispatcher.cancelOf? c with
+      | some (dc, st) => pure (.map (CatsEffectInLean.Std.Dispatcher.cancelIO dc st) (clo node .dFutHandle []))
+      | none => throw .typeError
+    | _ => throw .typeError
+  | .dPoll f, node, env, _ => do
+    -- `IO(futOf(f)._1.value).map(pollVal)`
+    match ← atomVal env f with
+    | .pair (.ref r) _ => pure (.map (.delay (clo node .dPollThunk [.ref r])) (clo node .dPollVal []))
+    | _ => throw .typeError
   | .cbNew n, node, _, _ =>
     -- `CyclicBarrier[IO](n).map(b => VBarrier(h.newBarrier(b)))` (`CyclicBarrier.scala:58-91`)
     match CatsEffectInLean.Std.CyclicBarrier.apply? n with

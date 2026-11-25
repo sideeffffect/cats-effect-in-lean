@@ -16,4 +16,6 @@ if [[ ! -f $cp_file ]] || [[ -n $(find "$dir/src/main" "$dir/build.sbt" -newer "
   [[ -s $cp_file.tmp ]] || { echo "run.sh: could not read the class path from sbt" >&2; exit 1; }
   mv "$cp_file.tmp" "$cp_file"
 fi
-exec java -cp "$(cat "$cp_file")" cats.effect.difftest.Main "${args[@]}"
+# Phase 7, track P7D: one CPU, so that `Dispatcher` has one worker (`Cpus`, Dispatcher.scala:108, :327)
+# and its worker choice (`ThreadLocalRandom.nextInt(Cpus)`) is fixed
+exec java -XX:ActiveProcessorCount=1 -cp "$(cat "$cp_file")" cats.effect.difftest.Main "${args[@]}"

@@ -2802,32 +2802,32 @@ std.DequeueSink.offer,std,method,std/shared/src/main/scala/cats/effect/std/Deque
 std.DequeueSink.tryOffer,std,method,std/shared/src/main/scala/cats/effect/std/Dequeue.scala,490,todo,,
 std.DequeueSink._tryOfferN,std,method,std/shared/src/main/scala/cats/effect/std/Dequeue.scala,492,excluded,internal: private helper; modelled as part of its public caller,
 std.DequeueSink.catsContravariantForDequeueSink,std,method,std/shared/src/main/scala/cats/effect/std/Dequeue.scala,505,todo,,
-std.Dispatcher.unsafeToFutureCancelable,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,66,todo,,
-std.Dispatcher.unsafeToFuture,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,72,todo,,
-std.Dispatcher.unsafeRunCancelable,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,79,todo,,
-std.Dispatcher.unsafeRunAndForget,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,85,todo,,
+std.Dispatcher.unsafeToFutureCancelable,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,66,modelled,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.seqFifo;std.Dispatcher.cancels;std.Dispatcher.noDeadlock;std.Dispatcher.cancelStops;std.Dispatcher.awaitDrains;std.Dispatcher.noLostSubmission
+std.Dispatcher.unsafeToFuture,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,72,modelled,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.cancels;std.Dispatcher.noDeadlock;std.Dispatcher.noLostSubmission
+std.Dispatcher.unsafeRunCancelable,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,79,todo,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.cancels;std.Dispatcher.noDeadlock;std.Dispatcher.cancelStops
+std.Dispatcher.unsafeRunAndForget,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,85,modelled,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.seqFifo;std.Dispatcher.cancels;std.Dispatcher.noDeadlock;std.Dispatcher.awaitDrains
 std.Dispatcher.reportFailure,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,91,excluded,internal: private helper; modelled as part of its public caller,
 std.Dispatcher.unsafeRunAsync,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,96,excluded,internal: private helper; modelled as part of its public caller,
 std.Dispatcher.parasiticEC,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,102,excluded,internal: private helper; modelled as part of its public caller,
 std.Dispatcher.Cpus,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,108,excluded,internal: private helper; modelled as part of its public caller,
-std.Dispatcher.apply,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,114,todo,,
-std.Dispatcher.parallel,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,121,todo,,
-std.Dispatcher.sequential,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,128,todo,,
-std.Dispatcher.parallel#2,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,165,todo,,
-std.Dispatcher.sequential#2,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,201,todo,,
+std.Dispatcher.apply,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,114,todo,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.cancels;std.Dispatcher.noDeadlock
+std.Dispatcher.parallel,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,121,todo,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.cancels;std.Dispatcher.noDeadlock;std.Dispatcher.cancelStops
+std.Dispatcher.sequential,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,128,todo,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.seqFifo;std.Dispatcher.cancels;std.Dispatcher.noDeadlock
+std.Dispatcher.parallel#2,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,165,modelled,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.cancels;std.Dispatcher.noDeadlock;std.Dispatcher.cancelStops;std.Dispatcher.awaitDrains;std.Dispatcher.noLostSubmission
+std.Dispatcher.sequential#2,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,201,modelled,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.seqFifo;std.Dispatcher.cancels;std.Dispatcher.noDeadlock;std.Dispatcher.awaitDrains;std.Dispatcher.noLostSubmission
 std.Dispatcher.sequentialCancelable,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,205,excluded,internal: private helper; modelled as part of its public caller,
 std.Dispatcher.impl,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,246,excluded,internal: private helper; modelled as part of its public caller,
 std.Dispatcher.Worker.doneR,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,409,excluded,internal: private helper; modelled as part of its public caller,
-std.Dispatcher.Worker.run,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,411,todo,,
-std.Dispatcher.Worker.apply,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,475,todo,,
-std.Dispatcher.Executor.apply,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,493,todo,,
-std.Dispatcher.Executor.inplace,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,499,todo,,
-std.Dispatcher.Executor.sequential,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,509,todo,,
-std.Dispatcher.Executor.parallel,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,615,todo,,
+std.Dispatcher.Worker.run,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,411,modelled,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.seqFifo;std.Dispatcher.cancels;std.Dispatcher.noDeadlock;std.Dispatcher.cancelStops;std.Dispatcher.awaitDrains;std.Dispatcher.noLostSubmission
+std.Dispatcher.Worker.apply,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,475,modelled,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.cancels;std.Dispatcher.noDeadlock;std.Dispatcher.awaitDrains;std.Dispatcher.noLostSubmission
+std.Dispatcher.Executor.apply,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,493,todo,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.noDeadlock
+std.Dispatcher.Executor.inplace,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,499,modelled,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.seqFifo;std.Dispatcher.cancels;std.Dispatcher.noDeadlock;std.Dispatcher.awaitDrains
+std.Dispatcher.Executor.sequential,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,509,excluded,internal: only private[std] sequentialCancelable (DP:205-207) uses it; no public caller (only the Cats Effect tests),
+std.Dispatcher.Executor.parallel,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,615,modelled,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.cancels;std.Dispatcher.noDeadlock;std.Dispatcher.cancelStops;std.Dispatcher.awaitDrains;std.Dispatcher.noLostSubmission
 std.Dispatcher.RightUnit,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,624,excluded,internal: private helper; modelled as part of its public caller,
 std.Dispatcher.UnsafeAsyncQueue.buffer,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,630,excluded,internal: private helper; modelled as part of its public caller,
-std.Dispatcher.UnsafeAsyncQueue.unsafeOffer,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,632,todo,,
-std.Dispatcher.UnsafeAsyncQueue.take,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,638,todo,,
+std.Dispatcher.UnsafeAsyncQueue.unsafeOffer,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,632,modelled,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.seqFifo;std.Dispatcher.noDeadlock;std.Dispatcher.cancelStops;std.Dispatcher.noLostSubmission
+std.Dispatcher.UnsafeAsyncQueue.take,std,method,std/shared/src/main/scala/cats/effect/std/Dispatcher.scala,638,modelled,,std.Dispatcher.runsOnce;std.Dispatcher.closedRejects;std.Dispatcher.seqFifo;std.Dispatcher.noDeadlock;std.Dispatcher.cancelStops;std.Dispatcher.noLostSubmission
 std.Env.get,std,method,std/shared/src/main/scala/cats/effect/std/Env.scala,31,todo,,
 std.Env.entries,std,method,std/shared/src/main/scala/cats/effect/std/Env.scala,33,todo,,
 std.Env.mapK,std,method,std/shared/src/main/scala/cats/effect/std/Env.scala,35,todo,,

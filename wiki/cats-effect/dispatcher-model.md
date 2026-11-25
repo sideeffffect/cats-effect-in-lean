@@ -1,40 +1,79 @@
-# Dispatcher: structure, CE-0090, and mirror plan
+# Dispatcher model, CE-0090 and CE-0091
 
-> Sources: Cats Effect v3.7.1 (`std/shared/src/main/scala/cats/effect/std/Dispatcher.scala`, `Supervisor.scala`, `tests/shared/src/test/scala/cats/effect/std/DispatcherSuite.scala`); read-only `gh` searches; own scala-cli runs, 2026-11-25
-> Raw: [Track P7D notes](../../raw/cats-effect/2026-11-25-track-p7d-dispatcher-notes.md)
+> Sources: Cats Effect v3.7.1 (`std/shared/src/main/scala/cats/effect/std/Dispatcher.scala`, `Supervisor.scala`, `UnsafeUnbounded.scala`, `kernel/.../Resource.scala:156-208`, `:826-920`, `core/.../IO.scala`, `tests/shared/src/test/scala/cats/effect/std/DispatcherSuite.scala`); cats-core 2.13.0; read-only `gh` searches; own Lean, difftest, smoke and scala-cli runs, 2026-11-25
+> Raw: [Track P7D notes (part 1)](../../raw/cats-effect/2026-11-25-track-p7d-dispatcher-notes.md); [Track P7D mirror notes (part 2)](../../raw/cats-effect/2026-11-25-track-p7d-mirror-notes.md)
 
 ## Overview
 
-Phase 7 batch 7.2, track P7D. Status on 2026-11-25: one bug found and reproduced (CE-0090). No Lean mirror, no difftest ops, no registry entries yet (QUESTIONS.md Q6). Codec namespaces 90–99 and bug ids CE-0090+ are reserved for this track.
+Phase 7 batch 7.2, track P7D (decision 66: after track V's `Supervisor`). Mirror of `std.Dispatcher` (`parallel`, `sequential`, `await = true/false`) on track V's `Std/Supervisor.lean`; difftest ops; eight statements: two **refuted** (CE-0090, CE-0091, heavy registry), six `open`; kernel-checked witnesses, wrong-function battery and fixed twins; smoke test. Codec namespaces 90 (closures), 91 (descriptors), 92 (harness).
 
 ## Structure (v3.7.1)
 
-- `impl(parallel, await, cancelable)` (:246-381) builds, in acquire order: outer `Supervisor(await, checkRestart = always)`, `terminationLatch` (Deferred), `doneR` (AtomicBoolean, `termination`), the executor, the workers, then supervises each `worker.run`.
-- Release runs in reverse: worker `PoisonPill`s (:487) and each worker's inner `Supervisor(false)`; the executor (`parallel`: `Supervisor(await)`, joins or cancels tasks; `sequential`: nothing); `doneR.set(true)`; `terminationLatch.complete`; the outer Supervisor (joins or cancels the workers).
-- Submission (`unsafeToFutureCancelable`, :288-372) is impure: check `doneR` (throw `IllegalStateException`), make `stateR = Unstarted(promisory)`, pick a worker (`parallel`: `ThreadLocalRandom.nextInt(Cpus)`), `unsafeOffer` a `Primary` registration. The cancel action negotiates `Unstarted → CancelRequested(latch)`, `Running(cancel) → Finalizer` registration, `Completed → Future.unit`.
-- Worker loop (:411-470): `take` a registration; `Primary` with `Unstarted` runs the executor; `CancelRequested` completes the latch; `Finalizer` supervises the cancel; `PoisonPill` sets the worker `doneR`. After the pill the worker only waits for `terminationLatch` and never takes again.
-- `UnsafeAsyncQueue.take` (:638-653) is a `cont` with a double-check on the latch callback.
+- `impl(parallel, await, cancelable)` (:246-381), acquire order: outer `Supervisor(await, checkRestart = always)`, `terminationLatch`, `doneR` (`termination`), the executor (`parallel`: `Supervisor(await)`; `sequential`: in place), the workers (each `Supervisor(false)` + `Resource.make(new Worker)(offer PoisonPill)`), then `launchAll`. Release: the reverse.
+- Submission (`unsafeToFutureCancelable`, :288-372) is impure: check `doneR`, `stateR = Unstarted(promisory)`, pick a worker (`ThreadLocalRandom.nextInt(Cpus)`), `unsafeOffer` a registration. Cancel: `Unstarted → CancelRequested(latch)`, `Running(cancel) → Finalizer` registration, `CancelRequested → latch`, `Completed → Future.unit`.
+- Worker loop (:411-470): `take`; `Primary` runs the executor (or completes a `CancelRequested` latch); `Finalizer` supervises the cancel; `PoisonPill` stops the worker for good.
+- `sequentialCancelable` / `Executor.sequential` are `private[std]` (tests only): excluded.
 
-## CE-0090: lost submission during release
+## Mirror (`Std/Dispatcher.lean`)
 
-The worker stops taking after the pill, but `doneR` is set only after the executor release. With `parallel(await = true)` the executor release waits for running tasks; a submission in that time passes the `doneR` check and is queued behind the pill. It never runs, its `Future` never completes, and its cancel action waits forever. `parallel(await = false)` has a short window (about 70 ms). `sequential` throws as promised. Reproduced on v3.7.1 and series/3.x: 50/50 TestControl seeds, 50/50 real runs ([bug record](../../bugs/CE-0090.yaml)).
+- `Resource#fold` makes `IO` nodes only at `Eval` and `Allocate`, so `impl(...).use(f)` is a nesting of `Supervisor.useIO` (track V; its `use` function is "the rest of the fold") and `bracketFull`s for the `Resource.make`s; exact terms for `ifM`, `>>`, `*>`, `<*`, `voidError`, `redeemWith`, `IO.defer`, `cont` (raw part 2).
+- Impure calls are one `IO.delay` thunk each (`submitIO`, `cancelIO`): one atomic step of the caller thread, as in the Scala difftest. `Promise` = a cell `pair forget result`; `unsafeRunAndForget`'s `onComplete` reports a failure at once (`UserEffect.report`).
+- Worker choice = input list `cs`; `n` workers. Supervisor map order = input `ho`.
+- Variants (not Cats Effect code): battery 1-16, 18-20; fixed twins 30 (CE-0090: `doneR` before the pill), 31 (CE-0091: the Worker finalizer waits until the worker took the pill), 32 = 30 + 31.
 
-The upstream test "reject new tasks while shutting down" (`DispatcherSuite.scala:500-517`) cannot fail: it ends with `yield fail("fail")`, so `r.isLeft` holds in every run.
+## Difftest
 
-Known, not bugs: a canceled dispatched effect never completes its `Future` (#2448); `sequential` cannot cancel queued or running work (#4069, comment :233-235).
+Ops `dUse`, `dSubmit`, `dForget`, `dCancel`, `dPoll` ([format](../methodology/difftest-program-format.md)); JVM with `-XX:ActiveProcessorCount=1`; template `tpl_disp` (own RNG `p_disp`; at most 3 accepted submissions and 2 cancels per scenario: Lean replay cost of the map orders, k!, not an agreement limit). Fixed cases `dispatcher.jsonl`: 68, all agree. Random run (`opcount.py --seeds 91 92 93`, cases 0-36,000 each, `--boost tpl_disp=12`): see "Results".
 
-## Mirror plan (not started)
+## Properties (`Props/Phase7/Dispatcher.lean`)
 
-1. Wait for track V's `Supervisor` mirror (both `checkRestart` paths, `applyForAsync`). An exact replay difftest needs the exact fiber structure of `Supervisor`.
-2. Mirror the submission as one atomic step: a harness fiber runs the impure code in one `IO.delay` thunk (uncancelable, never canceled). This is how the Scala difftest calls it too. A split check/offer (two thunks) models the multi-thread race inside the submission.
-3. Mirror `Promise`/`Future` as cells the harness reads without blocking (`future.value`). Do not use `IO.fromFuture` in the Scala runner: it is not cancelable.
-4. Run the Scala difftest JVM with `-XX:ActiveProcessorCount=1` so that `Cpus = 1` and the worker choice is fixed; the model takes the worker choice as an input.
-5. Properties to state: `noLostSubmission` (refuted by CE-0090; fixed twin: set `doneR` before the pills and drain the queue after the pill), at-most-once and exactly-once execution, sequential FIFO and one at a time, cancel-before-start prevents, cancel-after-start cancels and its Future completes, submit after release throws, release with `await` waits/cancels, no leaked fiber.
+Harness: `Dispatcher.use(d => body)`; the body submits tasks (mode `unsafeToFutureCancelable` or `unsafeRunAndForget`), cancels some, starts a fiber that submits more (concurrent submitter), runs a user program; after `use` the root submits the `late` tasks. Task `j` = `uncancelable(poll => enter(j) *> poll(ws[j].attempt).onCancel(fin(j)) *> mark(j, 2))`. All user programs, worker choices, `PChoice` schedules, map orders.
+
+| Entry | Claim | Status |
+|---|---|---|
+| `std.Dispatcher.runsOnce` | each effect starts at most once, finalizer at most once (every state) | open |
+| `std.Dispatcher.awaitDrains` | `await = true`, pure body submissions: done `Succeeded(())`, every effect ran | **refuted (CE-0091)** |
+| `std.Dispatcher.noLostSubmission` | `await = true`, body + concurrent submitter: done ⇒ each submission threw or ran | **refuted (CE-0090)** |
+| `std.Dispatcher.closedRejects` | a rejected submission never runs; late submissions throw | open |
+| `std.Dispatcher.seqFifo` | `sequential`: start order increasing, one at a time (every state) | open |
+| `std.Dispatcher.cancels` | `await = false`, sleeping effects: none finishes its sleep | open |
+| `std.Dispatcher.noDeadlock` | pure effects, any cancels: never blocked | open |
+| `std.Dispatcher.cancelStops` | `parallel`: a cancel after the start cancels (status 3) | open |
+
+## Kernel runs and battery (`Proofs/Phase7/DispatcherBattery.lean`, heavy, decision 55)
+
+34 runs (`Proofs/Phase7/DispatcherRuns/R*.lean`, generated by `tools/DispRuns/gen.py`), each checked in chunks from literal states ([kernel evaluation](../lean/kernel-evaluation.md), "Long runs in chunks"): first chunk about 2 min and 5.2-6.0 GB, later chunks ≤ 2 GB.
+
+| Operation | raises | hangs | drops | doubles |
+|---|---|---|---|---|
+| `unsafeToFutureCancelable` (`unsafeToFuture`, `unsafeRunCancelable`) | `awaitDrains` (v1) | `noDeadlock` (v2) | `awaitDrains` (v3) | `runsOnce` (v4) |
+| `unsafeRunAndForget` | `awaitDrains` (v9) | `noDeadlock` (v10) | `awaitDrains` (v11) | `runsOnce` (v12) |
+| cancel action | `cancelStops` (v5) | `noDeadlock` (v6) | `cancelStops` (v7) | not observable: idempotent (a second cancel returns the same latch or cancels an ended fiber) |
+| `Dispatcher.parallel` | `awaitDrains` (v13, on schedule `sched 14 300` where v3.7.1 meets it) | `noDeadlock` (v14) | `closedRejects` (v15: no pill, no `doneR`) | not applicable (a second allocation is unreachable) |
+| `Dispatcher.sequential` | `awaitDrains` (v13) | `noDeadlock` (v14) | `noDeadlock` (v15) | not applicable |
+
+Other wrong functions: v16 (ignores `await`) → `awaitDrains`; v18 (`sequential` overlaps) → `seqFifo`; v19 (no closed check) → `closedRejects`; v20 (always awaits) → `cancels`. Satisfiability witnesses (`*_sat`) for all eight hypothesis sets.
+
+## CE-0090 and CE-0091
+
+- **CE-0090** (found by reading): the workers stop at the pill, but `doneR` is set only after the executor release; a submission in that window is accepted and lost. Lean: `dispNoLostSubmission_refuted` (run R32, `sched 14 300`); twin 32 runs both effects (R33).
+- **CE-0091** (found by a generated difftest case where both sides agreed): an effect submitted before the scope exits but not yet taken is dropped by `parallel(await = true)`; the worker calls `supervise` on the closed executor `Supervisor` and dies with `IllegalStateException: supervisor already shutdown`. The issue #3506 shape (closed as fixed in 3.4.9; the current test waits for the start). `sequential` drains. Lean: `dispAwaitDrains_refuted` (R15, FIFO); twin 31 (R16). Reproduced on v3.7.1, series/3.x, series/3.7.x.
+- The upstream test "reject new tasks while shutting down" cannot fail (`yield fail("fail")`).
+- Known, not bugs: a canceled effect never completes its `Future` (#2448); `sequential` cannot cancel queued work (#4069).
+
+## Results
+
+- **Difftest** (`opcount.py --seeds 91 92 93`, cases 0-38,000 per seed, `--boost tpl_disp=12`, 18 processes): 114,000 cases, 113,995 agree, 0 unsupported. Agreeing cases per op: `dUse` 99,647, `dSubmit` 90,802, `dForget` 58,584, `dCancel` 50,425, `dPoll` 77,057 (each over 3 seeds, about a third per seed). Execution coverage (sample of 885 cases with `dUse`, seed 94): a dispatched effect's marker is in the trace in 153 (17%), a poll of a completed Future in 46; the rest end earlier (the appended scenario follows a random program, which can raise, cancel or end by fuel) or lose the effect (CE-0091).
+- **Mismatches (5, none a model bug):** (1) `g91-18199`: harness bug of the Scala side (`pollVal` mapped only `UserError`, while `attempt` maps `TimeoutException` too, `CodeOf`); fixed; the case agrees; the last 6,000 cases ran with the fix. (2) `g91-21111`, `g91-30579`, `g92-10716`, `g93-24799`: **harness limit** — each case has a track V `Supervisor` scenario (≥ 2 `supervise`) and a Dispatcher scenario, so two `Supervisor` maps hold ≥ 2 entries. Scala orders each map by identity hashes, independently; the Lean alternatives apply one permutation (by insertion index) to all maps (`Env.supOrder`), so some order pairs are missing. Shown: the same case gives different Scala schedules alone and inside its batch JVM (`g91-21111`, `g91-30579`; `g91-21111` agrees alone and mismatches in a 12-case batch), and with either scenario removed all 8 reduced cases agree. A fix needs a per-map order in track V's `ho` interface (open item). The generator is not capped.
+- **Kernel:** 34 runs, 88 chunk modules, all built: first chunks 1-2.3 min, 5.2-7.2 GB; later chunks ≤ 2 GB. Axioms of the refutations: `propext`, `Classical.choice`, `Quot.sound`.
+- **Smoke** (`lake exe dispsmoke 30`, 30 runs per row, random inputs and schedules, hypotheses evaluated: 0 failures): v3.7.1 has 0 violations of the six open statements; `awaitDrains` 15/30 and `noLostSubmission` 17/30 (the bugs); fixed twins 31 and 32: 0/30. Wrong variants: `runsOnce` v4 2, v12 7; `awaitDrains` v1 26, v3/v9/v11/v13 30, v16 28; `closedRejects` v19 14 (v15 0: its runs block, see R20 for the kernel break); `seqFifo` v18 5; `cancels` v20 18; `noDeadlock` v2 25, v6 9, v10 24, v14 30, v15 15; `cancelStops` v5 15, v7 15.
+- No proof of the open statements yet: a proof needs a state invariant over `Step`/`SchedP` (as the other Phase 6/7 open entries).
 
 ## See Also
 
-- [Semaphore and Mutex model](semaphore-mutex-model.md)
-- [CountDownLatch and CyclicBarrier model](latch-barrier-model.md)
-- [Resource model](resource-model.md)
+- [Supervisor model](supervisor-model.md)
+- [Resource use, allocated, both](resource-use-both-model.md)
 - [Bug history](bug-history.md)
+- [Differential testing](../methodology/differential-testing.md)
+- [Kernel evaluation of the model](../lean/kernel-evaluation.md)
 - [Agent workflow](../methodology/agent-workflow.md)

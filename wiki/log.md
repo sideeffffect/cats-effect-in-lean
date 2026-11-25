@@ -479,3 +479,8 @@
 - Created: cats-effect/supervisor-model.md
 - Updated: methodology/difftest-program-format.md, methodology/differential-testing.md, cats-effect/latch-barrier-model.md, index.md
 - Raw: raw/cats-effect/2026-11-25-track-v-supervisor-notes.md
+
+## [2026-11-25] ingest | Track P7D part 2: Dispatcher mirror, difftest, properties, CE-0091 (decision 66)
+- Updated: cats-effect/dispatcher-model.md (rewritten), cats-effect/bug-history.md, methodology/difftest-program-format.md, methodology/differential-testing.md, lean/kernel-evaluation.md (long runs in chunks), index.md
+- Raw: raw/cats-effect/2026-11-25-track-p7d-mirror-notes.md
+- Bugs: bugs/CE-0090.yaml (lean set), bugs/CE-0091.yaml (new; reproducer reproducers/CE-0091/Repro.scala: REPRODUCED on v3.7.1, series/3.x, series/3.7.x)

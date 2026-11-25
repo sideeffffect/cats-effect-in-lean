@@ -1,6 +1,6 @@
 id: CE-0090
 title: "Dispatcher.parallel: an effect submitted while the release runs is accepted but never runs, and its Future never completes"
-status: draft  # found in Phase 7 batch 7.2, track P7D (2026-11-25) by reading the source; reproduced on v3.7.1 and series/3.x; no Lean property yet (the mirror is not written, see lean.status)
+status: draft  # found in Phase 7 batch 7.2, track P7D (2026-11-25) by reading the source; reproduced on v3.7.1, series/3.x, series/3.7.x; refuted in Lean (2026-11-25, decision 66)
 priority: medium
 kind: hang
 area: std
@@ -113,8 +113,9 @@ duplicates:
     - "gh search issues 'Dispatcher' -R typelevel/cats-effect --limit 40 (2026-11-25): #4104, #2448, #1571, #3944, #2727, #4069, #3645, #4541, #3967, #3993, #3981, #3776, #3945, #3131, #3898, #3929, #3394, #3722, #3534, #3501, #3506, #2926, #3363, #2537, #1881, #3087, #2933; none about a submission during the release of a parallel dispatcher"
     - "gh search issues 'Dispatcher hang' / 'Dispatcher already closed' -R typelevel/cats-effect (2026-11-25): only #2448"
 lean:
-  status: "pending: no mirror yet. The planned property is std.Dispatcher.noLostSubmission (each submission either throws, or its Future completes, unless its effect never ends). See wiki/cats-effect/dispatcher-model.md, 'Plan'."
-  property: null
-  theorem: null
-  fixed_twin: null
-  ordinary_inputs: "The input is ordinary: one running task, one release, one submission (await = true)."
+  property: CatsEffectInLean.Props.Phase7.Dispatcher.dispNoLostSubmission
+  theorem: CatsEffectInLean.Proofs.Phase7.DispatcherBattery.dispNoLostSubmission_refuted
+  registry: CatsEffectInLean/RegistryHeavy.lean (std.Dispatcher.noLostSubmission, refuted; heavy, decision 55)
+  run: "Proofs/Phase7/DispatcherRuns/R32*.lean: parallel(await = true), one pure effect from the use body and one from a fiber the body starts, schedule sched 14 300, 386 micro-steps (kernel, 5 chunks). The root is done Succeeded(()); effect 0 ran; effect 1 was accepted (no IllegalStateException) and never ran."
+  fixed_twin: "variant 32 of Std/Dispatcher.lean (not Cats Effect code): the Worker finalizer sets the dispatcher doneR before it offers the PoisonPill (variant 30) and then waits until the worker took the pill (variant 31, the fix of CE-0091, needed on this schedule because the concurrent submission can also land before the pill). Same input and schedule: both effects run (DispatcherBattery.noLost_twin32, run R33). Variant 30 alone closes the window of this bug; variant 31 closes CE-0091."
+  ordinary_inputs: "The input is ordinary: one running task, one release, one submission (await = true). The statement also holds for sequential on the same input (noLost_sat, run R34: the concurrent submission throws)."

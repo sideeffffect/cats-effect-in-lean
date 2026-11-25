@@ -369,6 +369,32 @@ class Checker:
         if op == 'supervise':
             u(self.atom(p['s'], env), ('sup',), op)
             return ('fiber', self.prog(p['e'], env))
+        # ---- format v2 (Phase 7, track P7D): Dispatcher. A submission future has type
+        # ('fut', A); a cancel future ('cfut',) (no cancel action: `dCancel` on it is ill-typed).
+        # `dPoll` gives either(unit, either(E, A)) (`pollVal`: E is nat for a user error, unit for a
+        # library failure; the generator never reads it).
+        if op == 'dUse':
+            for k in ('par', 'aw'):
+                if not isinstance(p.get(k), bool):
+                    raise TypeErr(f"dUse {k} {p.get(k)!r}")
+            return self.prog(p['k'], {**env, p['x']: ('val', ('disp',))})
+        if op == 'dSubmit':
+            u(self.atom(p['d'], env), ('disp',), op)
+            return ('fut', self.prog(p['e'], env))
+        if op == 'dForget':
+            u(self.atom(p['d'], env), ('disp',), op)
+            self.prog(p['e'], env)
+            return ('unit',)
+        if op == 'dCancel':
+            u(self.atom(p['f'], env), ('fut', self.fresh()), op)
+            return ('cfut',)
+        if op == 'dPoll':
+            t = self.resolve(self.atom(p['f'], env))
+            if t == ('cfut',):
+                return ('either', ('unit',), ('either', self.fresh(), ('unit',)))
+            a = self.fresh()
+            u(t, ('fut', a), op)
+            return ('either', ('unit',), ('either', self.fresh(), a))
         if op == 'syncStep':
             raise TypeErr("syncStep below the root")
         if op in RES_OPS:

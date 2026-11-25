@@ -1,7 +1,10 @@
 package cats.effect.difftest
 
 import cats.effect.{Deferred, Fiber, IO, Outcome, Poll, Ref, Resource}
-import cats.effect.std.{CountDownLatch, CyclicBarrier, Mutex, Queue, Semaphore, Supervisor, SupervisorShim}
+import cats.effect.std.{CountDownLatch, CyclicBarrier, Dispatcher, Mutex, Queue, Semaphore, Supervisor, SupervisorShim}
+
+import scala.concurrent.Future
+import scala.util.{Failure, Success}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.*
@@ -69,6 +72,10 @@ final class Harness:
   def newBarrier(b: CyclicBarrier[IO]): Int = synchronized { barriers += b; barriers.size - 1 }
   val sups = ArrayBuffer.empty[Supervisor[IO]]
   def newSup(s: Supervisor[IO]): Int = synchronized { sups += s; sups.size - 1 }
+  val disps = ArrayBuffer.empty[Dispatcher[IO]]
+  def newDisp(d: Dispatcher[IO]): Int = synchronized { disps += d; disps.size - 1 }
+  val futs = ArrayBuffer.empty[(Future[Val], () => Future[Unit])]
+  def newFut(p: (Future[Val], () => Future[Unit])): Int = synchronized { futs += p; futs.size - 1 }
   def newAsync(): Int = synchronized { asyncs += 1; asyncs - 1 }
 
 /** The error code of `java.util.concurrent.TimeoutException` (format v1). The value language has
@@ -167,6 +174,27 @@ final class Interp(h: Harness):
   private def supOf(v: Val): Supervisor[IO] = v match
     case VSup(i) => h.sups(i)
     case _ => throw TypeError(s"not a supervisor handle: $v")
+
+  private def dispOf(v: Val): Dispatcher[IO] = v match
+    case VDisp(i) => h.disps(i)
+    case _ => throw TypeError(s"not a dispatcher handle: $v")
+
+  private def futOf(v: Val): (Future[Val], () => Future[Unit]) = v match
+    case VFut(i) => h.futs(i)
+    case _ => throw TypeError(s"not a future handle: $v")
+
+  /** `Future#value` as a value (format v2, track P7D): `None` → `left(unit)`; `Success(v)` →
+    * `right(right(v))`; `Failure(t)` with a code (`CodeOf`: a
+    * `UserError`, or `TimeoutException`, as `attempt`) → `right(left(nat c))`; any other failure (a
+    * library exception) → `right(left(unit))`.
+    */
+  private def pollVal(o: Option[scala.util.Try[Any]]): Val = o match
+    case None => VLeft(VUnit)
+    case Some(Success(v: Val)) => VRight(VRight(v))
+    case Some(Success(())) => VRight(VRight(VUnit))
+    case Some(Success(x)) => throw TypeError(s"not a value: $x")
+    case Some(Failure(CodeOf(c))) => VRight(VLeft(VNat(c)))
+    case Some(Failure(_)) => VRight(VLeft(VUnit))
 
   private def deferredOf(v: Val): (Int, Deferred[IO, Val]) = v match
     case VDeferred(i) => (i, h.deferreds(i))
@@ -361,6 +389,22 @@ final class Interp(h: Harness):
     case Prog.SupUse(aw, rs, cv, x, k) =>
       SupervisorShim(aw, rs, cv).use(s => run(k, env + (x -> Bound.V(VSup(h.newSup(s))))))
     case Prog.Supervise(s, e) => supOf(atom(s, env)).supervise(run(e, env)).map(f => VFiber(h.fiberHandle(f)))
+    // ---- format v2 (Phase 7, track P7D): std.Dispatcher (Dispatcher.scala:60-381). The JVM runs
+    // with -XX:ActiveProcessorCount=1 (run.sh), so `Cpus` = 1 and the worker choice is fixed.
+    case Prog.DUse(par, aw, x, k) =>
+      if Runtime.getRuntime.availableProcessors() != 1 then
+        throw new IllegalStateException("difftest: dUse needs -XX:ActiveProcessorCount=1")
+      (if par then Dispatcher.parallel[IO](aw) else Dispatcher.sequential[IO](aw))
+        .use(d => run(k, env + (x -> Bound.V(VDisp(h.newDisp(d))))))
+    case Prog.DSubmit(d, e) =>
+      val fa = run(e, env)
+      IO(dispOf(atom(d, env)).unsafeToFutureCancelable(fa)).map(p => VFut(h.newFut(p)))
+    case Prog.DForget(d, e) =>
+      val fa = run(e, env)
+      IO(dispOf(atom(d, env)).unsafeRunAndForget(fa)).as(VUnit)
+    case Prog.DCancel(f) =>
+      IO(futOf(atom(f, env))._2()).map(c => VFut(h.newFut((c.asInstanceOf[Future[Val]], null))))
+    case Prog.DPoll(f) => IO(futOf(atom(f, env))._1.value).map(o => pollVal(o))
 
   /** The factory of a `qNew` kind (format v2, track Q). The `*Conc` kinds are the private
     * `Concurrent` factories (`Queue.scala:93-110`), reachable here because this file is in

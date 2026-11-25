@@ -222,6 +222,23 @@ New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decod
 - Alternatives: if a map held ≥ 2 entries (ghost counter after the insertion-order replay), every order of up to 5 entries.
 - Fixed cases `cases/supervisor.jsonl` (`cases/gen_supervisor.py`). Generator: `tpl_sup`, appended by `gen_case` with its own RNG (`p_sup`). See [Supervisor model](../cats-effect/supervisor-model.md).
 
+### Format v2 ops of track P7D (Phase 7; same version, same `checkNoV2` gate)
+
+| op | fields | term |
+|----|--------|------|
+| `dUse` | `par`, `aw` (booleans), `x`, `k` | `(if par Dispatcher.parallel(aw) else Dispatcher.sequential(aw)).use(d => I(k)[x := disp(h.newDisp(d))])` |
+| `dSubmit` | `d`: atom, `e` | `{ val fa = I(e); IO(dispOf(⟦d⟧).unsafeToFutureCancelable(fa)).map(p => fut(h.newFut(p))) }` |
+| `dForget` | `d`: atom, `e` | `{ val fa = I(e); IO(dispOf(⟦d⟧).unsafeRunAndForget(fa)).as(VUnit) }` |
+| `dCancel` | `f`: atom | `IO(futOf(⟦f⟧)._2()).map(c => fut(h.newFut((c, null))))` |
+| `dPoll` | `f`: atom | `IO(futOf(⟦f⟧)._1.value).map(pollVal)`: `None` → `left(unit)`; `Success(v)` → `right(right(v))`; `Failure(UserError(c))` → `right(left(nat c))`; another failure → `right(left(unit))` |
+
+- `run.sh` starts the JVM with `-XX:ActiveProcessorCount=1`: `Cpus` = 1, so the worker choice (`ThreadLocalRandom.nextInt(Cpus)`) is fixed; `dUse` raises a harness error otherwise.
+- Values `{"t":"disp","id":n}`, `{"t":"fut","id":n}` (output only). A literal is a decode error. `dCancel` of a cancel future is ill-typed (`typecheck.py`: `fut` vs `cfut`).
+- Lean side: `Std/Dispatcher.lean` (`useIO'`, `submitIO`, `cancelIO`, `dispOf?`, `cancelOf?`); lambdas `dUseK`, `dSrc` (snapshot, `Env.srcIO`, `Env.bracketSrcIO`), `dFutHandle`, `dPollThunk`, `dPollVal`. The mirror's closures are dispatched in `Env.dispatch`, `Env.dispatchSup` and `Env.dispatchRes`; its descriptors in `Env.srcIO`/`bracketSrcIO`.
+- `IllegalStateException: Dispatcher already closed` prints as an exception (`Prog.userCodeV?`, `Replay.errText`, `drive.py` `LIB_EXNS`).
+- Alternatives: `dSubmit`, `dForget`, `dCancel` count as `supervise` for the map-order alternatives (`Env.dispCount`).
+- Fixed cases `cases/dispatcher.jsonl` (`cases/gen_dispatcher.py`, 68). Generator: `tpl_disp`, appended by `gen_case` with its own RNG (`p_disp`). See [Dispatcher model](../cats-effect/dispatcher-model.md).
+
 ## User function table
 
 `call(fn, v)` first emits `{"ev":"call","fn":fn,"arg":v}`, then applies the function. Lean must implement the same table.

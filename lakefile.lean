@@ -71,7 +71,9 @@ lean_exe leaksmoke where
 -- process at a time and audits both registries (`scripts/check_heavy_proofs.sh`,
 -- `lake exe audit_heavy`). The roots must match `CatsEffectInLean.heavyModules`.
 lean_lib HeavyProofs where
-  roots := #[`CatsEffectInLean.Proofs.Phase6.RaceLaw]
+  roots := #[`CatsEffectInLean.Proofs.Phase6.RaceLaw,
+    -- Phase 7, track P7D: Dispatcher witnesses, battery, refutations (kernel runs in chunks)
+    `CatsEffectInLean.Proofs.Phase7.DispatcherBattery]
 
 lean_exe audit_heavy where
   srcDir := "tools"
@@ -100,3 +102,8 @@ lean_exe semsmoke where
 lean_exe supsmoke where
   srcDir := "tools"
   root := `SupSmoke.Main
+
+-- Phase 7, track P7D: Dispatcher smoke test
+lean_exe dispsmoke where
+  srcDir := "tools"
+  root := `DispSmoke.Main

@@ -154,6 +154,10 @@ Ops `cdlNew`, `cdlRelease`, `cdlAwait`, `cbNew`, `cbAwait` (`std.CountDownLatch`
 
 Ops `supUse`, `supervise` (`std.Supervisor`). Template `tpl_sup` with its own RNG (`p_sup`). Lessons: (1) a closure code that embeds other closure references doubles per level; a value that user code holds must not embed a source code (8 GB on a 4-`supervise` case before the fix); (2) a documented library exception needs `LIB_EXNS` in `drive.py`, or the case is binned `generator-bug`; (3) `opcount.py --start` lets several processes share one seed. Counts: [Supervisor model](../cats-effect/supervisor-model.md).
 
+## Format v2, track P7D (Phase 7, 2026-11-25)
+
+Ops `dUse`, `dSubmit`, `dForget`, `dCancel`, `dPoll` (`std.Dispatcher`). Template `tpl_disp` with its own RNG (`p_disp`). Lessons: (1) a nondeterministic library choice (`ThreadLocalRandom` worker) can be fixed with a JVM flag (`-XX:ActiveProcessorCount=1`) and kept as a model input; (2) never wait on a Scala `Future` with `IO.fromFuture` in the harness (not cancelable: a lost Future hangs the case); poll `Future#value`; (3) the map-order alternatives cost k! replays: keep the map counters of a template small (cost limit; record it); (4) a bug can show first as an *agreeing* generated case (CE-0091: both sides dropped the effect). Counts: [Dispatcher model](../cats-effect/dispatcher-model.md).
+
 ## See Also
 
 - [Difftest program format v0 and Scala runner](difftest-program-format.md)

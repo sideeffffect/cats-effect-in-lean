@@ -122,6 +122,9 @@ WEIGHTS = {
     # format v2 (Phase 7, track V): a `Supervisor` scenario, appended by `gen_case` with its own
     # RNG (`p_sup`), like `parTraverseN`. The weight scales the probability (`--boost`).
     'tpl_sup': 1.0,
+    # format v2 (Phase 7, track P7D): a `Dispatcher` scenario, appended by `gen_case` with its own
+    # RNG (`p_disp`), like `parTraverseN`. The weight scales the probability (`--boost`).
+    'tpl_disp': 1.0,
 }
 
 # Other knobs (probabilities and ranges).
@@ -149,6 +152,7 @@ CONFIG = {
     'p_sem': 0.08,             # Phase 7, track S: append a `Semaphore`/`Mutex` part (own RNG, see gen_case)
     'p_latch': 0.08,           # Phase 7, track L: append a latch/barrier part (own RNG, see gen_case)
     'p_sup': 0.08,             # Phase 7, track V: append a Supervisor part (own RNG, see gen_case)
+    'p_disp': 0.08,            # Phase 7, track P7D: append a Dispatcher part (own RNG, see gen_case)
     'p_par_traverse': 0.08,    # batch 6.3: append a `parTraverseN` part (own RNG, see gen_case)         # replay case gets a `runtime` field (auto-yield every few iterations)
 }
 
@@ -927,6 +931,127 @@ class Gen:
                     'e': {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_599_999}}}}
             return {'op': 'bind', 'x': t, 'e': use, 'k': {'op': 'seq', 'ps': [late, {'op': 'pure', 'v': {'t': 'unit'}}]}}
         return {'op': 'seq', 'ps': [{'op': 'attempt', 'e': use}, {'op': 'pure', 'v': {'t': 'unit'}}]}
+
+    def disp_child(self, j, env, size, ctx, gv, dv, depth):
+        """A dispatched effect: user code (`latch_prefix`), markers `9_6xx_xxx`, sometimes a wait on
+        the gate `gv` (released later, or never), a cede, a raise; sometimes an `onCancel` finalizer;
+        sometimes (depth 0) a follow-up submission to the same dispatcher `dv` (it can race the
+        release: CE-0090)."""
+        mark = lambda k: {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_600_000 + 100 * k + j}}
+        core = self.latch_prefix(env, size, ctx) + [mark(1)]
+        x = self.r.random()
+        if x < 0.35:
+            core += [{'op': 'deferredGet', 'd': gv}]
+        elif x < 0.55:
+            core += [{'op': 'cede'} for _ in range(self.pick([(2, 1), (2, 2), (1, 4)]))]
+        elif x < 0.62:
+            core += [{'op': 'raise', 'code': self.code()}]
+        elif x < 0.66:
+            core += [{'op': 'never'}]
+        body = {'op': 'seq', 'ps': core + [mark(2)]}
+        if self.r.random() < 0.4:
+            body = self.tag({'op': 'onCancel', 'e': body, 'fin': mark(3)})
+        if depth < 1 and self.disp_left > 0 and self.r.random() < 0.2:
+            self.disp_left -= 1
+            f = self.fresh('f')
+            sub = {'op': 'bind', 'x': f, 'e': {'op': 'dSubmit', 'd': dv,
+                   'e': self.disp_child(j + 50, env, size, ctx, gv, dv, depth + 1)},
+                   'k': {'op': 'seq', 'ps': [{'op': 'cede'}, self.disp_poll(f)]}}
+            body = {'op': 'seq', 'ps': [body, {'op': 'attempt', 'e': sub}, mark(4)]}
+        return body
+
+    def disp_poll(self, f):
+        """`dPoll f`, its value in the trace (`delay fn1 x`)."""
+        x = self.fresh('o')
+        return {'op': 'bind', 'x': x, 'e': {'op': 'dPoll', 'f': {'t': 'var', 'x': f}},
+                'k': {'op': 'delay', 'fn': 1, 'arg': {'t': 'var', 'x': x}}}
+
+    def tpl_disp(self, env, size, ctx):
+        """A `Dispatcher` scenario of type unit: `dUse` (parallel or sequential, await random), a
+        gate `Deferred`; 1-4 submissions (`dSubmit`, `dForget`) of `disp_child` effects with cedes
+        between; polls and cancels of the futures; the gate is opened (or not); sometimes a fiber
+        that submits late (during or after the release: CE-0090) and opens the gate; sometimes the
+        dispatcher or a future escapes the body and is used after the release (submission fails
+        with `IllegalStateException`; a poll shows the final state).
+        Cost limit (not an agreement limit): at most 3 accepted submissions (executor map) and 2
+        cancels (worker map) per scenario. The Lean side replays every order of the largest
+        `Supervisor` map counter (k! replays, about 0.5 s each); 5 entries cost about 60 s per case."""
+        d, g = self.fresh('d'), self.fresh('g')
+        dv, gv = {'t': 'var', 'x': d}, {'t': 'var', 'x': g}
+        par = self.r.random() < 0.6
+        aw = self.r.random() < 0.5
+        sub = max(1, size // 4)
+        cedes = lambda: [{'op': 'cede'} for _ in range(self.pick([(3, 0), (2, 1), (1, 2), (1, 4)]))]
+        k = self.pick([(3, 1), (3, 2), (2, 3)])
+        self.disp_left = 3 - k
+        cancel_left = 2
+        steps = []  # (kind, payload) in order; futures bound by name
+        futs = []
+        opened = False
+        for j in range(k):
+            child = self.disp_child(j, env, sub, ctx, gv, dv, 0)
+            if self.r.random() < 0.4:
+                steps.append(('do', {'op': 'dForget', 'd': dv, 'e': child}))
+            else:
+                f = self.fresh('f')
+                futs.append(f)
+                steps.append(('bind', f, {'op': 'dSubmit', 'd': dv, 'e': child}))
+            for c in cedes():
+                steps.append(('do', c))
+            if not opened and self.r.random() < 0.2:
+                opened = True
+                steps.append(('do', {'op': 'deferredComplete', 'd': gv, 'v': {'t': 'nat', 'v': 1}}))
+        for f in futs:
+            r = self.r.random()
+            if r < 0.3:
+                steps.append(('do', self.disp_poll(f)))
+            elif r < 0.85 and cancel_left > 0:
+                cancel_left -= 1
+                c = self.fresh('c')
+                steps.append(('bind', c, {'op': 'dCancel', 'f': {'t': 'var', 'x': f}}))
+                for x in cedes():
+                    steps.append(('do', x))
+                if self.r.random() < 0.6:
+                    steps.append(('do', self.disp_poll(c)))
+        if self.r.random() < 0.3 and self.disp_left > 0:
+            # a late submitter: it can run while the release waits (CE-0090) or after it
+            self.disp_left -= 1
+            w = self.pick([(2, {'op': 'cede'}), (2, {'op': 'sleep', 'ms': 1}), (2, {'op': 'sleep', 'ms': 100}), (1, {'op': 'sleep', 'ms': 0})])
+            lf = self.fresh('f')
+            late = {'op': 'seq', 'ps': [w, {'op': 'attempt', 'e': {'op': 'bind', 'x': lf,
+                    'e': {'op': 'dSubmit', 'd': dv, 'e': self.disp_child(70, env, sub, ctx, gv, dv, 1)},
+                    'k': {'op': 'seq', 'ps': [{'op': 'sleep', 'ms': 10}, self.disp_poll(lf)]}}},
+                    {'op': 'deferredComplete', 'd': gv, 'v': {'t': 'nat', 'v': 2}}]}
+            steps.append(('do', {'op': 'start', 'e': late}))
+        elif not opened and self.r.random() < 0.6:
+            steps.append(('do', {'op': 'deferredComplete', 'd': gv, 'v': {'t': 'nat', 'v': 1}}))
+        r = self.r.random()
+        if r < 0.08:
+            steps.append(('do', {'op': 'raise', 'code': self.code()}))
+        elif r < 0.12:
+            steps.append(('do', {'op': 'canceled'}))
+        esc = self.pick([(5, None), (2, 'd')] + ([(2, 'f')] if futs else []))
+        ret = {'op': 'pure', 'v': {'t': 'unit'}} if esc is None else \
+            {'op': 'pure', 'v': dv if esc == 'd' else {'t': 'var', 'x': futs[-1]}}
+        body = ret
+        for st in reversed(steps):
+            if st[0] == 'do':
+                body = {'op': 'seq', 'ps': [st[1], body]}
+            else:
+                body = {'op': 'bind', 'x': st[1], 'e': st[2], 'k': body}
+        body = {'op': 'bind', 'x': g, 'e': {'op': 'deferredNew'}, 'k': body}
+        use = {'op': 'dUse', 'par': par, 'aw': aw, 'x': d, 'k': body}
+        if esc is None:
+            return {'op': 'seq', 'ps': [{'op': 'attempt', 'e': use}, {'op': 'pure', 'v': {'t': 'unit'}}]}
+        t = self.fresh('e')
+        after = [{'op': 'sleep', 'ms': self.pick([(1, 0), (1, 10)])}]
+        if esc == 'd':
+            after.append({'op': 'attempt', 'e': {'op': 'dSubmit', 'd': {'t': 'var', 'x': t},
+                          'e': {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_699_999}}}})
+        else:
+            after.append(self.disp_poll(t))
+        after.append({'op': 'pure', 'v': {'t': 'unit'}})
+        return {'op': 'bind', 'x': t, 'e': use, 'k': {'op': 'seq', 'ps': after}}
 
     # ------------------------------------------------------- format v1
 
@@ -1878,6 +2003,15 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
         prog = {'op': 'seq', 'ps': [prog, extra]}
         if any(x.get('rs') for x in walk_sup(extra)):
             case['maxSteps'] = min(case.get('maxSteps', 150), 150)
+        check_prog(prog)
+    # Phase 7, track P7D: append a `Dispatcher` scenario. Own RNG, so the rest of the case does not
+    # change; the probability scales with the template weight.
+    dr = random.Random(f"difftest-dispatcher:{seed}:{i}")
+    if prog.get('op') != 'syncStep' and dr.random() < g.c['p_disp'] * w['tpl_disp']:
+        g3 = Gen(dr, weights, config)
+        g3.names = 90000
+        extra = g3.tpl_disp({}, dr.randint(3, 12), {})
+        prog = {'op': 'seq', 'ps': [prog, extra]}
         check_prog(prog)
     case['prog'] = prog
     return case
