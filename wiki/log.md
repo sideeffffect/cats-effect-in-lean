@@ -471,3 +471,7 @@
 - Updated: index.md
 - Raw: raw/cats-effect/2026-11-25-track-p7d-dispatcher-notes.md
 - Bug: bugs/CE-0090.yaml, reproducers/CE-0090/Repro.scala (REPRODUCED on v3.7.1 and series/3.x)
+
+## [2026-11-25] ingest | Track P7D merged; decision 66 (Dispatcher mirror after Supervisor)
+- Updated: methodology/project-plan.md
+- Raw: raw/project-decisions/2026-11-25-decision-66-dispatcher-after-supervisor.md
