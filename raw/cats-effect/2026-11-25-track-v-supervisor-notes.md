@@ -75,3 +75,8 @@ First smoke: variant 9 was not wired for the `Async` state (only `modAdd`); fixe
   it can be outside the list. Evidence: a rerun of the 12 cases gave 5 agreements (the Scala output
   varies from run to run with the identity hashes). Not a model bug. Fix: the generator makes at
   most 5 `supervise` per scenario (`sup_left`); run 2 uses the fixed generator.
+- Run 2 (fixed generator, seeds 81-83, 0..19500 per seed): 58,500 cases, 58,500 agree, 0
+  mismatch, 0 unsupported. Agreeing per op: supUse 51,137, supervise 51,137 (81: 17,035, 82: 17,052,
+  83: 17,050). About 0.4 s per case per process with 12 processes.
+- Fixed cases: restart cases `maxSteps` 60 (CI time), 136 agree; added to the CI `cediff` and
+  `drive.py check` lists.

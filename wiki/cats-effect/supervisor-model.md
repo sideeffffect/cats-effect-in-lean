@@ -38,8 +38,9 @@ A closure id that embeds another closure reference is about twice as long. The f
 
 Ops `supUse` (`aw`, `rs`, `cv`, `x`, `k`) and `supervise` (`s`, `e`), [format](../methodology/difftest-program-format.md). Generator template `tpl_sup` with its own RNG (`p_sup`). Restart cases end by fuel (`always` restarts a finished child forever) and are slow on the Lean side (about 30 ms per step): at most 2 children, no nesting, `maxSteps` 150. `IllegalStateException: supervisor already shutdown` is a library exception (`drive.py` `LIB_EXNS`, `Prog.userCodeV?`). An external cancel of a restart wrapper handle is skipped on both sides (harness rule).
 
-- Fixed cases: 136 agree.
-- Generated: see the results section of the raw note and the log entry of this session.
+- Fixed cases: 136 agree (restart cases with `maxSteps` 60; in CI `cediff` and `drive.py check` lists).
+- Run 1 (55,200 cases): 12 mismatches, all with 6-8 `supervise` on one supervisor: the Scala map order (identity hashes) was outside the 120 listed orders. Harness limit, not a model bug; the generator now makes at most 5 `supervise` per scenario.
+- Run 2: `opcount.py --seeds 81 82 83 --n 18400 --boost tpl_sup=12` (12 processes, `--start`) plus 1,100 more per seed: **58,500 cases, all agree**; agreeing cases per op: `supUse` 51,137, `supervise` 51,137 (seed 81: 17,035, 82: 17,052, 83: 17,050). Model bugs found by the difftest: none (the two fixes were codec size and the variant-9 wiring).
 
 ## Properties (`Props/Phase7/Supervisor.lean`)
 
