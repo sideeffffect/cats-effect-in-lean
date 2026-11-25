@@ -1,0 +1,120 @@
+id: CE-0090
+title: "Dispatcher.parallel: an effect submitted while the release runs is accepted but never runs, and its Future never completes"
+status: draft  # found in Phase 7 batch 7.2, track P7D (2026-11-25) by reading the source; reproduced on v3.7.1 and series/3.x; no Lean property yet (the mirror is not written, see lean.status)
+priority: medium
+kind: hang
+area: std
+files:
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:254-285  # resource order: outer Supervisor, terminationLatch, doneR, executor, workers
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:257-258  # termination finalizer: doneR.set(true), runs after the executor release
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:293-295  # submission checks only doneR
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:331-338  # submission offers the registration to a worker queue
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:461-469  # PoisonPill: worker sets its doneR, then only waits for terminationLatch
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:487      # Worker finalizer offers the PoisonPill (released first)
+  - std/shared/src/main/scala/cats/effect/std/Dispatcher.scala:615-621  # Executor.parallel = Supervisor(await): joinAll or cancelAll on release
+functions:
+  - Dispatcher.parallel (await = true and await = false)
+  - Dispatcher#unsafeToFutureCancelable (and unsafeToFuture, unsafeRunCancelable, unsafeRunAndForget, unsafeRunSync, unsafeRunTimed, unsafeToCompletableFuture)
+summary: >
+  The release of `Dispatcher.parallel` runs the resource finalizers in reverse order. First each
+  `Worker` finalizer offers a `PoisonPill` to its queue (Dispatcher.scala:487). The worker takes
+  the pill, sets its own `doneR`, and from then on only waits for `terminationLatch`; it never
+  takes from its queue again (:461-469). Then the executor `Supervisor(await)` is released
+  (:615-621): with `await = true` it waits for all running tasks, with `await = false` it cancels
+  them and waits for the cancelation. Only after that does the `termination` finalizer set the
+  dispatcher `doneR` (:257-258). A submission checks only this `doneR` (:293-295). So a submission
+  in the window between the poison pill and `doneR.set(true)` passes the check, is offered to a
+  worker queue behind the pill (:331-338), and nobody takes it: the effect never runs, the
+  returned `Future` is never completed, `unsafeRunAndForget` drops the effect without a report,
+  and a cancel action returned for it waits forever (`CancelRequested` latch, :343-346). With
+  `await = true` the window lasts as long as the longest running task, so a running task that
+  submits a follow-up effect (a common pattern) loses it every time. `sequential` is not
+  affected: its executor is `inplace` (no Supervisor), so `doneR` is set right after the poison
+  pill without a suspension in between (the reproducer's first runs: `IllegalStateException`).
+likelihood: >
+  Medium. Any program that submits work to a parallel `Dispatcher` while the dispatcher shuts down
+  can hit it: callbacks of a Java library (HTTP server, message consumer, scheduler) that keep
+  calling `unsafeRunAndForget` / `unsafeRunSync` during a graceful shutdown with
+  `Dispatcher.parallel(await = true)`, or a dispatched task that submits a follow-up task. With
+  `await = true` the window is the whole time the release waits for running tasks; a caller that
+  blocks on the result (`unsafeRunSync`, `Await.result` on the `Future`) then hangs forever and can
+  block the shutdown itself. With `await = false` the window is short (about 70 ms on the default
+  runtime in our runs, the time to cancel the tasks and stop the workers). The reproducer shows
+  the lost submission in 50/50 TestControl seeds and 50/50 runs on the default runtime.
+maybe_intended: >
+  Unlikely. The Scaladoc of `parallel` and `sequential` says that once the resource scope exits
+  "attempts to submit new effects will throw an exception", and the maintainers fixed the related
+  issue #3501 so that a dispatcher that is releasing itself rejects new tasks (PR #3579). The test
+  "reject new tasks while shutting down" (tests/shared/src/test/scala/cats/effect/std/DispatcherSuite.scala:500-517,
+  run for every dispatcher through `common`, also `parallel(await = true)`) checks this window, but
+  it cannot fail: its `for` ends with `yield fail("fail")`, so the program raises in every run and
+  `assert(r.isLeft)` always holds. A maintainer can say that submitting during release is a user
+  error; but then the submission should still fail (throw or fail the Future) and not hang.
+reproducer: reproducers/CE-0090/Repro.scala
+output:
+  # v3.7.1, scripts/run_reproducers.sh CE-0090 (scala-cli), 2026-11-25
+  v3.7.1: |
+    await=true TestControl: Map(lost -> 50); lost in 50/50 seeds
+    await=true default runtime: Map(lost -> 50); lost in 50/50 runs
+    await=false default runtime (timing-dependent): threw
+    REPRODUCED CE-0090
+  # series/3.x = 3.7.1-89-de84c01 (publishLocal snapshot of origin/series/3.x head
+  # de84c01f76b2f42fcee9d43aba66c82992add103, made by track S; head checked unchanged with gh api
+  # on 2026-11-25; Dispatcher.scala last changed on series/3.x by 790bb3a573 (2025-02-28) and
+  # Supervisor.scala by 0cb2169455 (2025-10-08), both before v3.7.1)
+  series/3.x: |
+    await=true TestControl: Map(lost -> 50); lost in 50/50 seeds
+    await=true default runtime: Map(lost -> 50); lost in 50/50 runs
+    await=false default runtime (timing-dependent): threw
+    REPRODUCED CE-0090
+  # series/3.7.x = 3.7.1-15-2f94201 (publishLocal, 2026-11-10), 2026-11-25
+  series/3.7.x: |
+    (same lines as v3.7.1)
+    REPRODUCED CE-0090
+  # First exploratory run (scratch program, default runtime, submit 50 ms after the release
+  # started, Future read 2 s later): parallel await=true: submit returned, Future None;
+  # parallel await=false: submit returned, Future None; sequential await=true/false:
+  # IllegalStateException("Dispatcher already closed").
+expected: |
+  The submission made during the release throws IllegalStateException("Dispatcher already
+  closed"), or it is accepted and then runs (with await = true) or is canceled/failed (with
+  await = false), so that its Future completes. The reproducer then prints "threw" or "ran" and
+  its last line is NOT REPRODUCED CE-0090.
+promised_by:
+  - "Scaladoc of Dispatcher.parallel(await) and Dispatcher.sequential(await) (Dispatcher.scala:130-133, :168-171): 'Once the resource scope exits, depending on the termination policy all active effects will be canceled or awaited, and attempts to submit new effects will throw an exception.'"
+  - "Scaladoc of Dispatcher#unsafeToFuture (Dispatcher.scala:68-71): 'Submits an effect to be executed, returning a Future that holds the result of its evaluation.'"
+  - "Maintainer intent: issue #3501 / PR #3579 (a releasing dispatcher rejects new tasks) and the DispatcherSuite test 'reject new tasks while shutting down'."
+cause: >
+  The dispatcher-level flag `doneR` is set by a finalizer that runs after the executor release
+  (Dispatcher.scala:257-262 acquires it before `executorF`, :273), while the workers stop taking
+  from their queues before the executor release (the Worker finalizer :487 runs first). A
+  registration offered after the pill is never taken, never failed, never canceled. Before PR #3701
+  ("remove `alive` in favour of nullifying queues") the check used a different mechanism.
+possible_fix: >
+  Set the dispatcher `doneR` before the workers are poisoned: for example acquire the
+  `termination` resource after the workers (so its finalizer runs first), or set `doneR` in the
+  Worker finalizer before it offers the pill. This closes the window seen by submissions that
+  check after the flag is set. A submission that read `doneR = false` just before it was set can
+  still be offered after the pill on another thread, so the worker should also drain its queue
+  after the pill and complete each left-over registration (fail its Promise with
+  IllegalStateException, or run it with await = true), and complete a pending `CancelRequested`
+  latch.
+duplicates:
+  upstream: []
+  related:
+    - "typelevel/cats-effect#3501 (closed) Closing a Dispatcher from within it seems to enter invalid state: same promise (reject new tasks during release), fixed for the self-release case by PR #3579"
+    - "typelevel/cats-effect#3579 (merged) dispatcher releasing itself rejects new tasks"
+    - "typelevel/cats-effect#3701 (cross-reference of #3501) Dispatcher: remove `alive` in favour of nullifying queues"
+    - "typelevel/cats-effect#3981 (closed) Dispatcher sequential runs queued tasks concurrently when closing: other release-time bug, sequential mode"
+    - "typelevel/cats-effect#2448 (open) Make dispatcher safer: self-canceled effects never complete their Future (different cause, known)"
+    - "typelevel/cats-effect#4069 (open) Queued but unstarted work on Dispatcher.sequential should be cancelable (different, sequential mode)"
+  queries:
+    - "gh search issues 'Dispatcher release hang' / 'Dispatcher unsafeToFuture never completes' / 'Dispatcher closed submit' / 'Dispatcher shutdown race' / 'Dispatcher await true finalization' -R typelevel/cats-effect (2026-11-25): no result"
+    - "gh search issues 'Dispatcher' -R typelevel/cats-effect --limit 40 (2026-11-25): #4104, #2448, #1571, #3944, #2727, #4069, #3645, #4541, #3967, #3993, #3981, #3776, #3945, #3131, #3898, #3929, #3394, #3722, #3534, #3501, #3506, #2926, #3363, #2537, #1881, #3087, #2933; none about a submission during the release of a parallel dispatcher"
+    - "gh search issues 'Dispatcher hang' / 'Dispatcher already closed' -R typelevel/cats-effect (2026-11-25): only #2448"
+lean:
+  status: "pending: no mirror yet. The planned property is std.Dispatcher.noLostSubmission (each submission either throws, or its Future completes, unless its effect never ends). See wiki/cats-effect/dispatcher-model.md, 'Plan'."
+  property: null
+  theorem: null
+  fixed_twin: null
+  ordinary_inputs: "The input is ordinary: one running task, one release, one submission (await = true)."
