@@ -67,7 +67,7 @@ Other wrong functions: v16 (ignores `await`) → `awaitDrains`; v18 (`sequential
 
 **C4 (open item, before any proof):** the impure calls are one atomic step each (`submitIO`, `cancelIO`), and `UnsafeUnbounded.take` throws `FailureSignal` only on an empty list. The real calls have visible intermediate steps (`doneR` read, then the queue offer, `DP:293`, `:331-338`, `:632-637`; the CAS loop of `cancel`, `DP:341-364`; a half-done `put`, `UU:52-86`). Refutations on atomic steps are real schedules, and open statements are not harmed; but before a Dispatcher entry becomes `proven`, split these calls into their visible steps or prove a reduction lemma.
 
-**C1:** one run with the final harness: see "Results".
+**C1 (done):** one consistent run with the final harness (`-XX:hashCode=2`, `DispatcherShim`, the `pollVal` fix, the final generator): `opcount.py --seeds 91 92 93`, cases 0-40,500 per seed, `--boost tpl_disp=12`, 9 processes: **121,500 cases, 121,500 agree**, 0 unsupported, 0 mismatches. Agreeing cases per op (seed 91 / 92 / 93): `dUse` 103,049 (34,328 / 34,413 / 34,308), `dSubmit` 93,792 (31,205 / 31,257 / 31,330), `dForget` 60,535 (20,177 / 20,151 / 20,207), `dCancel` 52,132 (17,334 / 17,382 / 17,416), `dPoll` 79,625 (26,525 / 26,542 / 26,558). Smoke after the B1 fix (30 runs per row): `noLostSubmission` v3.7.1 15/30 violating, twin 32 0/30; other rows unchanged.
 
 ## Results
 
