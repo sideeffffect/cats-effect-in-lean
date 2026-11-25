@@ -499,5 +499,6 @@
 - Raw: raw/project-decisions/2026-11-25-review-batch-16-notes.md
 - Review: review/2026-11-25-review-batch-16.md
 
-## [2026-11-25] update | Review 16 condition C3 fixed
-- Updated: inventory (13 std.Supervisor.* / std.Dispatcher.* rows with registry links: todo -> modelled)
+## [2026-11-25] update | Review 16 condition C3 withdrawn
+- C3 asked to set 13 linked `todo` rows to `modelled`. `lake exe audit` rejects it: a row is `modelled` only through a proven or refuted entry; these rows link only to `open` entries (registry-and-audit rule from the review-1 fixes). The rows stay `todo`. C3 is a review error, not a defect.
+- Updated: methodology/phase7-batch2-gate-report.md
