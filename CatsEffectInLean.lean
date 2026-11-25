@@ -106,3 +106,4 @@ import CatsEffectInLean.Proofs.Phase7.QueueBatteryConcOther
 import CatsEffectInLean.Proofs.Phase7.QueueBatteryAsyncOther
 import CatsEffectInLean.Proofs.Phase7.QueueBatteryFactory
 import CatsEffectInLean.Proofs.Phase7.QueueBatteryHonest
+import CatsEffectInLean.Std.Supervisor
