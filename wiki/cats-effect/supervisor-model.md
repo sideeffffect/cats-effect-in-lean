@@ -77,3 +77,4 @@ The fibers that `supervise` returns are `IOFiber`s (public path); the restart wr
 - [race, both and fiber leaks](race-both-model.md)
 - [Differential testing](../methodology/differential-testing.md)
 - [Agent workflow and review protocol](../methodology/agent-workflow.md)
+- [Phase 7 batch 7.2 gate report](../methodology/phase7-batch2-gate-report.md) (review batch 16: gate FAIL, B1)

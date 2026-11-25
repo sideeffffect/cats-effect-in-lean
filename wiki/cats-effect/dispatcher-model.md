@@ -77,3 +77,4 @@ Other wrong functions: v16 (ignores `await`) → `awaitDrains`; v18 (`sequential
 - [Differential testing](../methodology/differential-testing.md)
 - [Kernel evaluation of the model](../lean/kernel-evaluation.md)
 - [Agent workflow](../methodology/agent-workflow.md)
+- [Phase 7 batch 7.2 gate report](../methodology/phase7-batch2-gate-report.md) (review batch 16: gate FAIL, B1)

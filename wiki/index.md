@@ -7,11 +7,12 @@ How this project works: synthesis, agent loop, difftest design. Start here.
 | Article | Summary | Updated |
 |---------|---------|---------|
 | [Lessons for Cats Effect in Lean](methodology/lessons-for-cats-effect.md) | Top-level synthesis: what to copy, what is new for CE, order of work | 2026-11-10 |
-| [Agent workflow and review protocol](methodology/agent-workflow.md) | Inventory → mirror → difftest → prove/refute → review; rubric; bug records; no upstream filing | 2026-11-15 |
+| [Agent workflow and review protocol](methodology/agent-workflow.md) | Inventory → mirror → difftest → prove/refute → review; rubric; bug records; no upstream filing | 2026-11-25 |
 | [Project plan](methodology/project-plan.md) | Step-by-step plan: phases 0–9, gates, risks, user decisions; started 2026-11-10 | 2026-11-15 |
 | [Phase 5 gate report](methodology/phase5-gate-report.md) | Gate PASS (review batch 3), user-approved 2026-11-10: 9/9 FAITHFUL, 3 calibration bugs refuted + reproduced, CE-0004, metrics, caveats | 2026-11-10 |
 | [Phase 6 gate report](methodology/phase6-gate-report.md) | Draft, review batch 10: gate PASS with conditions; 25/25 Phase 6 entries FAITHFUL (1 proven, 3 refuted, 21 open); CE-0005, CE-0020, CE-0030 reproduced; difftest v2 counts; caveats | 2026-11-15 |
 | [Phase 7 batch 7.1 gate report](methodology/phase7-batch1-gate-report.md) | Gate PASSED 2026-11-25 (review batch 15, conditions C2 and C3 closed); 35/35 entries FAITHFUL as statements (0 proven, 1 refuted, 34 open); all 5 batteries complete; CE-0060 reproduced; difftest counts | 2026-11-25 |
+| [Phase 7 batch 7.2 gate report](methodology/phase7-batch2-gate-report.md) | Draft, review batch 16: gate FAIL (B1: `std.Dispatcher.noLostSubmission` HOLLOW); 14/15 entries FAITHFUL (1 refuted CE-0091, 13 open); both batteries complete; conditions C1-C5 | 2026-11-25 |
 | [Differential testing](methodology/differential-testing.md) | Lean-vs-CE difftest harness, generator, driver, results; v1 ops ≥ 65,960 agreeing cases each; preempt coverage via small runtime thresholds; triage bins | 2026-11-10 |
 | [Difftest program format v0](methodology/difftest-program-format.md) | JSON AST v0 (values, ops → exact IO terms, user-fn table, trace events); Scala runner modes replay/testcontrol; commands, limits | 2026-11-10 |
 | [Inventory](methodology/inventory.md) | inventory/inventory.csv: columns, scope, exclusion rules, how to regenerate, counts (3,255 rows) | 2026-11-10 |

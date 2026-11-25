@@ -492,3 +492,9 @@
 ## [2026-11-25] ingest | Track P7D merged (CE-0090, CE-0091 refuted in Lean); decision 67 (difftest JVM hashCode=2)
 - Updated: methodology/differential-testing.md
 - Raw: raw/project-decisions/2026-11-25-decision-67-jvm-hashcode.md
+
+## [2026-11-25] review | Review batch 16: Phase 7 batch 7.2 gate (Supervisor, Dispatcher)
+- Created: Phase 7 batch 7.2 gate report (draft; gate FAIL, blocker B1 `std.Dispatcher.noLostSubmission` HOLLOW; 14/15 FAITHFUL; batteries complete; conditions C1-C5)
+- Updated: Agent workflow and review protocol (review log), index
+- Raw: raw/project-decisions/2026-11-25-review-batch-16-notes.md
+- Review: review/2026-11-25-review-batch-16.md
