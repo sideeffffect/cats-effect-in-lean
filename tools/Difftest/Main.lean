@@ -73,8 +73,14 @@ def processLine (line : String) : Json × Bool × Bool :=
             -- track V: the `Supervisor` map order: the orders of the entries that a map ever held
             -- (ghost counter of the replay with the insertion order; at most 5, 120 orders)
             -- track P7D: the `Dispatcher` maps (tasks, cancel actions) count too
-            let ks := if supCount tc.prog + dispCount tc.prog ≥ 2 then
-                min 5 (supPutsMax cfg tc.prog choices tc.maxSteps s0) else 0
+            -- review batch 16 (C2): difftest cost limit. Up to 5 entries: every order (the full
+            -- outcome set). Above 5: only the insertion-order replay (6! = 720 replays per case cost
+            -- too much). Sound for runs under `-XX:hashCode=2` (decision 67: Scala then iterates
+            -- small maps in insertion order), because that replay is one member of the full set.
+            -- The model, the statements and the proofs keep every order (`IsOrder ho`).
+            let puts := if supCount tc.prog + dispCount tc.prog ≥ 2 then
+                supPutsMax cfg tc.prog choices tc.maxSteps s0 else 0
+            let ks := if puts ≤ 5 then puts else 0
             let k := if ptMaxLen tc.prog ≥ 5 then max (ptMaxLen tc.prog) ks else ks
             if k ≥ 5 || ks ≥ 2 then
               -- review 8: the supervision set is a `HashSet`; every order of the children

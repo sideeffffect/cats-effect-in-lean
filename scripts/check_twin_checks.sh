@@ -34,6 +34,7 @@ theorems=(
   CatsEffectInLean.Proofs.Phase6.MemoizeStuckWitness.all_checks
   CatsEffectInLean.Proofs.Phase6.ResourceBothFixed.all_checks
   CatsEffectInLean.Proofs.Phase7.SemaphoreCountFixed.all_checks
+  CatsEffectInLean.Proofs.Phase7.SupervisorRestartWitness.all_checks
 )
 
 safe=$(mktemp -d)

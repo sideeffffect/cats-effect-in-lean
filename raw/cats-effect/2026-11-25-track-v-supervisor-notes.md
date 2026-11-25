@@ -80,3 +80,20 @@ First smoke: variant 9 was not wired for the `Async` state (only `modAdd`); fixe
   83: 17,050). About 0.4 s per case per process with 12 processes.
 - Fixed cases: restart cases `maxSteps` 60 (CI time), 136 agree; added to the CI `cediff` and
   `drive.py check` lists.
+
+## Review batch 16 follow-up (C1, C2, N3)
+
+- Merged `phase6` (decision 67: difftest JVM `-XX:hashCode=2`).
+- C2: generator bound 8 `supervise` per scenario (was 5). 222 cases with 6-8 calls: 3 Scala runs
+  identical; Lean full enumeration 222/222 agree (25 min, 7 s per case); with the fast path
+  (insertion order only above 5 entries) 222/222 agree (12 min under load 17).
+- Orchestrator rule: the fast path is difftest only; the model and the statements keep every order.
+- N3: `noLeak_v11` kernel theorem; input `aw = false`, `rs`, one never child, body `cede`; variant
+  11 ends `Errored(AssertionError "unexpected fiber")` with the child at status 1; v3.7.1 ends
+  `Succeeded` with the child canceled once. The run needs 5 GB (restart closures), so the module
+  is in `TwinChecks` (188 s). Fuel 300 is enough. The first try put it in the main witness module
+  with fuel 1500: heartbeat timeout at elaboration and 13 min.
+- C1 run: seeds 81-83 x 19,500 (6 processes, about 3.3 h under load 15-17 with track P7D):
+  58,500 cases, 58,498 agree, 2 `hang` (Lean batch timeout; restart cases g81-872, g82-3489 take
+  about 90 s each). Rerun without timeout: both agree (2 min 56 s). 0 mismatches. Per op 51,137
+  (81: 17,035, 82: 17,052, 83: 17,050).

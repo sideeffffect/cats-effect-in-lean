@@ -14,6 +14,7 @@ Phase 7, batch 7.2, track V. Mirror of `std.Supervisor` with `F = IO`: both stat
 | `Std/Supervisor.lean` | Mirror: `SLam` closures, descriptors `D`, `useIO` (factory + `use`), `superviseIO`, `dispatch`/`env`; variants 1-12 (wrong functions) |
 | `Props/Phase7/Supervisor.lean` | Harness (`HLam`), seven statements `supXV v` |
 | `Proofs/Phase7/SupervisorWitness.lean` | Witnesses, wrong-function and battery theorems (kernel, about 4.5 min, 2.5 GB) |
+| `Proofs/Phase7/SupervisorRestartWitness.lean` | Variant 11 (restart ignores its flags) breaks `noLeak`, kernel; v3.7.1 on the same input; `TwinChecks`, not in the default build (3 min, 5 GB) |
 | `tools/SupSmoke/Main.lean` | `lake exe supsmoke [runs]`: random inputs and schedules, every variant |
 | `difftest/src/main/scala/cats/effect/std/SupervisorShim.scala` | Access to the private entry points (`checkRestart`, `applyForConcurrent`) |
 | `difftest/cases/gen_supervisor.py` | 136 fixed cases |
@@ -39,8 +40,11 @@ A closure id that embeds another closure reference is about twice as long. The f
 Ops `supUse` (`aw`, `rs`, `cv`, `x`, `k`) and `supervise` (`s`, `e`), [format](../methodology/difftest-program-format.md). Generator template `tpl_sup` with its own RNG (`p_sup`). Restart cases end by fuel (`always` restarts a finished child forever) and are slow on the Lean side (about 30 ms per step): at most 2 children, no nesting, `maxSteps` 150. `IllegalStateException: supervisor already shutdown` is a library exception (`drive.py` `LIB_EXNS`, `Prog.userCodeV?`). An external cancel of a restart wrapper handle is skipped on both sides (harness rule).
 
 - Fixed cases: 136 agree (restart cases with `maxSteps` 60; in CI `cediff` and `drive.py check` lists).
-- Run 1 (55,200 cases): 12 mismatches, all with 6-8 `supervise` on one supervisor: the Scala map order (identity hashes) was outside the 120 listed orders. Harness limit, not a model bug; the generator now makes at most 5 `supervise` per scenario.
-- Run 2: `opcount.py --seeds 81 82 83 --n 18400 --boost tpl_sup=12` (12 processes, `--start`) plus 1,100 more per seed: **58,500 cases, all agree**; agreeing cases per op: `supUse` 51,137, `supervise` 51,137 (seed 81: 17,035, 82: 17,052, 83: 17,050). Model bugs found by the difftest: none (the two fixes were codec size and the variant-9 wiring).
+- Run 1 (55,200 cases): 12 mismatches, all with 6-8 `supervise` on one supervisor: the Scala map order (identity hashes) was outside the 120 listed orders. Harness limit, not a model bug; the generator then made at most 5 `supervise` per scenario. Review batch 16 (C2): that cap removed cases to get agreement; lifted (below).
+- Run 2: `opcount.py --seeds 81 82 83 --n 18400 --boost tpl_sup=12` (12 processes, `--start`) plus 1,100 more per seed: **58,500 cases, all agree**; agreeing cases per op: `supUse` 51,137, `supervise` 51,137 (seed 81: 17,035, 82: 17,052, 83: 17,050). Model bugs found by the difftest: none (the two fixes were codec size and the variant-9 wiring). This run was before decision 67 and used the 5-`supervise` cap; it does not count for C1.
+- **Decision 67 and C2 (2026-11-25).** The difftest JVM runs with `-XX:hashCode=2` (all identity hashes equal), so `ConcurrentHashMap` and Scala `HashMap` iterate small maps in insertion order. The generator bound is now 8 `supervise` per scenario (`sup_left`; above about 8 entries a `ConcurrentHashMap` bin may stop keeping insertion order, review 16 N6). Check: 222 generated cases with 6-8 `supervise`, Scala run 3 times: identical outputs; Lean with the full enumeration (every order of up to 5 entries, 121 replays per case): **222/222 agree** (25 min).
+- **Difftest cost limit (not an agreement fix).** `cediff` lists every map order when every map held at most 5 entries (the full outcome set). Above 5 entries it emits only the insertion-order replay (6! = 720 replays per case cost too much). This is sound under `-XX:hashCode=2`: the insertion-order outcome is one member of the full set, so a match is a valid refinement. The model, the statements, the witnesses and the batteries keep every order (`IsOrder ho`). With this rule the 222 cases above also agree (222/222).
+- **C1 run (final harness: decision 67, bound 8, fast path above 5 entries).** `opcount.py --seeds 81 82 83 --n 19500 --boost tpl_sup=12`, 6 processes (2 slices per seed, `--start`), together with track P7D's run: **58,500 cases; 58,498 agreed in the run, 2 were binned `hang`** (`g81-872`, `g82-3489`: restart-path cases, 150 steps, about 90 s each; the Lean batch timeout of `drive.run_lean` expired under load 15-17). Rerun of the 2 cases with the same binaries and no timeout: **both agree**. Mismatches: 0. Agreeing cases per op (with the 2 reruns): `supUse` 51,137, `supervise` 51,137; per seed 81: 17,035, 82: 17,052, 83: 17,050.
 
 ## Properties (`Props/Phase7/Supervisor.lean`)
 
@@ -48,7 +52,7 @@ Harness: `Supervisor.use(s => save s; supervise the root children; b.attempt)`, 
 
 | Entry | Claim | Wrong variants (kernel) |
 |---|---|---|
-| `std.Supervisor.noLeak` | done root ⇒ no child runs user code | 7 (smoke: 11) |
+| `std.Supervisor.noLeak` | done root ⇒ no child runs user code | 7; 11 (`SupervisorRestartWitness.noLeak_v11`, twin-check job, 3 min, 5 GB) |
 | `std.Supervisor.closedNoRun` | flagged ⇒ never ran; done `Succeeded` ⇒ every late child flagged | 9 |
 | `std.Supervisor.runsOnce` | no restart: ≤ 1 start, ≤ 1 finalizer run per child | 4 |
 | `std.Supervisor.awaitJoins` | `aw = true`, flat, pure: done `Succeeded(())`, every child status 2 | 1, 3, 5, 12 |
