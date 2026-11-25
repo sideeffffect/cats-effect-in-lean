@@ -45,7 +45,11 @@ completed (statement 8).
 1. Allocate the harness cells: `Ref` 0 = status list, 1 = user-code starts, 2 = finalizer runs,
    3 = "submission threw `IllegalStateException`" flags, 5 = the start order (a list of task
    numbers), 6 = the submission results (all lists), 4 = the dispatcher value.
-2. `Dispatcher.use(d => body)` (the mirror `useIO'`), then submit the `late` tasks.
+2. `Dispatcher.use(d => body)` (the mirror `useIO'`), then submit the `late` tasks. With a
+   concurrent submitter (`1 ∈ ps`) the body returns the concurrent fiber and the root joins it
+   before the `late` tasks (review batch 16, B1: without the join, "the root is done" did not mean
+   that the concurrent submissions were made, and statement 3 was false for every Dispatcher).
+   Without a concurrent submitter the program is as before (the same kernel runs).
 3. Task `j` = `IO.uncancelable(poll => enter(j) *> poll(ws[j].attempt).onCancel(fin(j)) *>
    mark(j, 2))`: `enter` adds 1 to the starts, sets status 1 and appends `j` to the start order;
    `fin` adds 1 to the finalizer runs and sets status 3.
@@ -63,9 +67,10 @@ list and fuel; the `Supervisor` map order is any permutation `ho`; any worker ch
    finalizer ran at most once.
 2. `dispAwaitDrains`: `aw = true`, the body submits pure tasks (`IO.pure(())`), no cancel: a done
    root is `Succeeded(())` and every task has status 2. Refuted for `parallel`: CE-0091.
-3. `dispNoLostSubmission`: `aw = true`, pure tasks from the body and the concurrent fiber, no
-   cancel: when the root is done, every task either threw (flag) or has status 2. Refuted:
-   CE-0090 (and CE-0091).
+3. `dispNoLostSubmission`: `aw = true`, pure tasks from the body and the concurrent fiber (which
+   the root joins), no cancel: when the root is done, every submission either threw (flag) or its
+   task has status 2 (`DP:130-133`: after the scope exits a submission throws; an accepted one is
+   awaited). Refuted: CE-0090 (and CE-0091).
 4. `dispClosedRejects`: in every state, a task whose submission threw never started; when the
    root is done `Succeeded(())`, every `late` task threw.
 5. `dispSeqFifo`: `sequential`, tasks from the body only: in every state the start order is
@@ -153,6 +158,16 @@ inductive HLam where
   | selDone (d : Val) (j p : Nat)
   /-- `_ => wait for `p``. -/
   | againDone (d : Val) (j p : Nat)
+  /-- Review batch 16 (B1), only with a concurrent submitter (`1 ∈ ps`): `fib => b.attempt.as(fib)`
+  after `start(concurrent fiber)`; the body returns the fiber. -/
+  | tailK
+  /-- `_ => x`. -/
+  | retV (x : Val)
+  /-- `fib => fib.join.flatMap(afterJoin)`: the root joins the concurrent submitter after `use`
+  returned (review batch 16, B1). -/
+  | joinK
+  /-- `_ => cell 4.flatMap(lateK)`: the late submissions after the join. -/
+  | afterJoin
   deriving DecidableEq, Repr
 
 def HLam.toVal : HLam → Val
@@ -187,6 +202,10 @@ def HLam.toVal : HLam → Val
   | .readDone p => cloVal hns 29 [.ref p]
   | .selDone d j p => cloVal hns 30 [d, .nat j, .ref p]
   | .againDone d j p => cloVal hns 31 [d, .nat j, .ref p]
+  | .tailK => cloVal hns 32 []
+  | .retV x => cloVal hns 33 [x]
+  | .joinK => cloVal hns 34 []
+  | .afterJoin => cloVal hns 35 []
 
 def HLam.ofFields : Nat → List Val → Option HLam
   | 0, [.nat k] => some (.newCells k)
@@ -220,6 +239,10 @@ def HLam.ofFields : Nat → List Val → Option HLam
   | 29, [.ref p] => some (.readDone p)
   | 30, [d, .nat j, .ref p] => some (.selDone d j p)
   | 31, [d, .nat j, .ref p] => some (.againDone d j p)
+  | 32, [] => some .tailK
+  | 33, [x] => some (.retV x)
+  | 34, [] => some .joinK
+  | 35, [] => some .afterJoin
   | _, _ => none
 
 /-- The closure id (odd: library side, not public). -/
@@ -295,7 +318,17 @@ def HLam.call (x : Inp) (h : HLam) (arg : Val) (w : View) : UserResult :=
     { effects := [.allocRef z, .allocRef z, .allocRef z, .allocRef z, .allocRef .unit, .allocRef .unit,
         .allocRef (listV (List.replicate k' .unit))], out := .ret .unit }
   | .afterCells par aw n v cs, _ =>
-    { out := .prog (.flatMap (.flatMap (useIO' par aw n v HLam.body.id cs) HLam.getD.fn) HLam.lateK.fn) }
+    if x.ps.contains 1 then
+      -- review batch 16 (B1): the root joins the concurrent submitter, then the late submissions
+      { out := .prog (.flatMap (useIO' par aw n v HLam.body.id cs) HLam.joinK.fn) }
+    else { out := .prog (.flatMap (.flatMap (useIO' par aw n v HLam.body.id cs) HLam.getD.fn) HLam.lateK.fn) }
+  | .joinK, f =>
+    match f with
+    | .fiber t => { out := .prog (.flatMap (IO.joinOf t (w.outcome t)) HLam.afterJoin.fn) }
+    | _ => bad
+  | .afterJoin, _ => { out := .prog (.flatMap (.delay HLam.readD.fn) HLam.lateK.fn) }
+  | .tailK, f => { out := .prog (.map (.attempt x.b) (HLam.retV f).fn) }
+  | .retV v, _ => { out := .ret v }
   | .getD, _ => { out := .prog (.delay HLam.readD.fn) }
   | .readD, _ => { out := .ret (w.refs.getD 4 .unit) }
   | .lateK, d => { out := .prog (subsFrom x d late 0) }
@@ -330,7 +363,9 @@ def HLam.call (x : Inp) (h : HLam) (arg : Val) (w : View) : UserResult :=
         | _ => { out := .prog (.flatMap (.pure .unit) (HLam.cancels d (i + 1)).fn) }
       | none => { out := .prog (.flatMap (.pure .unit) (HLam.tail d).fn) }
   | .tail d, _ =>
-    { out := .prog (.flatMap (.start (.flatMap (.attempt x.c) (HLam.conc d).fn)) HLam.bUser.fn) }
+    if x.ps.contains 1 then
+      { out := .prog (.flatMap (.start (.flatMap (.attempt x.c) (HLam.conc d).fn)) HLam.tailK.fn) }
+    else { out := .prog (.flatMap (.start (.flatMap (.attempt x.c) (HLam.conc d).fn)) HLam.bUser.fn) }
   | .conc d, _ => { out := .prog (subsFrom x d 1 0) }
   | .bUser, _ => { out := .prog (.map (.attempt x.b) HLam.unitK.fn) }
   | .unitK, _ => { out := .ret .unit }
@@ -415,6 +450,12 @@ def runs {M : Type} (s : Sched M) (j : Nat) : Nat := natIn s.liveHeap.refs 1 j
 def fins {M : Type} (s : Sched M) (j : Nat) : Nat := natIn s.liveHeap.refs 2 j
 /-- Did the submission of task `j` throw `IllegalStateException` (`Ref` 3)? -/
 def rejected {M : Type} (s : Sched M) (j : Nat) : Nat := natIn s.liveHeap.refs 3 j
+/-- Did the submission of task `j` return (cell 6 holds its `unsafeToFutureCancelable` result)? -/
+def accepted {M : Type} (s : Sched M) (j : Nat) : Bool :=
+  match (lst (s.liveHeap.refs.getD 6 .unit))[j]? with
+  | some (.pair (.ref _) _) => true
+  | _ => false
+
 /-- The start order (`Ref` 5). -/
 def order {M : Type} (s : Sched M) : List Nat :=
   (lst (s.liveHeap.refs.getD 5 .unit)).map fun v => match v with | .nat j => j | _ => 0

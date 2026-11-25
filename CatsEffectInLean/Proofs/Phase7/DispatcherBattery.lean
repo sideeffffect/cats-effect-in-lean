@@ -46,7 +46,7 @@ derives the theorems from their observations (`R*.obs`). User programs: `IO.pure
 |---|---|---|
 | `dispRunsOnce` | R01: one start | 4 (R04), 12 (R13) |
 | `dispAwaitDrains` | R01 (`sequential`) | 1 (R02), 3 (R03), 13 (R05, R18), 16 (R06), 9 (R11), 11 (R12) |
-| `dispNoLostSubmission` | R34 (`sequential`: the late submission throws) | refuted (CE-0090, R32); twin 32 (R33) |
+| `dispNoLostSubmission` | R34 (`sequential`: the concurrent submission throws) | refuted (CE-0090, R32: accepted, never run); twin 32 meets it (R33) |
 | `dispClosedRejects` | R23 | 19 (R24) |
 | `dispSeqFifo` | R25 (order `[0, 1]`) | 18 (R26, two tasks at once) |
 | `dispCancels` | R27 (canceled, status 3) | 20 (R28) |
@@ -153,22 +153,42 @@ theorem noLost_sat : Hyp id 1 x90 u ∧
     rejected (run id false true 1 .unit x90 u 203 [] 0) 1 = 1 := by
   have h := CatsEffectInLean.Proofs.Phase7.DispatcherRuns.R34.obs; simp only [Bool.and_eq_true, beq_iff_eq, and_assoc] at h; exact ⟨hyp_x90 1 (by decide), h⟩
 
-/-- **CE-0090.** `parallel(await = true)`: a pure task from the body runs; the release waits for
-it; the concurrent fiber's submission is accepted (no `IllegalStateException`) and never runs. -/
+/-- **CE-0090**, the kernel fact (run R32, `parallel(await = true)`, schedule `sched 18 300`, 370
+micro-steps; the root joins the concurrent submitter, review batch 16 B1): the root is done
+`Succeeded(())`; the body's task ran (status 2); the concurrent submission of task 1 returned
+(`accepted`: cell 6 holds its `unsafeToFutureCancelable` result), did not throw (`rejected = 0`),
+and its task never started (status 0). -/
+theorem ce0090_accepted_never_run :
+    (run id true true 1 .unit x90 u 370 (sched 18 300) 0).halt = some (.done (.succeeded .unit)) ∧
+    status (run id true true 1 .unit x90 u 370 (sched 18 300) 0) 0 = 2 ∧
+    status (run id true true 1 .unit x90 u 370 (sched 18 300) 0) 1 = 0 ∧
+    rejected (run id true true 1 .unit x90 u 370 (sched 18 300) 0) 1 = 0 ∧
+    accepted (run id true true 1 .unit x90 u 370 (sched 18 300) 0) 1 = true := by
+  have h := CatsEffectInLean.Proofs.Phase7.DispatcherRuns.R32.obs; simp only [Bool.and_eq_true, beq_iff_eq, and_assoc] at h; exact h
+
+/-- **CE-0090.** `parallel(await = true)`: an accepted submission made while the release waits is
+never run (`ce0090_accepted_never_run`). -/
 theorem dispNoLostSubmission_refuted : ¬ dispNoLostSubmission := by
-  intro hs; have h := CatsEffectInLean.Proofs.Phase7.DispatcherRuns.R32.obs; simp only [Bool.and_eq_true, beq_iff_eq, and_assoc] at h
-  have := (hs u id true 1 .unit [0, 1] [0, 0] p (hyp_x90 1 (by decide)) (by decide) 386 (sched 14 300) _ h.1) 1
+  intro hs
+  have h := ce0090_accepted_never_run
+  have := (hs u id true 1 .unit [0, 1] [0, 0] p (hyp_x90 1 (by decide)) (by decide) 370 (sched 18 300) _ h.1) 1
     (by decide)
   rcases this with hr | hst
-  · exact absurd (hr.symm.trans h.2.2.2) (by decide)
+  · exact absurd (hr.symm.trans h.2.2.2.1) (by decide)
   · exact absurd (hst.symm.trans h.2.2.1) (by decide)
 
-/-- Fixed twin 32 of CE-0090 (decision 39) on the refuting input and schedule: both tasks run. -/
+/-- Fixed twin 32 of CE-0090 (decision 39) on the refuting input and schedule (run R33, 384
+micro-steps): the root is done and the conclusion of statement 3 holds (task 0 ran, task 1's
+submission threw `IllegalStateException`: `doneR` is set before the pill). -/
 theorem noLost_twin32 :
-    (run id true true 1 .unit x90 u 476 (sched 14 300) 32).halt = some (.done (.succeeded .unit)) ∧
-    status (run id true true 1 .unit x90 u 476 (sched 14 300) 32) 0 = 2 ∧
-    status (run id true true 1 .unit x90 u 476 (sched 14 300) 32) 1 = 2 := by
-  have h := CatsEffectInLean.Proofs.Phase7.DispatcherRuns.R33.obs; simp only [Bool.and_eq_true, beq_iff_eq, and_assoc] at h; exact h
+    (run id true true 1 .unit x90 u 384 (sched 18 300) 32).halt = some (.done (.succeeded .unit)) ∧
+    ∀ j < 2, rejected (run id true true 1 .unit x90 u 384 (sched 18 300) 32) j = 1 ∨
+      status (run id true true 1 .unit x90 u 384 (sched 18 300) 32) j = 2 := by
+  have h := CatsEffectInLean.Proofs.Phase7.DispatcherRuns.R33.obs; simp only [Bool.and_eq_true, beq_iff_eq, and_assoc] at h
+  refine ⟨h.1, fun j hj => ?_⟩
+  match j, hj with
+  | 0, _ => exact Or.inr h.2.1
+  | 1, _ => exact Or.inl h.2.2
 
 /-! ## Statement 4: `dispClosedRejects` -/
 

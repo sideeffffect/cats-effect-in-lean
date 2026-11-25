@@ -501,3 +501,7 @@
 
 ## [2026-11-25] update | Review 16 condition C3 fixed
 - Updated: inventory (13 std.Supervisor.* / std.Dispatcher.* rows with registry links: todo -> modelled)
+
+## [2026-11-25] update | Track P7D: review batch 16 B1 fix (noLostSubmission), C4 recorded
+- Updated: cats-effect/dispatcher-model.md (review 16 section: B1 fix, C4 open item)
+- Raw: raw/cats-effect/2026-11-25-track-p7d-review16-b1.md

@@ -54,7 +54,7 @@ def registryHeavy : List Entry := [
     status := .refuted
     thm := `CatsEffectInLean.Proofs.Phase7.DispatcherBattery.dispNoLostSubmission_refuted
     bug := some "bugs/CE-0090.yaml"
-    note := "Phase 7, track P7D: await = true, pure effects submitted by the use body and by a fiber the body starts: when the root is done, each submission threw IllegalStateException or its effect ran to its end (Scaladoc DP:130-133). Refuted (CE-0090): parallel(await = true), schedule sched 14 300 (run R32, 386 micro-steps): the body's effect runs, the release waits for it, the concurrent submission passes the doneR check, is queued behind the PoisonPill and never runs. Fixed twin 32 (doneR set before the pill, and the Worker finalizer waits for the pill): both effects run (noLost_twin32, R33). Satisfiable (noLost_sat, R34: sequential, the concurrent submission throws). Heavy (decision 55)." }
+    note := "Phase 7, track P7D: await = true, pure effects submitted by the use body and by a fiber the body starts; the root joins that fiber after use returned (review batch 16, B1). When the root is done, each submission threw IllegalStateException or its effect ran to its end (Scaladoc DP:130-133). Refuted (CE-0090): parallel(await = true), schedule sched 18 300 (run R32, 370 micro-steps): the body effect runs, the release waits for it, the concurrent submission passes the doneR check, returns (accepted, kernel fact ce0090_accepted_never_run), is queued behind the PoisonPill and never runs. Fixed twin 32 (doneR set before the pill, and the Worker finalizer waits for the pill): the conclusion holds on the same input and schedule (noLost_twin32, R33: the concurrent submission throws). Satisfiable (noLost_sat, R34). Heavy (decision 55)." }
 ]
 
 end CatsEffectInLean

@@ -56,8 +56,8 @@ RUNS = {
     '29': (True, True, 'xcan', 0, None, None, DONE, [('status', 0, 3)], '`parallel`: a cancel after the start cancels the task'),
     '30': (True, True, 'xcan', 5, None, None, DONE, [('status', 0, 2)], 'variant 5 (the cancel action raises)'),
     '31': (True, True, 'xcan', 7, None, None, DONE, [('status', 0, 2)], 'variant 7 (the cancel action drops)'),
-    '32': (True, True, 'x90', 0, 14, None, DONE, [('status', 0, 2), ('status', 1, 0), ('rejected', 1, 0)], 'CE-0090: a submission during the release is accepted and never runs'),
-    '33': (True, True, 'x90', 32, 14, None, DONE, [('status', 0, 2), ('status', 1, 2)], 'fixed twin 32 of CE-0090'),
+    '32': (True, True, 'x90', 0, 18, None, DONE, [('status', 0, 2), ('status', 1, 0), ('rejected', 1, 0), ('accepted', 1, 'true')], 'CE-0090: the concurrent submission (joined by the root) is accepted and never runs'),
+    '33': (True, True, 'x90', 32, 18, None, DONE, [('status', 0, 2), ('rejected', 1, 1)], 'fixed twin 32 of CE-0090: the concurrent submission throws'),
     '34': (False, True, 'x90', 0, None, None, DONE, [('status', 0, 2), ('rejected', 1, 1)], 'sequential: the late concurrent submission throws'),
 }
 

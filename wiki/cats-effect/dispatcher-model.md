@@ -1,7 +1,7 @@
 # Dispatcher model, CE-0090 and CE-0091
 
 > Sources: Cats Effect v3.7.1 (`std/shared/src/main/scala/cats/effect/std/Dispatcher.scala`, `Supervisor.scala`, `UnsafeUnbounded.scala`, `kernel/.../Resource.scala:156-208`, `:826-920`, `core/.../IO.scala`, `tests/shared/src/test/scala/cats/effect/std/DispatcherSuite.scala`); cats-core 2.13.0; read-only `gh` searches; own Lean, difftest, smoke and scala-cli runs, 2026-11-25
-> Raw: [Track P7D notes (part 1)](../../raw/cats-effect/2026-11-25-track-p7d-dispatcher-notes.md); [Track P7D mirror notes (part 2)](../../raw/cats-effect/2026-11-25-track-p7d-mirror-notes.md); [Cpus shim](../../raw/cats-effect/2026-11-25-track-p7d-cpus-shim.md); [Identity-hash order](../../raw/cats-effect/2026-11-25-track-p7d-identity-hash.md)
+> Raw: [Track P7D notes (part 1)](../../raw/cats-effect/2026-11-25-track-p7d-dispatcher-notes.md); [Track P7D mirror notes (part 2)](../../raw/cats-effect/2026-11-25-track-p7d-mirror-notes.md); [Cpus shim](../../raw/cats-effect/2026-11-25-track-p7d-cpus-shim.md); [Identity-hash order](../../raw/cats-effect/2026-11-25-track-p7d-identity-hash.md); [Review 16 B1 fix](../../raw/cats-effect/2026-11-25-track-p7d-review16-b1.md)
 
 ## Overview
 
@@ -33,7 +33,7 @@ Harness: `Dispatcher.use(d => body)`; the body submits tasks (mode `unsafeToFutu
 |---|---|---|
 | `std.Dispatcher.runsOnce` | each effect starts at most once, finalizer at most once (every state) | open |
 | `std.Dispatcher.awaitDrains` | `await = true`, pure body submissions: done `Succeeded(())`, every effect ran | **refuted (CE-0091)** |
-| `std.Dispatcher.noLostSubmission` | `await = true`, body + concurrent submitter: done ⇒ each submission threw or ran | **refuted (CE-0090)** |
+| `std.Dispatcher.noLostSubmission` | `await = true`, body + concurrent submitter (joined by the root): done ⇒ each submission threw or ran | **refuted (CE-0090)** |
 | `std.Dispatcher.closedRejects` | a rejected submission never runs; late submissions throw | open |
 | `std.Dispatcher.seqFifo` | `sequential`: start order increasing, one at a time (every state) | open |
 | `std.Dispatcher.cancels` | `await = false`, sleeping effects: none finishes its sleep | open |
@@ -56,10 +56,18 @@ Other wrong functions: v16 (ignores `await`) → `awaitDrains`; v18 (`sequential
 
 ## CE-0090 and CE-0091
 
-- **CE-0090** (found by reading): the workers stop at the pill, but `doneR` is set only after the executor release; a submission in that window is accepted and lost. Lean: `dispNoLostSubmission_refuted` (run R32, `sched 14 300`); twin 32 runs both effects (R33).
+- **CE-0090** (found by reading): the workers stop at the pill, but `doneR` is set only after the executor release; a submission in that window is accepted and lost. Lean: `dispNoLostSubmission_refuted` from the kernel fact `ce0090_accepted_never_run` (run R32, `sched 18 300`: the concurrent submission returned, did not throw, its effect never started); twin 32 meets the statement on the same input and schedule (R33: the submission throws).
 - **CE-0091** (found by a generated difftest case where both sides agreed): an effect submitted before the scope exits but not yet taken is dropped by `parallel(await = true)`; the worker calls `supervise` on the closed executor `Supervisor` and dies with `IllegalStateException: supervisor already shutdown`. The issue #3506 shape (closed as fixed in 3.4.9; the current test waits for the start). `sequential` drains. Lean: `dispAwaitDrains_refuted` (R15, FIFO); twin 31 (R16). Reproduced on v3.7.1, series/3.x, series/3.7.x.
 - The upstream test "reject new tasks while shutting down" cannot fail (`yield fail("fail")`).
 - Known, not bugs: a canceled effect never completes its `Future` (#2448); `sequential` cannot cancel queued work (#4069).
+
+## Review batch 16 (2026-11-25)
+
+[Review](../../review/2026-11-25-review-batch-16.md). **B1 (HOLLOW, fixed):** the first `noLostSubmission` let the root end without joining the fiber that submits concurrently; the run stops when the root has an outcome, so with `c = IO.never` the statement was false for every Dispatcher (also twin 32), and R32's fact did not show that task 1 was submitted. Fix: with a concurrent submitter the body returns that fiber and the root joins it before the late submissions (`HLam.tailK`, `joinK`; the program of every other input is unchanged, so runs R01-R31 are the same). R32 now shows "accepted, not rejected, never run" (`accepted`: the submission result is in cell 6); twin 32 meets the conclusion on that input. Lesson: a statement of the form "when the root is done, every X happened" needs the root to wait for every actor that does X.
+
+**C4 (open item, before any proof):** the impure calls are one atomic step each (`submitIO`, `cancelIO`), and `UnsafeUnbounded.take` throws `FailureSignal` only on an empty list. The real calls have visible intermediate steps (`doneR` read, then the queue offer, `DP:293`, `:331-338`, `:632-637`; the CAS loop of `cancel`, `DP:341-364`; a half-done `put`, `UU:52-86`). Refutations on atomic steps are real schedules, and open statements are not harmed; but before a Dispatcher entry becomes `proven`, split these calls into their visible steps or prove a reduction lemma.
+
+**C1:** one run with the final harness: see "Results".
 
 ## Results
 

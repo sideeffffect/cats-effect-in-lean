@@ -9,19 +9,19 @@ open CatsEffectInLean.Model
 open CatsEffectInLean.Props.Phase7.Dispatcher
 open CatsEffectInLean.Proofs.Phase7.DispatcherCommon
 
-/-- The last 86 micro-steps. -/
+/-- The last 87 micro-steps. -/
 theorem fin :
-    ((runSchedStateP {} counterMaskModel (env id x90 u) 86 ([].drop 117) S1).halt == some (Summary.done (.succeeded .unit)) &&
-    status (runSchedStateP {} counterMaskModel (env id x90 u) 86 ([].drop 117) S1) 0 == 2 &&
-    rejected (runSchedStateP {} counterMaskModel (env id x90 u) 86 ([].drop 117) S1) 1 == 1) = true := by
+    ((runSchedStateP {} counterMaskModel (env id x90 u) 87 ([].drop 116) S1).halt == some (Summary.done (.succeeded .unit)) &&
+    status (runSchedStateP {} counterMaskModel (env id x90 u) 87 ([].drop 116) S1) 0 == 2 &&
+    rejected (runSchedStateP {} counterMaskModel (env id x90 u) 87 ([].drop 116) S1) 1 == 1) = true := by
   decide +kernel
 
 /-- The run of 203 micro-steps. -/
 theorem eq_fin : run id false true 1 .unit x90 u 203 [] 0 =
-    runSchedStateP {} counterMaskModel (env id x90 u) 86 ([].drop 117) S1 := by
+    runSchedStateP {} counterMaskModel (env id x90 u) 87 ([].drop 116) S1 := by
   show runSchedStateP {} counterMaskModel (env id x90 u) 203 []
     (Sched.init counterMaskModel (prog false true 1 .unit x90.ws.length 0)) = _
-  rw [show (203 : Nat) = 117 + (86) from rfl, runP_add, reach1]
+  rw [show (203 : Nat) = 116 + (87) from rfl, runP_add, reach1]
 
 theorem obs :
     ((run id false true 1 .unit x90 u 203 [] 0).halt == some (Summary.done (.succeeded .unit)) &&
