@@ -1,13 +1,13 @@
-# Phase 7 batch 7.1 gate report (2026-11-15)
+# Phase 7 batch 7.1 gate report (2026-11-15, passed 2026-11-25)
 
 > Sources: own gate summary from the registry, battery files, inventory, bug record CE-0060, difftest and smoke notes, and review batches 11a–15 (2026-11-15)
-> Raw: [Review batch 15 notes](../../raw/project-decisions/2026-11-15-review-batch-15-notes.md); [Semaphore/Mutex review 14](../../raw/cats-effect/2026-11-15-semaphore-mutex-review14.md); [Queue review 14 honest drops](../../raw/cats-effect/2026-11-15-queue-review14-honest-drops.md); [Review batch 14 notes](../../raw/project-decisions/2026-11-15-review-batch-14-notes.md); [Review batch 13 notes](../../raw/project-decisions/2026-11-15-review-batch-13-notes.md); [Decision 63](../../raw/project-decisions/2026-11-15-decision-63-wrong-function-battery.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md); [Queue review 13 battery](../../raw/cats-effect/2026-11-15-queue-review13-battery.md); [Semaphore/Mutex review 13](../../raw/cats-effect/2026-11-15-semaphore-mutex-review13.md); [Track L review 13 fix](../../raw/cats-effect/2026-11-15-track-l-review13-fix.md); [CE-0060 re-run by track L](../../raw/project-decisions/2026-11-15-ce0060-rerun-track-l.md)
+> Raw: [Review batch 15 notes](../../raw/project-decisions/2026-11-15-review-batch-15-notes.md); [Semaphore/Mutex review 14](../../raw/cats-effect/2026-11-15-semaphore-mutex-review14.md); [Queue review 14 honest drops](../../raw/cats-effect/2026-11-15-queue-review14-honest-drops.md); [Review batch 14 notes](../../raw/project-decisions/2026-11-15-review-batch-14-notes.md); [Review batch 13 notes](../../raw/project-decisions/2026-11-15-review-batch-13-notes.md); [Decision 63](../../raw/project-decisions/2026-11-15-decision-63-wrong-function-battery.md); [Phase 7 start](../../raw/project-decisions/2026-11-15-phase7-start.md); [Queue review 13 battery](../../raw/cats-effect/2026-11-15-queue-review13-battery.md); [Semaphore/Mutex review 13](../../raw/cats-effect/2026-11-15-semaphore-mutex-review13.md); [Track L review 13 fix](../../raw/cats-effect/2026-11-15-track-l-review13-fix.md); [CE-0060 re-run by track L](../../raw/project-decisions/2026-11-15-ce0060-rerun-track-l.md); [Gate passed](../../raw/project-decisions/2026-11-25-phase7-batch1-gate-passed.md)
 
 ## Overview
 
 Phase 7 batch 7.1 ran on 2026-11-15 in tracks Q (`Queue`, both families as twins), S (`Semaphore`, `Mutex`) and L (`CountDownLatch`, `CyclicBarrier`). Gate rule ([Project plan](project-plan.md), Phase 7): rows reviewed FAITHFUL. Decision 63 adds: each structure's wrong-function battery is complete. Phases 6–8 have no user gate; this report is the input for the review gate. Full reviews: `review/2026-11-15-review-batch-14.md` (first gate review), `review/2026-11-15-review-batch-15.md` (re-check).
 
-**Gate verdict (review batch 15): PASS**, no blocker; two open conditions (C2 CI green, C3 independent CE-0060 re-run). All 35 entries are FAITHFUL as statements; all five batteries are complete. Review batch 14 gave FAIL (blocker B1); track S closed B1 with statements 9 and 10.
+**Gate PASSED (2026-11-25).** Review batch 15 gave PASS with two conditions; both are now closed: C2 (CI run `43774680682` on `45209fc` green) and C3 (track L re-ran CE-0060 independently). All 35 entries are FAITHFUL as statements; all five batteries are complete. Review batch 14 gave FAIL (blocker B1); track S closed B1 with statements 9 and 10.
 
 ## Verdict table (all batch 7.1 registry entries)
 
@@ -100,9 +100,9 @@ None (review batch 15). B1 of review batch 14 (Semaphore battery: the honest `tr
 
 ## Conditions
 
-Open (the gate is FAIL again if one fails):
+All closed on 2026-11-25:
 
-1. C2: CI green on the gate commit (`1339812` or a later commit that contains it). At review 15 the run `43770796431` was `pending`.
+1. C2: CI green on the gate commit (`1339812` or a later commit that contains it). At review 15 the run `43770796431` was `pending`. Closed: run `43774680682` on `45209fc` (contains `1339812`) is `success`, all required checks green.
 2. C3: an independent agent re-runs `reproducers/CE-0060` on v3.7.1 and series/3.x; the last line must be `REPRODUCED CE-0060`. Track S re-ran it (2026-11-15T21:33Z, same output); the independent run was not seen at review 15. Track L re-ran it independently on 2026-11-15 (v3.7.1 and its own snapshot of series/3.x `de84c01`): `REPRODUCED CE-0060` on both, same output; recorded in `bugs/CE-0060.yaml`.
 
 Closed in review batch 15: C1 (12 honest queue rows, kernel), C4 (CE-0060 `status` comment), C5 (inventory `registry` column of the track S rows matches the registry in both directions).

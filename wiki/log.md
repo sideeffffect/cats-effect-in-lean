@@ -454,3 +454,7 @@
 ## [2026-11-15] ingest | CE-0060 independent re-run (track L, gate C3)
 - Updated: bug record CE-0060 (output: v3.7.1 and series/3.x de84c01 re-run, both REPRODUCED)
 - Raw: raw/project-decisions/2026-11-15-ce0060-rerun-track-l.md
+
+## [2026-11-25] ingest | Phase 7 batch 7.1 gate passed
+- Updated: methodology/phase7-batch1-gate-report.md (C2 closed, gate PASSED), methodology/project-plan.md, index.md
+- Raw: raw/project-decisions/2026-11-25-phase7-batch1-gate-passed.md
