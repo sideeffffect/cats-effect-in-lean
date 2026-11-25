@@ -125,12 +125,12 @@ def stat (st v runs : Nat) : Array Nat := Id.run do
     let x := base.x
     let sl : List CatsEffectInLean.Model.IO := x.ws.map (fun _ => CatsEffectInLean.Model.IO.sleep 1)
     let p0 := x.ps.map (fun _ => 0)
+    let cRand : CatsEffectInLean.Model.IO := progs.getD (i % progs.size) (.pure .unit)
     let cs : Case := match st with
       | 2 => { base with aw := true, x := { x with cn := [] } }
       -- review 17 (B2): the concurrent submitter's prefix `c` is any user program (it can cancel
       -- itself or never end before it submits)
-      | 3 => { base with aw := true, x := { x with cn := [], c := progs.getD (i % progs.size) (.pure .unit),
-                ps := x.ps.mapIdx fun j _ => j % 2 } }
+      | 3 => { base with aw := true, x := { x with cn := [], c := cRand, ps := x.ps.mapIdx fun j _ => j % 2 } }
       | 5 => { base with par := false, n := 1, x := { x with cn := [] } }
       | 6 => { base with aw := false, x := { x with ws := sl, cn := [], ps := p0, b := .cede } }
       | 8 => { base with par := true, x := { x with ws := sl, cn := [], ps := p0, ms := p0, b := .pure .unit, sw := true } }
