@@ -753,10 +753,10 @@ def registry : List Entry := [
     note := "Sequential specification (review batch 14, B1): one fiber runs any script of acquireN, \
       releaseN, tryAcquireN, available, count, permit.use(_ => available) on Semaphore(k) and records \
       every answer; the answers equal the spec semSpec (tryAcquireN true exactly when n <= available, \
-      S:79-80; available, count = permits; acquireN/permit block when not enough permits) and the run \
+      S:41-43, S:79-80; available, count = permits; acquireN/permit block when not enough permits) and the run \
       ends Succeeded(()) or blocked exactly where the spec blocks. All k, scripts and schedules; no \
       user code. The model meets it on all 585 scripts of length <= 3 over 8 ops, for each k in {0, 1, 2} \
-      (eval). Satisfiable (semSeqSpec_satisfiable: true and false answers, blocks). Wrong functions: \
+      (evaluation only, smoke; not kernel-checked). Satisfiable (semSeqSpec_satisfiable: true and false answers, blocks). Wrong functions: \
       the honest tryAcquire/tryAcquireN drop (answers false, no effect) breaks it \
       (SemaphoreBattery.tryAcquire_honestDrop, tryAcquireN_honestDrop, kernel). Open." },
   { id := "std.Mutex.lock.seqSpec"

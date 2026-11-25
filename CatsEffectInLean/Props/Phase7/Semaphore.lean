@@ -744,7 +744,8 @@ One fiber (the root) runs a script of operations on one lock and records each an
 (`pair (nat tag) answer`). With one fiber there is no race, so the answers are fixed by the
 Scaladoc: `Semaphore` (`S:28-117`): `acquireN(n)` takes `n` permits when `n ≤ available` and else
 blocks the fiber (`S:31-34`); `releaseN(n)` adds `n`; `tryAcquireN(n)` "Acquires `n` permits now and
-returns `true`, or returns `false` immediately" (`S:79-80`), so `true` exactly when `n ≤ available`
+returns `true`, or returns `false` immediately" (`S:79-80`), and `tryAcquire*` returns immediately "if
+the current count is not high enough to satisfy the request" (`S:41-43`), so `true` exactly when `n ≤ available`
 (and for `n = 0`); `available` is the number of permits; `count` equals `available` when nobody waits
 (`S:47-53`); `permit.use(f)` holds one permit while `f` runs (`S:105-109`). `Mutex`
 (`Mutex.scala:24-48`): `lock.use(f)` runs `f` when the lock is free; the lock "is not reentrant,
