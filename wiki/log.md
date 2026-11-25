@@ -524,3 +524,8 @@
 ## [2026-11-25] update | Track P7D: review batch 17 B2 fix (noLostSubmission over accepted submissions)
 - Updated: cats-effect/dispatcher-model.md
 - Raw: raw/cats-effect/2026-11-25-track-p7d-review17-b2.md
+
+## [2026-11-25] review | Review batch 18: noLostSubmission after B2 (FAITHFUL); batch 7.2 gate PASS on C5
+- Updated: methodology/phase7-batch2-gate-report.md, methodology/agent-workflow.md, index.md
+- Raw: raw/project-decisions/2026-11-25-review-batch-18-notes.md
+- `accepted j = true → status j = 2` is the DP:130-133 promise; `accepted` exact for both submission kinds; refutation exact (R32); twin 32 (R33), witness (R34) correct; "always reject" broken by the `awaitDrains` companion (`awaitDrains_v1`). Gate PASS; C5 (CI green on `022a6a5`) for the orchestrator.
