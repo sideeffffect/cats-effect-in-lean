@@ -144,7 +144,9 @@ object Runner:
           if step >= maxSteps then stop = Some("fuel")
           else
             h.fiberAt(hd) match
+              // no fiber, or a `Supervisor` restart wrapper (track V; not an `IOFiber`): skipped
               case None => log += ujson.Obj("cancel" -> hd, "skipped" -> true)
+              case Some(f) if !f.isInstanceOf[Runnable] => log += ujson.Obj("cancel" -> hd, "skipped" -> true)
               case Some(f) =>
                 val readyLabels = ujson.Arr.from(ec.ready.map(r => ujson.Str(ec.label(r))))
                 ec.nextLabel = Some(s"x$cancels")
@@ -181,7 +183,8 @@ object Runner:
       case Some(oc) => outcomeJson(oc)
       case None => ujson.Obj("t" -> stop.get)
     val fibers = ujson.Obj.from(h.fibers.zipWithIndex.collect {
-      case (f, i) if f != null => i.toString -> ujson.Str(ec.label(f.asInstanceOf[Runnable]))
+      // a `Supervisor` restart wrapper (track V) is a `Fiber` but not an `IOFiber`: no task label
+      case (f, i) if f != null && f.isInstanceOf[Runnable] => i.toString -> ujson.Str(ec.label(f.asInstanceOf[Runnable]))
     })
     runtime.shutdown()
     RunResult(outcome, h.trace, step, Some(now / 1000000), ujson.Arr.from(log), fifoFrom, fibers,

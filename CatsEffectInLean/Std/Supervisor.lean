@@ -98,7 +98,8 @@ is mirrored too (`cv = 1`), as a twin (`F = IO` through the `private[effect]` en
   `s` = `supV d m rs cv v`: `doneR` cell `d`, state cell `m`, `checkRestart` `rs` (`none` or
   `some (fn k)` with `k` a function `Outcome => Boolean`), state kind `cv` (0 = `applyForAsync`,
   1 = `applyForConcurrent`), variant `v`.
-* The state cell holds the map as a list of `pair token fiber` in insertion order; the
+* The state cell holds the map as `mapV c es`: the entries `pair (pair token (nat i)) fiber` in
+  insertion order and a ghost insertion counter `c` (`i` is the insertion index); the
   `Concurrent` state uses `none` for `null` (`SV:353-356`). The iteration order of
   `ConcurrentHashMap.values` and of a Scala `HashMap` depends on identity hashes; the mirror
   takes it as an input `ho : List Val → List Val` (applied to the entries; statements require
@@ -132,10 +133,12 @@ def effNs : Nat := 81
 
 /-- `IllegalStateException("supervisor already shutdown")` (`SV:322`). -/
 def iseErr : Err := { code := 8000001 }
-/-- `AssertionError("supervised fiber couldn't cancel ...")` (`SV:309-310`). -/
-def aeCancelErr : Err := { code := 8000002, kind := .fatal }
+/-- `AssertionError("supervised fiber couldn't cancel ...")` (`SV:309-310`). `AssertionError` is
+`NonFatal` (`scala.util.control.NonFatal` excludes only VM errors, `ThreadDeath`,
+`InterruptedException`, `LinkageError`, `ControlThrowable`). -/
+def aeCancelErr : Err := { code := 8000002 }
 /-- `AssertionError("unexpected fiber ...")` (`SV:268-269`). -/
-def aeFiberErr : Err := { code := 8000003, kind := .fatal }
+def aeFiberErr : Err := { code := 8000003 }
 /-- An argument of the wrong shape: impossible in a well-typed Scala program. -/
 def illErr : Err := { code := 999999, kind := .fatal }
 /-- The error of the battery variants that raise (not Cats Effect code). -/
@@ -160,43 +163,44 @@ def Sup.ofVal? : Val → Option Sup
     | some [.ref d, .ref m, rs, .nat cv, .nat v] => some { d, m, rs, cv, v }
     | _ => none
 
-/-- One `supervise` call: the supervisor, the source of `fa`, the `done` cell, the
-`insertResult` `Deferred`, the token. -/
+/-- One `supervise` call: the supervisor, the `done` cell, the `insertResult` `Deferred`, the
+token. (The source of `fa` is captured only by the closures that use it.) -/
 structure Call where
   s : Sup
-  src : Val
   dl : Nat
   ir : Nat
   tok : Val
   deriving DecidableEq, Repr
 
-def Call.toVal (c : Call) : Val := listV [c.s.toVal, c.src, .ref c.dl, .deferred c.ir, c.tok]
+def Call.toVal (c : Call) : Val := listV [c.s.toVal, .ref c.dl, .deferred c.ir, c.tok]
 
 def Call.ofVal? : Val → Option Call
   | x =>
     match unlistV x with
-    | some [sv, src, .ref dl, .deferred ir, tok] =>
+    | some [sv, .ref dl, .deferred ir, tok] =>
       match Sup.ofVal? sv with
-      | some s => some { s, src, dl, ir, tok }
+      | some s => some { s, dl, ir, tok }
       | none => none
     | _ => none
 
-/-- The restart context (`SV:188-193`): the call, `resultR`, `canceledR`, `currentR`. -/
+/-- The restart context (`SV:188-193`): the call, the source of `fa`, `resultR`, `canceledR`,
+`currentR`. -/
 structure RCtx where
   c : Call
+  src : Val
   res : Nat
   can : Nat
   cur : Nat
   deriving DecidableEq, Repr
 
-def RCtx.toVal (r : RCtx) : Val := listV [r.c.toVal, .deferred r.res, .ref r.can, .ref r.cur]
+def RCtx.toVal (r : RCtx) : Val := listV [r.c.toVal, r.src, .deferred r.res, .ref r.can, .ref r.cur]
 
 def RCtx.ofVal? : Val → Option RCtx
   | x =>
     match unlistV x with
-    | some [cv, .deferred res, .ref can, .ref cur] =>
+    | some [cv, src, .deferred res, .ref can, .ref cur] =>
       match Call.ofVal? cv with
-      | some c => some { c, res, can, cur }
+      | some c => some { c, src, res, can, cur }
       | none => none
     | _ => none
 
@@ -310,13 +314,13 @@ inductive SLam where
   /-- `_ => cleanup` of `done.set(true) *> cleanup` (`SV:312`). -/
   | thenCleanup (c : Val)
   /-- `resultR => F.ref(false).flatMap(...)` (`SV:188-189`). -/
-  | rRes (c : Val)
+  | rRes (c src : Val)
   /-- `canceledR => F.deferred[Fiber].flatMap(...)` (`SV:189-190`). -/
-  | rCan (c : Val) (res : Nat)
+  | rCan (c src : Val) (res : Nat)
   /-- `firstCurrent => F.ref(firstCurrent).flatMap(...)` (`SV:190-193`). -/
-  | rFirst (c : Val) (res can : Nat)
+  | rFirst (c src : Val) (res can : Nat)
   /-- `currentR => action(firstCurrent).as(wrapper)` (`SV:193-283`). -/
-  | rCur (c : Val) (res can first : Nat)
+  | rCur (c src : Val) (res can first : Nat)
   /-- `_ => started flatMap { f => current.complete(f).void }` of `action` (`SV:195-227`). -/
   | actBody (r : Val) (current : Nat)
   /-- `f => current.complete(f).void` (`SV:226`). -/
@@ -404,10 +408,10 @@ def SLam.toVal : SLam → Val
   | .updRemove m tok v => cloVal ns 44 [.ref m, tok, .nat v]
   | .modAdd m tok fib v => cloVal ns 45 [.ref m, tok, fib, .nat v]
   | .thenCleanup c => cloVal ns 46 [c]
-  | .rRes c => cloVal ns 47 [c]
-  | .rCan c res => cloVal ns 48 [c, .deferred res]
-  | .rFirst c res can => cloVal ns 49 [c, .deferred res, .ref can]
-  | .rCur c res can first => cloVal ns 50 [c, .deferred res, .ref can, .deferred first]
+  | .rRes c src => cloVal ns 47 [c, src]
+  | .rCan c src res => cloVal ns 48 [c, src, .deferred res]
+  | .rFirst c src res can => cloVal ns 49 [c, src, .deferred res, .ref can]
+  | .rCur c src res can first => cloVal ns 50 [c, src, .deferred res, .ref can, .deferred first]
   | .actBody r current => cloVal ns 51 [r, .deferred current]
   | .actK current => cloVal ns 52 [.deferred current]
   | .gcFin r => cloVal ns 53 [r]
@@ -475,10 +479,10 @@ def SLam.ofFields : Nat → List Val → Option SLam
   | 44, [.ref m, tok, .nat v] => some (.updRemove m tok v)
   | 45, [.ref m, tok, fib, .nat v] => some (.modAdd m tok fib v)
   | 46, [c] => some (.thenCleanup c)
-  | 47, [c] => some (.rRes c)
-  | 48, [c, .deferred res] => some (.rCan c res)
-  | 49, [c, .deferred res, .ref can] => some (.rFirst c res can)
-  | 50, [c, .deferred res, .ref can, .deferred first] => some (.rCur c res can first)
+  | 47, [c, src] => some (.rRes c src)
+  | 48, [c, src, .deferred res] => some (.rCan c src res)
+  | 49, [c, src, .deferred res, .ref can] => some (.rFirst c src res can)
+  | 50, [c, src, .deferred res, .ref can, .deferred first] => some (.rCur c src res can first)
   | 51, [r, .deferred current] => some (.actBody r current)
   | 52, [.deferred current] => some (.actK current)
   | 53, [r] => some (.gcFin r)
@@ -788,29 +792,44 @@ def srcOf (ioOf : Val → IO) (c : Val) : IO :=
   | some d => dIO d
   | none => ioOf c
 
-/-- The map entries of a state cell value (`none` = `null`). -/
-def entriesOf : Val → Option (List Val)
-  | .none => none
-  | x => unlistV x
+/-- A map value: ghost insertion counter `c` and the entries `pair (pair token (nat i)) fiber`
+in insertion order (`i` = the insertion index; ghost state, not observable: it names one
+iteration order in the difftest). -/
+def mapV (c : Nat) (es : List Val) : Val := .pair (.nat c) (listV es)
 
-/-- The fiber of an entry `pair token fiber`. -/
+/-- The empty map (`Map.empty`, a new `ConcurrentHashMap`). -/
+def emptyMap : Val := mapV 0 []
+
+/-- The counter and entries of a state cell value (`none` = `null` or another shape). -/
+def mapOf? : Val → Option (Nat × List Val)
+  | .pair (.nat c) es =>
+    match unlistV es with
+    | some l => some (c, l)
+    | none => none
+  | _ => none
+
+/-- The fiber of an entry. -/
 def entryFiber : Val → Val
   | .pair _ f => f
   | _ => .unit
 
+/-- The token of an entry. -/
+def entryToken : Val → Val
+  | .pair (.pair t _) _ => t
+  | _ => .unit
+
 /-- Remove the entry with `tok` (`map - token`, `ConcurrentHashMap.remove`). -/
 def removeEntry (tok : Val) (es : List Val) : List Val :=
-  es.filter fun e => match e with
-    | .pair t _ => t != tok
-    | _ => true
+  es.filter fun e => entryToken e != tok
 
-/-- Insert or replace the entry of `tok` (`map.updated`, `ConcurrentHashMap.put`). -/
-def putEntry (tok fib : Val) (es : List Val) : List Val :=
-  if es.any (fun e => match e with | .pair t _ => t == tok | _ => false) then
-    es.map fun e => match e with
-      | .pair t _ => if t == tok then .pair tok fib else e
-      | _ => e
-  else es ++ [.pair tok fib]
+/-- Insert or replace the entry of `tok` (`map.updated`, `ConcurrentHashMap.put`); a new entry
+gets insertion index `c`. -/
+def putEntry (c : Nat) (tok fib : Val) (es : List Val) : Nat × List Val :=
+  if es.any (fun e => entryToken e == tok) then
+    (c, es.map fun e => match e with
+      | .pair k _ => if entryToken e == tok then .pair k fib else e
+      | _ => e)
+  else (c + 1, es ++ [.pair (.pair tok (.nat c)) fib])
 
 private def ret (x : Val) : UserResult := { out := .ret x }
 private def prog (p : IO) : UserResult := { out := .prog p }
@@ -825,7 +844,7 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
   | .newRef x => { effects := [.allocRef x], out := .ret (.ref v.refs.length) }
   | .newDeferred => { effects := [.allocDeferred], out := .ret (.deferred v.deferreds.length) }
   | .newToken => { effects := [.allocRef .unit], out := .ret (.ref v.refs.length) }
-  | .newMap => { effects := [.allocRef (listV [])], out := .ret (.ref v.refs.length) }
+  | .newMap => { effects := [.allocRef emptyMap], out := .ret (.ref v.refs.length) }
   | .mkStateK => ret arg
   | .evalK aw rs cv vr f =>
     match arg with
@@ -833,7 +852,7 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
     | _ => illTyped
   -- `mkState(doneR).map(a => (a, e => release(a, e)))`
   | .acq aw d cv vr =>
-    let mk := if cv == 1 then .map (newRefIO (listV [])) SLam.mkStateK.fn else .delay SLam.newMap.fn
+    let mk := if cv == 1 then .map (newRefIO emptyMap) SLam.mkStateK.fn else .delay SLam.newMap.fn
     prog (.map mk (SLam.pairRel aw d cv vr).fn)
   | .pairRel aw d cv vr => ret (.pair arg (.fn (SLam.relE aw d cv vr arg).id))
   | .relE aw d cv vr st => prog (releaseIO aw d cv vr st arg)
@@ -850,13 +869,13 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
   | .thenJoinAll m cv => prog (joinAllIO m cv)
   | .thenCancelAll m cv => prog (cancelAllIO m cv)
   | .values m =>
-    match entriesOf (v.refs.getD m .unit) with
-    | some es => ret (listV ((ho es).map entryFiber))
+    match mapOf? (v.refs.getD m .unit) with
+    | some (_, es) => ret (listV ((ho es).map entryFiber))
     | none => illTyped
   | .getAndSetNull m => { effects := [.writeRef m .none], out := .ret (v.refs.getD m .unit) }
   | .valuesK =>
-    match entriesOf arg with
-    | some es => ret (listV ((ho es).map entryFiber))
+    match mapOf? arg with
+    | some (_, es) => ret (listV ((ho es).map entryFiber))
     | none => illTyped
   -- `_.traverse_(_.join.void)`: `f(a)` is built while the fold runs
   | .joinTrav =>
@@ -911,7 +930,7 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
   | .kTok s src dl ir =>
     match arg, Sup.ofVal? s with
     | .pair tok _, some sp =>
-      let c : Call := { s := sp, src, dl, ir, tok }
+      let c : Call := { s := sp, dl, ir, tok }
       let fa := (D.fa src ir (dsnapVal (v.deferred ir))).toVal
       let mon : IO :=
         match sp.rs with
@@ -921,7 +940,7 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
           | some dfa => .flatMap (.start (dIO dfa)) (SLam.monNone c.toVal).fn
           | none => .error illErr
         -- `case Some(restart) => F.deferred[Outcome].flatMap { resultR => ... }` (`SV:187-188`)
-        | _ => .flatMap newDeferredIO (SLam.rRes c.toVal).fn
+        | _ => .flatMap newDeferredIO (SLam.rRes c.toVal src).fn
       prog (.flatMap mon (SLam.kFib c.toVal).fn)
     | _, _ => illTyped
   | .kFib c =>
@@ -958,8 +977,10 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
         (.ext (D.fin c).toVal))) (SLam.constV arg).fn)
     | _ => illTyped
   | .putThunk m tok fib =>
-    match entriesOf (v.refs.getD m .unit) with
-    | some es => { effects := [.writeRef m (listV (putEntry tok fib es))], out := .ret .unit }
+    match mapOf? (v.refs.getD m .unit) with
+    | some (c, es) =>
+      let (c', es') := putEntry c tok fib es
+      { effects := [.writeRef m (mapV c' es')], out := .ret .unit }
     | none => illTyped
   | .thenNotDone d => prog (.map (getIO d) SLam.notK.fn)
   | .notK =>
@@ -967,56 +988,58 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
     | .bool b => ret (.bool !b)
     | _ => illTyped
   | .removeThunk m tok vr =>
-    match entriesOf (v.refs.getD m .unit) with
-    | some es =>
+    match mapOf? (v.refs.getD m .unit) with
+    | some (c, es) =>
       if vr == 10 then ret .unit
-      else { effects := [.writeRef m (listV (removeEntry tok es))], out := .ret .unit }
+      else { effects := [.writeRef m (mapV c (removeEntry tok es))], out := .ret .unit }
     | none => illTyped
   | .updRemove m tok vr =>
     match v.refs.getD m .unit with
     | .none => { effects := [.writeRef m .none], out := .ret .unit }
     | x =>
-      match unlistV x with
-      | some es =>
+      match mapOf? x with
+      | some (c, es) =>
         if vr == 10 then { effects := [.writeRef m x], out := .ret .unit }
-        else { effects := [.writeRef m (listV (removeEntry tok es))], out := .ret .unit }
+        else { effects := [.writeRef m (mapV c (removeEntry tok es))], out := .ret .unit }
       | none => illTyped
   | .modAdd m tok fib vr =>
     match v.refs.getD m .unit with
     | .none => { effects := [.writeRef m .none], out := .ret (.bool (vr == 9)) }
     | x =>
-      match unlistV x with
-      | some es => { effects := [.writeRef m (listV (putEntry tok fib es))], out := .ret (.bool true) }
+      match mapOf? x with
+      | some (c, es) =>
+        let (c', es') := putEntry c tok fib es
+        { effects := [.writeRef m (mapV c' es')], out := .ret (.bool true) }
       | none => illTyped
   | .thenCleanup c =>
     match Call.ofVal? c with
     | some k => prog (removeIO k.s k.tok)
     | none => illTyped
   -- the restart branch (`SV:187-288`)
-  | .rRes c =>
+  | .rRes c src =>
     match arg with
-    | .deferred res => prog (.flatMap (newRefIO (.bool false)) (SLam.rCan c res).fn)
+    | .deferred res => prog (.flatMap (newRefIO (.bool false)) (SLam.rCan c src res).fn)
     | _ => illTyped
-  | .rCan c res =>
+  | .rCan c src res =>
     match arg with
-    | .ref can => prog (.flatMap newDeferredIO (SLam.rFirst c res can).fn)
+    | .ref can => prog (.flatMap newDeferredIO (SLam.rFirst c src res can).fn)
     | _ => illTyped
-  | .rFirst c res can =>
+  | .rFirst c src res can =>
     match arg with
-    | .deferred first => prog (.flatMap (newRefIO (.deferred first)) (SLam.rCur c res can first).fn)
+    | .deferred first => prog (.flatMap (newRefIO (.deferred first)) (SLam.rCur c src res can first).fn)
     | _ => illTyped
   -- `action(firstCurrent).as(new Fiber { ... })`
-  | .rCur c res can first =>
+  | .rCur c src res can first =>
     match arg, Call.ofVal? c with
     | .ref cur, some k =>
-      let r : RCtx := { c := k, res, can, cur }
+      let r : RCtx := { c := k, src, res, can, cur }
       prog (.map (actionIO r first) (SLam.constV (wrapVal r)).fn)
     | _, _ => illTyped
   -- `started flatMap { f => current.complete(f).void }`, `started = F start { fa guaranteeCase {...} }`
   | .actBody r current =>
     match RCtx.ofVal? r with
     | some rc =>
-      let fa := (D.fa rc.c.src rc.c.ir (dsnapVal none)).toVal
+      let fa := (D.fa rc.src rc.c.ir (dsnapVal none)).toVal
       prog (.flatMap (.start (Bracket.guaranteeCaseIO (.ext fa) (SLam.gcFin r).id)) (SLam.actK current).fn)
     | none => illTyped
   | .actK current => prog (completeVoidIO current arg)

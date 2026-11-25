@@ -55,14 +55,14 @@ def runClo (U : ResourceUse.UEnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) :
   | .mapFn, .map _ fn => callUser fn arg
   | .hewK, .handleErrorWith e k =>
     match arg with
-    | .err t => match userCode? t with
+    | .err t => match userCodeV? t with
       | some c => ofTr (tr R k (node + 1 + e.size) (.nat c :: env) vw)
       | none => prog (.error t)
     | _ => DResult.harness
   | .attemptMap, .attempt _ =>
     match arg with
     | .right v => ret (.right v)
-    | .left (.err t) => match userCode? t with
+    | .left (.err t) => match userCodeV? t with
       | some c => ret (.left (.nat c))
       | none => { base := { out := .throw t } }
     | _ => DResult.harness
@@ -389,6 +389,14 @@ def runClo (U : ResourceUse.UEnv) (c : Clo) (n : Prog) (arg : Val) (vw : View) :
   -- The handle number is not observable (generated programs never print a latch or barrier).
   | .latchHandle, _ => ret arg []
   | .barrierHandle, _ => ret arg []
+  -- track V: `s => I(k)` of `supUse`; the supervisor is the object reference of the mirror
+  | .supUseK, .supUse _ _ _ k => ofTr (tr R k (node + 1) (arg :: env) vw)
+  | .supFiberHandle, _ =>
+    match arg with
+    | .fiber i => ret arg [.handle i]
+    | .fn w => if (CatsEffectInLean.Std.Supervisor.wrapOf? arg).isSome then ret arg [.wrapH w] else DResult.harness
+    | _ => DResult.harness
+  | .alwaysTrue, _ => ret (.bool true)
   -- format v2 (batch 6.3): `x => run(f, env + x)`, called by the mirror inside the fiber
   | .ptF, .parTraverseN _ _ f => ofTr (tr R f (node + 1) (arg :: env) vw)
   -- `.map(bs => list)`: the model already holds the list encoding
@@ -460,6 +468,11 @@ def srcIO (p : Prog) (srcV : Val) : IO :=
     match p.at? node with
     | some (.memoize e) => build e (node + 1) env snap
     | _ => .error harnessErr
+  -- Phase 7, track V: `I(e)` of a `supervise` node
+  | some { node, lam := .supSrc, vals := snap :: env } =>
+    match p.at? node with
+    | some (.supervise _ e) => build e (node + 1) env snap
+    | _ => .error harnessErr
   | some { node, lam := .raceSrcB, vals := snap :: env } =>
     match (p.at? node).bind Prog.combArgs? with
     | some (a, b) =>
@@ -472,7 +485,10 @@ def srcIO (p : Prog) (srcV : Val) : IO :=
     if (ResourceUse.USrc.ofVal srcV).isSome then ResourceUse.srcU (uenvOf p) srcV
     -- batch 6.3: a source code of the `parTraverseN` mirror (namespace 41)
     else if (CatsEffectInLean.Model.Codec.ofCloVal srcV).any (·.1 == ParTraverse.ns) then ParTraverse.ioOf srcV
-    else .error harnessErr
+    -- Phase 7, track V: a descriptor of the `Supervisor` mirror (namespace 81)
+    else match CatsEffectInLean.Std.Supervisor.D.ofVal? srcV with
+      | some d => CatsEffectInLean.Std.Supervisor.dIO d
+      | none => .error harnessErr
 
 /-- The external sources of `Bracket.call` (format v2): `I(e)` and the finalizer of
 `guarantee`, `I(acq)` of `bracket`/`bracketCase`, each built with the snapshot of the op. -/
@@ -497,7 +513,10 @@ def bracketSrcIO (p : Prog) (srcV : Val) : IO :=
     if (ResourceUse.USrc.ofVal srcV).isSome then ResourceUse.srcU (uenvOf p) srcV
     -- batch 6.3: a source code of the `parTraverseN` mirror (namespace 41)
     else if (CatsEffectInLean.Model.Codec.ofCloVal srcV).any (·.1 == ParTraverse.ns) then ParTraverse.ioOf srcV
-    else .error harnessErr
+    -- Phase 7, track V: a descriptor of the `Supervisor` mirror (namespace 81)
+    else match CatsEffectInLean.Std.Supervisor.D.ofVal? srcV with
+      | some d => CatsEffectInLean.Std.Supervisor.dIO d
+      | none => .error harnessErr
 
 /-- A library closure of the mirrors. -/
 inductive LibClo where
@@ -513,6 +532,7 @@ inductive LibClo where
   | mutex (l : Mutex.ML)
   | cdl (l : CatsEffectInLean.Std.CountDownLatch.CLam)
   | cb (l : CatsEffectInLean.Std.CyclicBarrier.BLam)
+  | sup (l : CatsEffectInLean.Std.Supervisor.SLam)
 
 /-- The library closure of an id that is not a difftest closure id, if exactly one mirror
 decodes it. -/
@@ -538,6 +558,8 @@ def libClo? (id : Nat) : Option LibClo :=
             (CatsEffectInLean.Std.CountDownLatch.CLam.ofFields tag fs).map .cdl
           else if k == CatsEffectInLean.Std.CyclicBarrier.ns then
             (CatsEffectInLean.Std.CyclicBarrier.BLam.ofFields tag fs).map .cb
+          else if k == CatsEffectInLean.Std.Supervisor.ns then
+            (CatsEffectInLean.Std.Supervisor.SLam.ofFields tag fs).map .sup
           else none
         | none => none
       match res, lib with
@@ -577,6 +599,27 @@ def dispatchSem (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
     | some l => Mutex.call l arg vw
     | none => dispatchDt p id arg vw
 
+/-- The `Supervisor` map order (track V) from the `HashSet` order `ho`: rank an entry by its
+insertion index `i` (ghost state of the mirror): `all` holds the entry with index `i` at position
+`i`, so `rankOrder perm all` ranks it by `perm[i]`. -/
+def supOrder (ho : List Val → List Val → List Val) (es : List Val) : List Val :=
+  let idx : Val → Nat := fun e => match e with
+    | .pair (.pair _ (.nat i)) _ => i
+    | _ => 0
+  let n := es.foldl (fun m e => max m (idx e + 1)) 0
+  let all := (List.range n).map fun i => (es.find? (fun e => idx e == i)).getD .unit
+  ho all es
+
+/-- The `Supervisor` closures (track V), with the difftest closures as user code (the `use`
+function, the restart predicate). The mirror calls back into itself (`relK` calls `relE`), so
+the dispatcher has fuel. -/
+def dispatchSup (ho : List Val → List Val → List Val) (p : Prog) : Nat → Nat → Val → View → UserResult
+  | 0, id, arg, vw => dispatchDt p id arg vw
+  | fuel + 1, id, arg, vw =>
+    match CatsEffectInLean.Std.Supervisor.SLam.ofId? id with
+    | some l => CatsEffectInLean.Std.Supervisor.call (dispatchSup ho p fuel) (srcIO p) (supOrder ho) l arg vw
+    | none => dispatchDt p id arg vw
+
 /-- The difftest closures and the `ResourceUse` lambdas of program `p` (the functions that the
 `Bracket` mirror calls: `IO.bracketFull` of `Resource#fold`, track Res). -/
 def dispatchRes (ho : List Val → List Val → List Val) (p : Prog) (id : Nat) (arg : Val) (vw : View) : UserResult :=
@@ -586,8 +629,11 @@ def dispatchRes (ho : List Val → List Val → List Val) (p : Prog) (id : Nat) 
     -- batch 6.3: the `guaranteeCase` finalizers of `parTraverseN` are `ParTraverse` closures
     match ParTraverse.PT.ofId? id with
     | some l => ParTraverse.call ho (dispatchDt p) l arg vw
-    -- Phase 7, track S: the `Allocate` and fold closures of `permit.use`/`lock.use`
-    | none => dispatchSem p id arg vw
+    | none =>
+      -- Phase 7, track V: the `bracketFull` and `guaranteeCase` functions of `Supervisor`
+      if (CatsEffectInLean.Std.Supervisor.SLam.ofId? id).isSome then dispatchSup ho p 4 id arg vw
+      -- Phase 7, track S: the `Allocate` and fold closures of `permit.use`/`lock.use`
+      else dispatchSem p id arg vw
 
 /-- All closures of program `p`: difftest closures (with trace and failures) and library
 closures (module doc). `ho`: the `HashSet` iteration order of the `parTraverseN` mirror. -/
@@ -608,6 +654,7 @@ def dispatch (ho : List Val → List Val → List Val) (p : Prog) (id : Nat) (ar
     | some (.sem _) | some (.mutex _) => dispatchSem p id arg vw
     | some (.cdl l) => CatsEffectInLean.Std.CountDownLatch.call l arg vw
     | some (.cb l) => CatsEffectInLean.Std.CyclicBarrier.call l arg vw
+    | some (.sup _) => dispatchSup ho p 4 id arg vw
     | none =>
       -- format v2 (track Q): the queue mirrors (namespaces 50, 52)
       match CatsEffectInLean.Std.QueueFactory.call? id arg vw with
@@ -639,6 +686,13 @@ def ptMaxLen (p : Prog) : Nat :=
   (List.range p.size).foldl (fun m i =>
     match p.at? i with
     | some (.parTraverseN _ xs _) => max m xs.length
+    | _ => m) 0
+
+/-- The number of `supervise` nodes of a program (track V). -/
+def supCount (p : Prog) : Nat :=
+  (List.range p.size).foldl (fun m i =>
+    match p.at? i with
+    | some (.supervise _ _) => m + 1
     | _ => m) 0
 
 /-- The view of the root term: only the root fiber, not completed. -/

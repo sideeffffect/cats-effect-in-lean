@@ -360,6 +360,15 @@ class Checker:
         if op == 'cbAwait':
             u(self.atom(p['b'], env), ('barrier',), op)
             return ('unit',)
+        # ---- format v2 (Phase 7, track V): Supervisor
+        if op == 'supUse':
+            for k in ('aw', 'rs', 'cv'):
+                if not isinstance(p.get(k), bool):
+                    raise TypeErr(f"supUse {k} {p.get(k)!r}")
+            return self.prog(p['k'], {**env, p['x']: ('val', ('sup',))})
+        if op == 'supervise':
+            u(self.atom(p['s'], env), ('sup',), op)
+            return ('fiber', self.prog(p['e'], env))
         if op == 'syncStep':
             raise TypeErr("syncStep below the root")
         if op in RES_OPS:

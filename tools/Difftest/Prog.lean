@@ -61,6 +61,15 @@ def userCode? (e : Err) : Option Nat :=
     some (if e.code ≤ timeoutModelCode then e.code - 2 else e.code - 3)
   else none
 
+/-- Phase 7, track V: the model code of the `Supervisor` `IllegalStateException`
+(`Std/Supervisor.lean`, `iseErr`); the next two codes are its `AssertionError`s. Scala prints it as an exception, not a `UserError` (a user
+`raise 7999998` would print the same code; generated codes are small). -/
+def supIseCode : Nat := 8000001
+
+/-- `userCode?` without the library exceptions of the Phase 7 mirrors (track V). -/
+def userCodeV? (e : Err) : Option Nat :=
+  if supIseCode ≤ e.code && e.code ≤ supIseCode + 2 then none else userCode? e
+
 /-! ## AST -/
 
 /-- An argument position: a literal or a variable (de Bruijn index). -/
@@ -221,6 +230,12 @@ inductive Prog where
   | cbNew (n : Nat)
   /-- `barrierOf(⟦b⟧).await.as(VUnit)`. -/
   | cbAwait (b : Atom)
+  -- format v2 (Phase 7, track V): `std.Supervisor`
+  /-- `SupervisorShim(aw, rs, cv).use(s => I(k)[x := VSup(h.newSup(s))])`; `k` binds the
+  supervisor. -/
+  | supUse (aw rs cv : Bool) (k : Prog)
+  /-- `supOf(⟦s⟧).supervise(I(e)).map(f => VFiber(h.fiberHandle(f)))`. -/
+  | supervise (s : Atom) (e : Prog)
   deriving DecidableEq, Repr
 
 /-- Number of nodes. Nodes are numbered in pre-order from 0; the children of a node with
@@ -232,7 +247,8 @@ def Prog.size : Prog → Nat
   | .rUse e k | .rAllocated e k | .rBoth e k => 1 + e.size + k.size
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
-  | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e => 1 + e.size
+  | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e
+  | .supUse _ _ _ e | .supervise _ e => 1 + e.size
   | .guarantee e k _ => 1 + e.size + k.size
   | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => 1 + a.size + u.size + r.size
   | _ => 1
@@ -249,7 +265,8 @@ def Prog.at? : Prog → Nat → Option Prog
       if i < e.size then e.at? i else k.at? (i - e.size)
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
-    | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e => e.at? i
+    | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e
+    | .supUse _ _ _ e | .supervise _ e => e.at? i
     | .guarantee e k _ => if i < e.size then e.at? i else k.at? (i - e.size)
     | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
       if i < a.size then a.at? i
@@ -288,6 +305,7 @@ def Prog.opName : Prog → String
   | .mutexLock .. => "mutexLock"
   | .cdlNew .. => "cdlNew" | .cdlRelease .. => "cdlRelease" | .cdlAwait .. => "cdlAwait"
   | .cbNew .. => "cbNew" | .cbAwait .. => "cbAwait"
+  | .supUse .. => "supUse" | .supervise .. => "supervise"
 
 /-- The two sub-programs of a v2 combinator (`race`, `raceOutcome`, `both`, `bothOutcome`). -/
 def Prog.combArgs? : Prog → Option (Prog × Prog)
@@ -303,7 +321,8 @@ def Prog.ops (p : Prog) : List String :=
     | .rUse e k | .rAllocated e k | .rBoth e k => e.ops ++ k.ops
     | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
     | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .rEval e | .memoize e
-    | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e => e.ops
+    | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e
+    | .supUse _ _ _ e | .supervise _ e => e.ops
     | .guarantee e k _ => e.ops ++ k.ops
     | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ => a.ops ++ u.ops ++ r.ops
     | _ => []
@@ -328,6 +347,8 @@ def Prog.eagerReads : Prog → Bool
   -- track Res: `use`/`allocated` build `I_R(res)` at once; `rBoth` builds both sides at once
   | .rUse e _ | .rAllocated e _ => e.eagerReads
   | .rBoth e k => e.eagerReads || k.eagerReads
+  -- Phase 7, track V: `supervise` builds `e` at once (`use` builds `k` when it calls the function)
+  | .supervise _ e => e.eagerReads
   | _ => false
 
 /-- The resource restriction: no `IO` program inside a resource node reads state when it is
@@ -342,7 +363,8 @@ def Prog.resViewFree : Prog → Bool
   | .rUse e k | .rAllocated e k | .rBoth e k => e.resViewFree && k.resViewFree
   | .map e _ | .attempt e | .uncancelable e | .poll _ e | .start e | .asyncFin _ e _
   | .split _ e | .syncStep e _ | .timeout e _ | .allocatedCase e | .memoize e
-  | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e => e.resViewFree
+  | .parTraverseN _ _ e | .semPermit _ e | .mutexLock _ e
+  | .supUse _ _ _ e | .supervise _ e => e.resViewFree
   | .guarantee e k _ => e.resViewFree && k.resViewFree
   | .bracket a u r _ | .bracketCase a u r _ | .bracketFull a u r _ =>
     a.resViewFree && u.resViewFree && r.resViewFree
@@ -392,7 +414,9 @@ def v2Ops : List String := ["race", "raceOutcome", "both", "bothOutcome", "guara
   "semNew", "semAcquireN", "semReleaseN", "semTryAcquireN", "semAvailable", "semCount",
   "semPermit", "mutexNew", "mutexLock",
   -- Phase 7, track L
-  "cdlNew", "cdlRelease", "cdlAwait", "cbNew", "cbAwait"]
+  "cdlNew", "cdlRelease", "cdlAwait", "cbNew", "cbAwait",
+  -- Phase 7, track V
+  "supUse", "supervise"]
 /-- The queue kinds of `qNew` (format v2, track Q), by index: the public factories, then the
 `Concurrent` factories that `IO` reaches only through `bounded(1)`, `bounded(n >= 65534)`,
 `dropping(1)` (`Queue.scala:93-110`). -/
@@ -464,7 +488,7 @@ partial def decodeVal (j : Json) : D Val := do
   | "succeeded" => only ["v"]; pure (.ocSucceeded (← decodeVal (← field o "v" t)))
   | "errored" => only ["code"]; pure (.ocErrored (userErr (← nat (← field o "code" t) "errored.code")))
   | "canceled" => only []; pure .ocCanceled
-  | "fiber" | "ref" | "deferred" | "queue" | "memo" | "sem" | "mutex" | "latch" | "barrier" => fail s!"value '{t}': handles cannot be literals"
+  | "fiber" | "ref" | "deferred" | "queue" | "memo" | "sem" | "mutex" | "latch" | "barrier" | "sup" => fail s!"value '{t}': handles cannot be literals"
   | _ => fail s!"unknown value tag '{t}'"
 
 /-- The kind of a bound name. -/
@@ -585,6 +609,15 @@ partial def decodeProgIn (j : Json) (scope : Scope) (ver : Nat) (pos : Pos := .i
   else if op == "cdlRelease" then do only ["l"]; .cdlRelease <$> a "l"
   else if op == "cdlAwait" then do only ["l"]; .cdlAwait <$> a "l"
   else if op == "cbAwait" then do only ["b"]; .cbAwait <$> a "b"
+  -- format v2 (Phase 7, track V)
+  else if op == "supUse" then do
+    only ["aw", "rs", "cv", "x", "k"]; let x ← s "x"
+    let flag (k : String) : Except String Bool :=
+      match get? o k with
+      | some (.bool b) => pure b
+      | _ => fail s!"{ctx}.{k}: expected a boolean"
+    pure (.supUse (← flag "aw") (← flag "rs") (← flag "cv") (← p "k" ((x, .v) :: scope)))
+  else if op == "supervise" then do only ["s", "e"]; pure (.supervise (← a "s") (← p "e"))
   else
     match op with
     | "pure" => only ["v"]; .pure <$> a "v"

@@ -55,7 +55,7 @@ object Json:
       case "succeeded" => only("v"); Val.VSucceeded(decodeVal(field(o, "v", t)))
       case "errored" => only("code"); Val.VErrored(Err.User(nat(field(o, "code", t), "errored.code")))
       case "canceled" => only(); Val.VCanceled
-      case "fiber" | "ref" | "deferred" | "queue" | "memo" | "sem" | "mutex" | "latch" | "barrier" => fail(s"value '$t': handles cannot be literals")
+      case "fiber" | "ref" | "deferred" | "queue" | "memo" | "sem" | "mutex" | "latch" | "barrier" | "sup" => fail(s"value '$t': handles cannot be literals")
       case _ => fail(s"unknown value tag '$t'")
 
   def encodeErr(e: Err): ujson.Obj = e match
@@ -81,6 +81,7 @@ object Json:
     case Val.VMutex(i) => ujson.Obj("t" -> "mutex", "id" -> i)
     case Val.VLatch(i) => ujson.Obj("t" -> "latch", "id" -> i)
     case Val.VBarrier(i) => ujson.Obj("t" -> "barrier", "id" -> i)
+    case Val.VSup(i) => ujson.Obj("t" -> "sup", "id" -> i)
 
   // --------------------------------------------------------------- programs
 
@@ -113,7 +114,9 @@ object Json:
     "semNew", "semAcquireN", "semReleaseN", "semTryAcquireN", "semAvailable", "semCount", "semPermit",
     "mutexNew", "mutexLock",
     // Phase 7, track L
-    "cdlNew", "cdlRelease", "cdlAwait", "cbNew", "cbAwait")
+    "cdlNew", "cdlRelease", "cdlAwait", "cbNew", "cbAwait",
+    // Phase 7, track V
+    "supUse", "supervise")
 
   /** The queue kinds of `qNew` (format v2, track Q); `Prog.qKinds` in `tools/Difftest/Prog.lean`. */
   val QKinds: List[String] = List("bounded", "dropping", "circularBuffer", "synchronous", "unbounded",
@@ -312,6 +315,14 @@ object Json:
       case "cdlRelease" => only("l"); Prog.CdlRelease(a("l"))
       case "cdlAwait" => only("l"); Prog.CdlAwait(a("l"))
       case "cbAwait" => only("b"); Prog.CbAwait(a("b"))
+      // ---- format v2 (Phase 7, track V)
+      case "supUse" =>
+        only("aw", "rs", "cv", "x", "k"); val x = s("x")
+        def flag(k: String): Boolean = field(o, k, ctx) match
+          case ujson.Bool(b) => b
+          case _ => fail(s"$ctx.$k: expected a boolean")
+        Prog.SupUse(flag("aw"), flag("rs"), flag("cv"), x, p("k", scope + (x -> Kind.V)))
+      case "supervise" => only("s", "e"); Prog.Supervise(a("s"), p("e"))
       case "syncStep" => fail(s"$ctx: only at the root of a program")
       case r if ResOps.contains(r) => fail(s"$ctx: a resource op outside a resource position")
       case _ => fail(s"unknown op '$op'")

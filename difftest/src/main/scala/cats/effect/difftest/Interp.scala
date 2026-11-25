@@ -1,7 +1,7 @@
 package cats.effect.difftest
 
 import cats.effect.{Deferred, Fiber, IO, Outcome, Poll, Ref, Resource}
-import cats.effect.std.{CountDownLatch, CyclicBarrier, Mutex, Queue, Semaphore}
+import cats.effect.std.{CountDownLatch, CyclicBarrier, Mutex, Queue, Semaphore, Supervisor, SupervisorShim}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.*
@@ -67,6 +67,8 @@ final class Harness:
   def newLatch(l: CountDownLatch[IO]): Int = synchronized { latches += l; latches.size - 1 }
   val barriers = ArrayBuffer.empty[CyclicBarrier[IO]]
   def newBarrier(b: CyclicBarrier[IO]): Int = synchronized { barriers += b; barriers.size - 1 }
+  val sups = ArrayBuffer.empty[Supervisor[IO]]
+  def newSup(s: Supervisor[IO]): Int = synchronized { sups += s; sups.size - 1 }
   def newAsync(): Int = synchronized { asyncs += 1; asyncs - 1 }
 
 /** The error code of `java.util.concurrent.TimeoutException` (format v1). The value language has
@@ -161,6 +163,10 @@ final class Interp(h: Harness):
   private def barrierOf(v: Val): CyclicBarrier[IO] = v match
     case VBarrier(i) => h.barriers(i)
     case _ => throw TypeError(s"not a barrier handle: $v")
+
+  private def supOf(v: Val): Supervisor[IO] = v match
+    case VSup(i) => h.sups(i)
+    case _ => throw TypeError(s"not a supervisor handle: $v")
 
   private def deferredOf(v: Val): (Int, Deferred[IO, Val]) = v match
     case VDeferred(i) => (i, h.deferreds(i))
@@ -351,6 +357,10 @@ final class Interp(h: Harness):
     case Prog.CdlAwait(l) => latchOf(atom(l, env)).await.as(VUnit)
     case Prog.CbNew(n) => CyclicBarrier[IO](n).map(b => VBarrier(h.newBarrier(b)))
     case Prog.CbAwait(b) => barrierOf(atom(b, env)).await.as(VUnit)
+    // ---- format v2 (Phase 7, track V): std.Supervisor (Supervisor.scala:128-409)
+    case Prog.SupUse(aw, rs, cv, x, k) =>
+      SupervisorShim(aw, rs, cv).use(s => run(k, env + (x -> Bound.V(VSup(h.newSup(s))))))
+    case Prog.Supervise(s, e) => supOf(atom(s, env)).supervise(run(e, env)).map(f => VFiber(h.fiberHandle(f)))
 
   /** The factory of a `qNew` kind (format v2, track Q). The `*Conc` kinds are the private
     * `Concurrent` factories (`Queue.scala:93-110`), reachable here because this file is in

@@ -12,6 +12,7 @@ import CatsEffectInLean.Std.QueueFactory
 import CatsEffectInLean.Model.Mutex
 import CatsEffectInLean.Std.CountDownLatch
 import CatsEffectInLean.Std.CyclicBarrier
+import CatsEffectInLean.Std.Supervisor
 
 /-!
 # Translation: difftest program → `Model.IO` + user environment
@@ -110,6 +111,9 @@ inductive TraceEv where
   /-- Internal (not printed; Phase 7, track S): `h.newMutex` gives the mutex with queue cell `q`
   its handle. -/
   | mutexH (q : Nat)
+  /-- Internal (not printed; Phase 7, track V): `h.fiberHandle` gives the `Supervisor` restart
+  wrapper with closure id `w` its fiber handle. -/
+  | wrapH (w : Nat)
   deriving DecidableEq, Repr
 
 /-- A trace event as a model value, for `UserEffect.emit`. Tag first. -/
@@ -133,6 +137,7 @@ def TraceEv.toVal : TraceEv → Val
   | .memoH r => .pair (.nat 15) (.nat r)
   | .semH q => .pair (.nat 60) (.nat q)
   | .mutexH q => .pair (.nat 61) (.nat q)
+  | .wrapH w => .pair (.nat 80) (.nat w)
 
 /-- The inverse of `TraceEv.toVal`. -/
 def TraceEv.ofVal? : Val → Option TraceEv
@@ -155,6 +160,7 @@ def TraceEv.ofVal? : Val → Option TraceEv
   | .pair (.nat 15) (.nat r) => some (.memoH r)
   | .pair (.nat 60) (.nat q) => some (.semH q)
   | .pair (.nat 61) (.nat q) => some (.mutexH q)
+  | .pair (.nat 80) (.nat w) => some (.wrapH w)
   | _ => none
 
 /-! ## Construction-time snapshot
@@ -365,13 +371,23 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     pure (.map (.start (← tr R e (node + 1) env vw)) (clo node .fiberHandle []))
   | .join f, node, env, vw => do
     -- `fiberOf(⟦f⟧).join.flatMap(ocVal)`; `join` reads `_join` now (`IOFiber.scala:203-207`).
-    let .fiber t ← atomVal env f | throw .typeError
-    pure (.flatMap (IO.joinOf t (vw.outcome t)) (clo node .ocValK []))
+    match ← atomVal env f with
+    | .fiber t => pure (.flatMap (IO.joinOf t (vw.outcome t)) (clo node .ocValK []))
+    | w =>
+      -- track V: a `Supervisor` restart wrapper; `def join = resultR.get` (`Supervisor.scala:281`)
+      match CatsEffectInLean.Std.Supervisor.wrapOf? w with
+      | some r => pure (.flatMap (IO.deferredGetOf r.res (vw.deferred r.res)) (clo node .ocValK []))
+      | none => throw .typeError
   | .cancel f, node, env, vw => do
     -- `fiberOf(⟦f⟧).cancel.as(VUnit)`; `cancel` reads `_cancel` now (`IOFiber.scala:197-201`);
     -- `as` = `map(_ => b)` (`IO.scala:182-183`).
-    let .fiber t ← atomVal env f | throw .typeError
-    pure (.map (IO.cancelOf t (vw.outcome t)) (clo node .asUnit []))
+    match ← atomVal env f with
+    | .fiber t => pure (.map (IO.cancelOf t (vw.outcome t)) (clo node .asUnit []))
+    | w =>
+      -- track V: the wrapper's `val cancel` (`Supervisor.scala:235-279`)
+      match CatsEffectInLean.Std.Supervisor.wrapOf? w with
+      | some r => pure (.map (CatsEffectInLean.Std.Supervisor.wCancelIO r.toVal) (clo node .asUnit []))
+      | none => throw .typeError
   | .racePair a b, node, env, vw => do
     let ia ← tr R a (node + 1) env vw
     let ib ← tr R b (node + 1 + a.size) env vw
@@ -596,6 +612,21 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     -- `latchOf(⟦l⟧).await.as(VUnit)`
     match CatsEffectInLean.Std.CountDownLatch.latchOf? (← atomVal env l) with
     | some (r, _) => pure (.map (CatsEffectInLean.Std.CountDownLatch.awaitIO r) (clo node .asUnit []))
+    | none => throw .typeError
+  -- format v2 (Phase 7, track V): the mirror `Std/Supervisor.lean`
+  | .supUse aw rs cv _, node, env, _ =>
+    -- `SupervisorShim(aw, rs, cv).use(s => run(k, env + (x -> VSup(h.newSup(s)))))`: the `use`
+    -- function builds `I(k)` when it is called
+    let rsV : Val := if rs then .some (.fn (cloId node .alwaysTrue [])) else .none
+    pure (CatsEffectInLean.Std.Supervisor.useIO aw rsV (if cv then 1 else 0) 0 (cloId node .supUseK env))
+  | .supervise s e, node, env, vw => do
+    -- `supOf(⟦s⟧).supervise(run(e, env)).map(f => VFiber(h.fiberHandle(f)))`: `run(e, env)` is
+    -- built now; the source code captures the snapshot (`Env.srcIO` rebuilds it)
+    let _ ← tr R e (node + 1) env vw
+    match CatsEffectInLean.Std.Supervisor.supOf? (← atomVal env s) with
+    | some sp =>
+      pure (.map (CatsEffectInLean.Std.Supervisor.superviseIO sp
+        (.nat (Clo.encode { node, lam := .supSrc, vals := snapVal vw :: env }))) (clo node .supFiberHandle []))
     | none => throw .typeError
   | .cbNew n, node, _, _ =>
     -- `CyclicBarrier[IO](n).map(b => VBarrier(h.newBarrier(b)))` (`CyclicBarrier.scala:58-91`)

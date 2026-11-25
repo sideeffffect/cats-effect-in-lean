@@ -119,6 +119,9 @@ WEIGHTS = {
     # format v2 (Phase 7, track L): `CountDownLatch` and `CyclicBarrier` scenarios, appended by
     # `gen_case` with their own RNG (`p_latch`), like `parTraverseN`. Weights scale the two shapes.
     'tpl_cdl': 1.0, 'tpl_cb': 1.0,
+    # format v2 (Phase 7, track V): a `Supervisor` scenario, appended by `gen_case` with its own
+    # RNG (`p_sup`), like `parTraverseN`. The weight scales the probability (`--boost`).
+    'tpl_sup': 1.0,
 }
 
 # Other knobs (probabilities and ranges).
@@ -145,6 +148,7 @@ CONFIG = {
     'p_queue2': 0.08,          # Phase 7, track Q: append a `qNew` queue scenario (own RNG, see gen_case)
     'p_sem': 0.08,             # Phase 7, track S: append a `Semaphore`/`Mutex` part (own RNG, see gen_case)
     'p_latch': 0.08,           # Phase 7, track L: append a latch/barrier part (own RNG, see gen_case)
+    'p_sup': 0.08,             # Phase 7, track V: append a Supervisor part (own RNG, see gen_case)
     'p_par_traverse': 0.08,    # batch 6.3: append a `parTraverseN` part (own RNG, see gen_case)         # replay case gets a `runtime` field (auto-yield every few iterations)
 }
 
@@ -853,6 +857,69 @@ class Gen:
                 prog = {'op': 'seq', 'ps': st[1] + [prog]}
         new = {'op': 'cbNew', 'n': n} if barrier else {'op': 'cdlNew', 'n': n}
         return {'op': 'bind', 'x': h, 'e': new, 'k': prog}
+
+    # ------------------------------------------- format v2 (Phase 7, track V)
+
+    def sup_child(self, j, env, size, ctx, sv, depth):
+        """A supervised child: user code (`latch_prefix`), markers, often an `onCancel`
+        finalizer, sometimes a wait (cede, never), sometimes a grandchild that it supervises
+        on the same supervisor `sv` (nested supervision; it can race the close)."""
+        mark = lambda k: {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_500_000 + 100 * k + j}}
+        core = self.latch_prefix(env, size, ctx) + [mark(1)]
+        x = self.r.random()
+        if x < 0.15:
+            core += [{'op': 'never'}]
+        elif x < 0.5:
+            core += [{'op': 'cede'} for _ in range(self.pick([(2, 1), (2, 2), (1, 4)]))]
+        elif x < 0.6:
+            core += [{'op': 'raise', 'code': self.code()}]
+        body = {'op': 'seq', 'ps': core + [mark(2)]}
+        if self.r.random() < 0.5:
+            body = self.tag({'op': 'onCancel', 'e': body, 'fin': mark(3)})
+        if depth < 1 and self.r.random() < 0.25:
+            sub = {'op': 'supervise', 's': sv, 'e': self.sup_child(j + 50, env, size, ctx, sv, depth + 1)}
+            body = {'op': 'seq', 'ps': [body, {'op': 'attempt', 'e': sub}, mark(4)]}
+        return body
+
+    def tpl_sup(self, env, size, ctx):
+        """A `Supervisor` scenario of type unit: `supUse` (await, restart, state kind random),
+        supervise 1-4 children, then the body cedes, joins or cancels some children (or the
+        restart wrapper), maybe raises or cancels itself, and returns; sometimes the supervisor
+        escapes the body and a late `supervise` fails (`IllegalStateException`)."""
+        s = self.fresh('s')
+        sv = {'t': 'var', 'x': s}
+        aw = self.r.random() < 0.5
+        rs = self.r.random() < 0.25
+        cv = self.r.random() < 0.3
+        sub = max(1, size // 4)
+        cedes = lambda: [{'op': 'cede'} for _ in range(self.pick([(3, 0), (2, 1), (1, 2), (1, 4)]))]
+        k = self.pick([(3, 1), (3, 2), (2, 3), (1, 4)])
+        fs = [self.fresh('x') for _ in range(k)]
+        tail = cedes()
+        for f in fs:
+            r = self.r.random()
+            if r < 0.25:
+                tail += [{'op': 'cancel', 'f': {'t': 'var', 'x': f}}] + cedes()
+            elif r < 0.45 and not rs:
+                tail += [{'op': 'join', 'f': {'t': 'var', 'x': f}}]
+        r = self.r.random()
+        if r < 0.1:
+            tail += [{'op': 'raise', 'code': self.code()}]
+        elif r < 0.15:
+            tail += [{'op': 'canceled'}]
+        escape = self.r.random() < 0.15
+        tail += [{'op': 'pure', 'v': sv if escape else {'t': 'unit'}}]
+        body = {'op': 'seq', 'ps': tail}
+        for j, f in reversed(list(enumerate(fs))):
+            body = {'op': 'bind', 'x': f, 'e': {'op': 'supervise', 's': sv,
+                    'e': self.sup_child(j, env, sub, ctx, sv, 0)}, 'k': body}
+        use = {'op': 'supUse', 'aw': aw, 'rs': rs, 'cv': cv, 'x': s, 'k': body}
+        if escape:
+            t = self.fresh('s')
+            late = {'op': 'attempt', 'e': {'op': 'supervise', 's': {'t': 'var', 'x': t},
+                    'e': {'op': 'delay', 'fn': 1, 'arg': {'t': 'nat', 'v': 9_599_999}}}}
+            return {'op': 'bind', 'x': t, 'e': use, 'k': {'op': 'seq', 'ps': [late, {'op': 'pure', 'v': {'t': 'unit'}}]}}
+        return {'op': 'seq', 'ps': [{'op': 'attempt', 'e': use}, {'op': 'pure', 'v': {'t': 'unit'}}]}
 
     # ------------------------------------------------------- format v1
 
@@ -1794,8 +1861,31 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
         extra = g3.tpl_latch({}, lr.randint(3, 16), {}, barrier)
         prog = {'op': 'seq', 'ps': [prog, extra]}
         check_prog(prog)
+    # Phase 7, track V: append a `Supervisor` scenario. Own RNG, so the rest of the case does not
+    # change; the probability scales with the template weight.
+    vr = random.Random(f"difftest-supervisor:{seed}:{i}")
+    if prog.get('op') != 'syncStep' and vr.random() < g.c['p_sup'] * w['tpl_sup']:
+        g3 = Gen(vr, weights, config)
+        g3.names = 80000
+        extra = g3.tpl_sup({}, vr.randint(3, 12), {})
+        prog = {'op': 'seq', 'ps': [prog, extra]}
+        if any(x.get('rs') for x in walk_sup(extra)):
+            case['maxSteps'] = min(case.get('maxSteps', 400), 400)
+        check_prog(prog)
     case['prog'] = prog
     return case
+
+
+def walk_sup(p):
+    """The `supUse` nodes of a program (track V)."""
+    if isinstance(p, dict):
+        if p.get('op') == 'supUse':
+            yield p
+        for v in p.values():
+            yield from walk_sup(v)
+    elif isinstance(p, list):
+        for v in p:
+            yield from walk_sup(v)
 
 
 def to_testcontrol(case, tc_seed, suffix=None):

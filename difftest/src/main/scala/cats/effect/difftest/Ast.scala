@@ -29,6 +29,7 @@ enum Val:
   case VMutex(id: Int) // v2 (Phase 7, track S): a `Mutex[IO]`
   case VLatch(id: Int) // v2 (Phase 7, track L): a `CountDownLatch`
   case VBarrier(id: Int) // v2 (Phase 7, track L): a `CyclicBarrier`
+  case VSup(id: Int) // v2 (Phase 7, track V): a `Supervisor[IO]`
 
 /** An argument position: a literal value or a bound variable. */
 enum Atom:
@@ -152,6 +153,11 @@ enum Prog:
   case CbNew(n: Int)
   /** `barrierOf(b).await.as(VUnit)`. */
   case CbAwait(b: Atom)
+  // ---- format v2 (Phase 7, track V)
+  /** `SupervisorShim(aw, rs, cv).use(s => k[x := VSup(h.newSup(s))])`. */
+  case SupUse(aw: Boolean, rs: Boolean, cv: Boolean, x: String, k: Prog)
+  /** `supOf(s).supervise(e).map(f => VFiber(h.fiberHandle(f)))`. */
+  case Supervise(s: Atom, e: Prog)
 
 /** A `Resource[IO, Val]` (format v1). It occurs only under `AllocatedCase`. */
 enum Res:

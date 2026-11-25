@@ -261,6 +261,15 @@ inductive Lam where
   | latchHandle
   /-- `cbNew`: `b => VBarrier(h.newBarrier(b))`. -/
   | barrierHandle
+  -- format v2 (Phase 7, track V): `std.Supervisor` runs on the mirror `Std/Supervisor.lean`
+  /-- `supUse`: `s => I(k)` with `x = VSup(h.newSup(s))` (the `use` function). `vals = env`. -/
+  | supUseK
+  /-- `supervise`: source code of `I(e)` (built with the op). `vals = snap :: env`. -/
+  | supSrc
+  /-- `supervise`: `f => VFiber(h.fiberHandle(f))` (an `IOFiber` or a restart wrapper). -/
+  | supFiberHandle
+  /-- `checkRestart = Some(_ => true)` of `SupervisorShim` (Dispatcher's `always`). -/
+  | alwaysTrue
   deriving DecidableEq, Repr
 
 /-- All lambdas, in a fixed order. The index is the code of the lambda. -/
@@ -281,7 +290,8 @@ def Lam.all : List Lam :=
    .ptF, .ptList,
    .qHandle, .qBool, .qNat,
    .semHandle, .semUse, .semVal, .semCountMap, .mutexHandle, .mutexUse,
-   .latchHandle, .barrierHandle]
+   .latchHandle, .barrierHandle,
+   .supUseK, .supSrc, .supFiberHandle, .alwaysTrue]
 
 def Lam.toNat (l : Lam) : Nat := Lam.all.idxOf l
 def Lam.ofNat? (n : Nat) : Option Lam := Lam.all[n]?

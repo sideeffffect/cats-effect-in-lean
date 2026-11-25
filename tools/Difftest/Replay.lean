@@ -99,7 +99,10 @@ structure RS where
 `TimeoutException` prints without its message (format v1; the model does not keep it). -/
 def errText (e : Err) : String :=
   if e == Timeout.timeoutErr then "TimeoutException" else
-  match userCode? e with
+  if e.code == supIseCode then "IllegalStateException: supervisor already shutdown" else
+  if e.code == supIseCode + 1 then "AssertionError: supervised fiber couldn't cancel (this is a bug in Supervisor)" else
+  if e.code == supIseCode + 2 then "AssertionError: unexpected fiber (this is a bug in Supervisor)" else
+  match userCodeV? e with
   | some c => s!"UserError: UserError({c})"
   | none => if e == typeErr then "TypeError: ?" else s!"ModelError: code {e.code}"
 
@@ -143,6 +146,11 @@ def absorb (r : RS) : RS := Id.run do
       if !r.sOf.contains q then r := { r with sOf := r.sOf.insert q r.sOf.size }
     | some (.mutexH q) =>
       if !r.muOf.contains q then r := { r with muOf := r.muOf.insert q r.muOf.size }
+    -- track V: a `Supervisor` restart wrapper gets a fiber handle (keyed by its closure id; a
+    -- cancel choice on it is skipped, as in Scala: it is not an `IOFiber`)
+    | some (.wrapH w) =>
+      if !r.hOf.contains w then
+        r := { r with hOf := r.hOf.insert w r.hids.size, hids := r.hids.push w }
     | some e => r := { r with trace := r.trace.push e }
     | none => r := r.setErr s!"unknown emitted value {repr v}"
   r := { r with outLen := n }
@@ -244,7 +252,7 @@ end RS
 
 /-- An error value (`Json.encodeErr`). -/
 def errJson (e : Err) : Json :=
-  match userCode? e with
+  match userCodeV? e with
   | some c => Json.mkObj [("t", "errored"), ("code", toJson c)]
   | none => Json.mkObj [("t", "errored"), ("exn", .str (errText e))]
 
@@ -283,6 +291,10 @@ def valJson (hOf : Ren) : Val → Json
   | .deferred i => Json.mkObj [("t", "deferred"), ("id", toJson (hOf.dOf.getD i (1000000 + i)))]
   -- Phase 7: a semaphore, mutex (track S) or `qNew` queue (track Q) is a reference to its object closure
   | .fn k =>
+    -- track V: a `Supervisor` restart wrapper prints as its fiber handle
+    if (CatsEffectInLean.Std.Supervisor.wrapOf? (.fn k)).isSome && hOf.hOf.contains k then
+      Json.mkObj [("t", "fiber"), ("id", toJson (hOf.hOf.getD k 0))]
+    else
     match CatsEffectInLean.Model.Semaphore.semRef? k, CatsEffectInLean.Model.Mutex.mutexRef? k with
     | some q, _ => Json.mkObj [("t", "sem"), ("id", toJson (hOf.sOf.getD q (1000000 + q)))]
     | _, some q => Json.mkObj [("t", "mutex"), ("id", toJson (hOf.muOf.getD q (1000000 + q)))]
@@ -362,7 +374,9 @@ def replayFieldsH (ho : List Val → List Val → List Val) (cfg : Config) (p : 
   let outcome := match r.glueErr with
     | some m => Json.mkObj [("t", .str s!"glue:{m}")]
     | none => summaryJson hOf r.s.summary
-  let fibers := Json.mkObj ((r.hids.toList.zipIdx).map fun (i, h) =>
+  -- track V: a restart wrapper is not an `IOFiber`; Scala lists no label for it
+  let fibers := Json.mkObj (((r.hids.toList.zipIdx).filter fun (i, _) =>
+      (CatsEffectInLean.Std.Supervisor.wrapOf? (.fn i)).isNone).map fun (i, h) =>
     (toString h, Json.str (r.fibLabel.getD i "?")))
   [("outcome", outcome), ("trace", Json.arr (r.trace.map (evJson hOf))),
    ("steps", toJson r.s.tasks), ("time", toJson r.s.liveHeap.clock), ("schedule", Json.arr r.log),

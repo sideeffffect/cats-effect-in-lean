@@ -94,3 +94,9 @@ lean_exe qsmoke where
 lean_exe semsmoke where
   srcDir := "tools"
   root := `SemSmoke.Main
+
+-- Phase 7, track V: random-schedule smoke test of the `Supervisor` statements
+-- (`Props/Phase7/Supervisor.lean`) and the wrong variants of the mirror. Not a default target.
+lean_exe supsmoke where
+  srcDir := "tools"
+  root := `SupSmoke.Main
