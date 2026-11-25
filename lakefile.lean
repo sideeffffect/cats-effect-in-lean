@@ -56,7 +56,9 @@ lean_lib TwinChecks where
     -- CE-0020 fixed-twin check (track Res, Phase 6; review batch 5)
     `CatsEffectInLean.Proofs.Phase6.ResourceBothFixed,
     -- CE-0060 fixed-twin check (Phase 7, track S)
-    `CatsEffectInLean.Proofs.Phase7.SemaphoreCountFixed]
+    `CatsEffectInLean.Proofs.Phase7.SemaphoreCountFixed,
+    -- Supervisor variant 11 (restart path) wrong-function check (track V; review batch 16, N3)
+    `CatsEffectInLean.Proofs.Phase7.SupervisorRestartWitness]
 
 -- Leak smoke test of track R (Phase 6): exact bounded search (`exploreP`) of `race`, `both`,
 -- `raceOutcome`, `bothOutcome` and `timeout` over a small family of sides, with the leak

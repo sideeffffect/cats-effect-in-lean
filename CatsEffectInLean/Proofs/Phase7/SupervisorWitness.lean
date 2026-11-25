@@ -15,7 +15,7 @@ insertion order (`id`). Schedules: the default (`pick 0` at each step).
 
 | Statement | Witness (`v = 0`) | Wrong variants (theorems) |
 |---|---|---|
-| `supNoLeak` | `aw = false`, a child that never ends: done, the child canceled (status 3) | 7 finalizer drops |
+| `supNoLeak` | `aw = false`, a child that never ends: done, the child canceled (status 3) | 7 finalizer drops (11 restart ignores its flags: `SupervisorRestartWitness.lean`, separate CI job) |
 | `supClosedNoRun` | a late `supervise`: done, flagged, never ran | 9 `add` ignores the close |
 | `supRunsOnce` | a child canceled by the close: one start, one finalizer run | 4 `supervise` doubles |
 | `supAwaitJoins` | `aw = true`, two children: done `Succeeded(())`, both status 2 | 1 raises, 3 drops, 5 factory raises, 12 cancels |
