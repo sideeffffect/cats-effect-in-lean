@@ -23,5 +23,9 @@ lazy val difftest = (project in file("."))
     scalacOptions ++= Seq("-deprecation", "-feature", "-Wunused:all"),
     Compile / run / fork := true,
     Compile / run / connectInput := true,
-    Compile / run / outputStrategy := Some(StdoutOutput)
+    Compile / run / outputStrategy := Some(StdoutOutput),
+    // the golden test runs in its own JVM with the JVM options of run.sh (identity hashes all
+    // equal: a deterministic `Supervisor` map order; track P7D, 2026-11-25)
+    Test / fork := true,
+    Test / javaOptions ++= Seq("-XX:+UnlockExperimentalVMOptions", "-XX:hashCode=2")
   )

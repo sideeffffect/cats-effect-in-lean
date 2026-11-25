@@ -16,4 +16,8 @@ if [[ ! -f $cp_file ]] || [[ -n $(find "$dir/src/main" "$dir/build.sbt" -newer "
   [[ -s $cp_file.tmp ]] || { echo "run.sh: could not read the class path from sbt" >&2; exit 1; }
   mv "$cp_file.tmp" "$cp_file"
 fi
-exec java -cp "$(cat "$cp_file")" cats.effect.difftest.Main "${args[@]}"
+# Identity hashes all equal (HotSpot `hashCode=2`): `ConcurrentHashMap` iteration (the
+# `Supervisor` state) then follows insertion order, the same in every batch and JVM; with the
+# default (a per-thread sequence) it depended on the earlier cases of the batch (track P7D,
+# 2026-11-25: self-test prefix violations, CasesSuite failures of supervisor.jsonl on main)
+exec java -XX:+UnlockExperimentalVMOptions -XX:hashCode=2 -cp "$(cat "$cp_file")" cats.effect.difftest.Main "${args[@]}"

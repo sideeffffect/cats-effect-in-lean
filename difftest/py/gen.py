@@ -2007,7 +2007,10 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
     # Phase 7, track P7D: append a `Dispatcher` scenario. Own RNG, so the rest of the case does not
     # change; the probability scales with the template weight.
     dr = random.Random(f"difftest-dispatcher:{seed}:{i}")
-    if prog.get('op') != 'syncStep' and dr.random() < g.c['p_disp'] * w['tpl_disp']:
+    # not in a case with a tiny `maxSteps` (`p_small_maxsteps`): the scenario never runs there, it
+    # only turns a finished run into a `fuel` one (self-test bound on blocked + fuel outcomes)
+    if prog.get('op') != 'syncStep' and dr.random() < g.c['p_disp'] * w['tpl_disp'] and \
+            case.get('maxSteps', 10000) > 5:
         g3 = Gen(dr, weights, config)
         g3.names = 90000
         extra = g3.tpl_disp({}, dr.randint(3, 12), {})
