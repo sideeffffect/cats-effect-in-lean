@@ -458,3 +458,7 @@
 ## [2026-11-25] ingest | Phase 7 batch 7.1 gate passed
 - Updated: methodology/phase7-batch1-gate-report.md (C2 closed, gate PASSED), methodology/project-plan.md, index.md
 - Raw: raw/project-decisions/2026-11-25-phase7-batch1-gate-passed.md
+
+## [2026-11-25] ingest | Phase 7 batch 7.2 start (decisions 64–65)
+- Updated: methodology/project-plan.md
+- Raw: raw/project-decisions/2026-11-25-phase7-batch2-start.md
