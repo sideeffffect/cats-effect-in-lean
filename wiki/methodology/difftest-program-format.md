@@ -236,7 +236,7 @@ New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decod
 - Values `{"t":"disp","id":n}`, `{"t":"fut","id":n}` (output only). A literal is a decode error. `dCancel` of a cancel future is ill-typed (`typecheck.py`: `fut` vs `cfut`).
 - Lean side: `Std/Dispatcher.lean` (`useIO'`, `submitIO`, `cancelIO`, `dispOf?`, `cancelOf?`); lambdas `dUseK`, `dSrc` (snapshot, `Env.srcIO`, `Env.bracketSrcIO`), `dFutHandle`, `dPollThunk`, `dPollVal`. The mirror's closures are dispatched in `Env.dispatch`, `Env.dispatchSup` and `Env.dispatchRes`; its descriptors in `Env.srcIO`/`bracketSrcIO`.
 - `IllegalStateException: Dispatcher already closed` prints as an exception (`Prog.userCodeV?`, `Replay.errText`, `drive.py` `LIB_EXNS`).
-- Alternatives: `dSubmit`, `dForget`, `dCancel` count as `supervise` for the map-order alternatives (`Env.dispCount`).
+- Alternatives: `dSubmit`, `dForget`, `dCancel` count as `supervise` for the map-order alternatives (`Env.dispCount`). The Scala JVM runs with `-XX:hashCode=2` (all identity hashes equal), so Scala's map order is the insertion order, one of the alternatives.
 - Fixed cases `cases/track_p7d_dispatcher.jsonl` (`cases/gen_dispatcher.py`, 68; named to sort after `supervisor.jsonl`, see the generator doc). Generator: `tpl_disp`, appended by `gen_case` with its own RNG (`p_disp`). See [Dispatcher model](../cats-effect/dispatcher-model.md).
 
 ## User function table

@@ -484,3 +484,7 @@
 - Updated: cats-effect/dispatcher-model.md (rewritten), cats-effect/bug-history.md, methodology/difftest-program-format.md, methodology/differential-testing.md, lean/kernel-evaluation.md (long runs in chunks), index.md
 - Raw: raw/cats-effect/2026-11-25-track-p7d-mirror-notes.md, raw/cats-effect/2026-11-25-track-p7d-cpus-shim.md
 - Bugs: bugs/CE-0090.yaml (lean set), bugs/CE-0091.yaml (new; reproducer reproducers/CE-0091/Repro.scala: REPRODUCED on v3.7.1, series/3.x, series/3.7.x)
+
+## [2026-11-25] update | difftest: identity hashes all equal (-XX:hashCode=2); Dispatcher Cpus shim
+- Updated: cats-effect/dispatcher-model.md, methodology/differential-testing.md, methodology/difftest-program-format.md
+- Raw: raw/cats-effect/2026-11-25-track-p7d-identity-hash.md
