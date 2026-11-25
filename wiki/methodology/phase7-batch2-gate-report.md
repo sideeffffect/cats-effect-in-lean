@@ -39,7 +39,7 @@ Proven / refuted / open (registry): 0 / 2 / 13. Counted (FAITHFUL): 0 / 1 / 13.
 
 - **C1**: difftest ≥ 50,000 cases over ≥ 3 seeds at 100 % with the final harness (`-XX:hashCode=2`, `pollVal` fix), track V and P7D ops.
 - **C2**: lift the 5-`supervise` cap of the track V generator (bound about 8, see N6 of the review).
-- **C3**: 13 registry-linked inventory rows of `std.Supervisor.*`/`std.Dispatcher.*` still say `todo`; set them to `modelled`.
+- **C3** (withdrawn 2026-11-25 by the orchestrator): asked to set 13 registry-linked `todo` rows to `modelled`. `lake exe audit` rejects this: a row is `modelled` only through a proven or refuted entry, and these rows link only to `open` entries ([project plan](project-plan.md), review-1 fixes: open entries mark no rows). `todo` is correct.
 - **C4** (before any proof): the `unsafe*` calls are one atomic step each; split them into their visible steps or prove a reduction.
 - **C5**: CI green on the commit that closes B1.
 
