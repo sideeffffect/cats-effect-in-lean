@@ -1,4 +1,4 @@
-# Phase 7 batch 7.2 gate report (2026-11-25, re-checked in review batches 17 and 18)
+# Phase 7 batch 7.2 gate report (2026-11-25, passed 2026-11-25)
 
 > Sources: review batch 18 (2026-11-25): `noLostSubmission` after the B2 fix (commit `022a6a5`); review batch 17 (2026-11-25): B1 fix, C1, C2, N3 re-check; review batch 16 (2026-11-25): registries, Props, mirrors, witnesses, batteries, kernel runs R15/R32, CE-0090, CE-0091, reproducers, inventory, Scala source v3.7.1, read-only `gh issue view 3506`
 > Raw: [Review batch 18 notes](../../raw/project-decisions/2026-11-25-review-batch-18-notes.md); [Review batch 17 notes](../../raw/project-decisions/2026-11-25-review-batch-17-notes.md); [Review batch 16 notes](../../raw/project-decisions/2026-11-25-review-batch-16-notes.md); [Batch 7.2 start](../../raw/project-decisions/2026-11-25-phase7-batch2-start.md); [Decision 66](../../raw/project-decisions/2026-11-25-decision-66-dispatcher-after-supervisor.md); [Decision 67](../../raw/project-decisions/2026-11-25-decision-67-jvm-hashcode.md)
@@ -7,7 +7,7 @@
 
 Phase 7 batch 7.2 ran on 2026-11-25 in tracks V (`Supervisor`) and P7D (`Dispatcher`) (decisions 64–67). Gate rule ([Project plan](project-plan.md), Phase 7): rows reviewed FAITHFUL; decision 63: each battery complete. Full reviews: `review/2026-11-25-review-batch-16.md`, `review/2026-11-25-review-batch-17.md`, `review/2026-11-25-review-batch-18.md`.
 
-**Gate: PASS (review batch 18), on condition C5.** B2 is closed: `std.Dispatcher.noLostSubmission` now claims `accepted j = true → status j = 2` and is FAITHFUL. 15 of 15 entries are FAITHFUL; both batteries are complete. C1 and C2 are met; C3 is withdrawn; C4 stays open before any Dispatcher proof (not a gate item). C5: the orchestrator must confirm CI green on `022a6a5` (including `heavy-proofs` and `TwinChecks`) before Phase 8 starts; the reviewer did not run CI.
+**Gate PASSED (2026-11-25).** C5 closed: CI run `45677317664` on `2d5ec73` (contains `022a6a5`; the run on `022a6a5` was cancelled by that push) is green, all 7 required checks ([note](../../raw/project-decisions/2026-11-25-phase7-batch2-gate-passed.md)). Review batch 18: PASS on condition C5. B2 is closed: `std.Dispatcher.noLostSubmission` now claims `accepted j = true → status j = 2` and is FAITHFUL. 15 of 15 entries are FAITHFUL; both batteries are complete. C1 and C2 are met; C3 is withdrawn; C4 stays open before any Dispatcher proof (not a gate item). C5: the orchestrator must confirm CI green on `022a6a5` (including `heavy-proofs` and `TwinChecks`) before batch 7.3 starts; the reviewer did not run CI.
 
 Review batch 17: FAIL, blocker B2. Review batch 16: FAIL, blocker B1, conditions C1–C5.
 
@@ -44,7 +44,7 @@ Proven / refuted / open (registry): 0 / 2 / 13. Counted (FAITHFUL): 0 / 2 / 13.
 - **C2** (met, review batch 17): bound 8; the insertion-order-only replay above 5 map entries is in `tools/Difftest/Main.lean` only; it checks against a subset of the outcome set, so it is sound. Asked: lift the 5-`supervise` cap of the track V generator (bound about 8, see N6 of the review).
 - **C3** (withdrawn 2026-11-25 by the orchestrator; review batch 17 confirms, `tools/Audit/Core.lean:160-190`): asked to set 13 registry-linked `todo` rows to `modelled`. `lake exe audit` rejects this: a row is `modelled` only through a proven or refuted entry, and these rows link only to `open` entries ([project plan](project-plan.md), review-1 fixes: open entries mark no rows). `todo` is correct.
 - **C4** (before any proof): the `unsafe*` calls are one atomic step each; split them into their visible steps or prove a reduction.
-- **C5** (to confirm by the orchestrator): CI green on `022a6a5`, the commit that closes B2 (including `heavy-proofs` and `TwinChecks`).
+- **C5** (closed 2026-11-25: run `45677317664` on `2d5ec73` green): CI green on `022a6a5`, the commit that closes B2 (including `heavy-proofs` and `TwinChecks`).
 
 ## Batteries
 

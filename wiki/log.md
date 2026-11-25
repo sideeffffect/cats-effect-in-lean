@@ -532,3 +532,7 @@
 
 ## [2026-11-25] update | Review 18 low note fixed
 - Updated: cats-effect/dispatcher-model.md (only R10, R12, R13 changed when R10–R14 were regenerated)
+
+## [2026-11-25] ingest | Phase 7 batch 7.2 gate passed
+- Updated: methodology/phase7-batch2-gate-report.md (C5 closed), methodology/project-plan.md, index.md
+- Raw: raw/project-decisions/2026-11-25-phase7-batch2-gate-passed.md
