@@ -889,11 +889,14 @@ class Gen:
         s = self.fresh('s')
         sv = {'t': 'var', 'x': s}
         aw = self.r.random() < 0.5
-        rs = self.r.random() < 0.25
+        # restart path (`checkRestart = Some(_ => true)`): `always` restarts a finished child
+        # forever, so these runs end by fuel; the Lean side is slow on them (large closure codes):
+        # at most 2 children, no nesting, maxSteps 150 (`gen_case`)
+        rs = self.r.random() < 0.2
         cv = self.r.random() < 0.3
         sub = max(1, size // 4)
         cedes = lambda: [{'op': 'cede'} for _ in range(self.pick([(3, 0), (2, 1), (1, 2), (1, 4)]))]
-        k = self.pick([(3, 1), (3, 2), (2, 3), (1, 4)])
+        k = self.pick([(3, 1), (3, 2)] if rs else [(3, 1), (3, 2), (2, 3), (1, 4)])
         fs = [self.fresh('x') for _ in range(k)]
         tail = cedes()
         for f in fs:
@@ -912,7 +915,7 @@ class Gen:
         body = {'op': 'seq', 'ps': tail}
         for j, f in reversed(list(enumerate(fs))):
             body = {'op': 'bind', 'x': f, 'e': {'op': 'supervise', 's': sv,
-                    'e': self.sup_child(j, env, sub, ctx, sv, 0)}, 'k': body}
+                    'e': self.sup_child(j, env, sub, ctx, sv, 1 if rs else 0)}, 'k': body}
         use = {'op': 'supUse', 'aw': aw, 'rs': rs, 'cv': cv, 'x': s, 'k': body}
         if escape:
             t = self.fresh('s')
@@ -1870,7 +1873,7 @@ def gen_case(seed, i, max_size=40, weights=None, config=None):
         extra = g3.tpl_sup({}, vr.randint(3, 12), {})
         prog = {'op': 'seq', 'ps': [prog, extra]}
         if any(x.get('rs') for x in walk_sup(extra)):
-            case['maxSteps'] = min(case.get('maxSteps', 400), 400)
+            case['maxSteps'] = min(case.get('maxSteps', 150), 150)
         check_prog(prog)
     case['prog'] = prog
     return case

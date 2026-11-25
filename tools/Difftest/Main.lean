@@ -70,8 +70,10 @@ def processLine (line : String) : Json × Bool × Bool :=
                 kv "compare" (Json.arr #[.str "outcome"])]), true, true)
           | _ =>
             let s0 := CatsEffectInLean.Model.Sched.init CatsEffectInLean.Model.counterMaskModel io
-            -- track V: the `Supervisor` map order (`supervise` nodes; at most 5, 120 orders)
-            let ks := min 5 (supCount tc.prog)
+            -- track V: the `Supervisor` map order: the orders of the entries that a map ever held
+            -- (ghost counter of the replay with the insertion order; at most 5, 120 orders)
+            let ks := if supCount tc.prog ≥ 2 then
+                min 5 (supPutsMax cfg tc.prog choices tc.maxSteps s0) else 0
             let k := if ptMaxLen tc.prog ≥ 5 then max (ptMaxLen tc.prog) ks else ks
             if k ≥ 5 || ks ≥ 2 then
               -- review 8: the supervision set is a `HashSet`; every order of the children

@@ -39,7 +39,7 @@ def u : UserEnv := { call := fun id a refs => uR id a { refs }, callV := uR }
 long sleep (a child that runs until the close). -/
 def progs : Array IO :=
   #[.pure .unit, .cede, .sleep 3, .canceled, .uncancelable (.user 4), .error { code := 5 },
-    .flatMap .cede (.user 2), .sleep 100000, .pure .unit, .ioCont (.user 6)]
+    .flatMap .cede (.user 2), .sleep 100000, .pure .unit, CatsEffectInLean.Model.Timeout.neverIO]
 
 def next (x : Nat) : Nat := (x * 1103515245 + 12345) % 2147483648
 
@@ -151,7 +151,8 @@ def stats (n v : Nat) : Array Nat := Id.run do
     if bad5 last5 then c := c.modify 4 (· + 1)
     -- statement 7: await = false, sleeping children
     let x7 := inp (i + 400000) true false false
-    let x7 := { x7 with aw := false, ws := x7.ws.map (fun _ => .sleep (1 + i % 5)) }
+    let x7 := { x7 with aw := false, ws := x7.ws.map (fun _ => .sleep (1 + i % 5)),
+                        b := if i % 2 == 0 then .cede else .pure .unit }
     let last7 := (runOf x7 i v).getLastD (Sched.init counterMaskModel (.pure .unit))
     if bad7 x7.ws.length last7 then c := c.modify 9 (· + 1)
   return c

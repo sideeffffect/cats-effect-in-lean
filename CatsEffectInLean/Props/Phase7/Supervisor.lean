@@ -50,8 +50,9 @@ code if `ps[j] = i + 1` with `i < j`; otherwise never), and a user program `b` o
    `fin` adds 1 to the finalizer runs and sets status 3.
 
 The user programs get no handle (not the supervisor, not a harness cell, not a fiber); the
-library of the statements is empty (`supLib`): user code builds its own programs only, so it can
-not name a source code of the harness (a harness source is a closure reference). User programs
+library of the statements is the `IO.never` closures (`supLib`): user code builds its own
+programs and may wait forever; it cannot name a source of the harness (a harness source is a
+closure reference that user code never holds). User programs
 can raise, cancel themselves, wait forever, and start their own fibers. Schedules: every
 `PChoice` list and fuel; the map order of `allFibers` is any permutation `ho`.
 
@@ -74,8 +75,8 @@ can raise, cancel themselves, wait forever, and start their own fibers. Schedule
 6. `supRemoved`: without restart, in a blocked state, the supervisor map holds no fiber that
    has terminated. Wrong function: `remove` never removes (variant 10).
 
-7. `supCancels`: `await = false`, children that sleep (`d ≥ 1`), pure body, no restart: when the
-   root is done, no child finished its sleep. Wrong function: `await = false` joins (variant 8).
+7. `supCancels`: `await = false`, children that sleep (`d ≥ 1`), a body `IO.pure(())` or
+   `IO.cede`, no restart: when the root is done, no child finished its sleep. Wrong function: `await = false` joins (variant 8).
 
 `supXV v` is statement X with mirror variant `v` (`supX = supXV 0`).
 -/
@@ -344,10 +345,25 @@ def terminated {M : Type} (s : Sched M) (x : Val) : Bool :=
   | .fiber t => ((s.liveFibers.map (·.outcome))[t]?).any Option.isSome
   | _ => false
 
-/-- The library of the statements: empty. User programs build their own programs only (they
-cannot name a mirror closure; a mirror closure that resolves a source would let user code run a
-harness child). -/
-@[reducible] def supLib : Lib := Lib.idFree (fun _ => false)
+/-- Is `id` one of the `IO.never` closures (`Timeout.neverIO`, `IO.scala:1418-1431`)? They
+capture only `Cont` and poll handles. -/
+def isNeverClo (id : Nat) : Bool :=
+  if isLibId id then
+    match (cloOfId id).bind ofCloVal with
+    | some (k, tag, fs) =>
+      if k == Timeout.ns then
+        match Timeout.TLam.ofFields tag fs with
+        | some .neverBody | some (.neverUnc _) | some (.neverSel _ _ _) | some .constNever => true
+        | _ => false
+      else false
+    | none => false
+  else false
+
+/-- The library of the statements: the `IO.never` closures only. User programs build their own
+programs and may wait forever; they do not use a `Supervisor` of their own (no mirror closure is
+public here; nested supervision is the harness tree `ps`). A harness source is a closure
+reference, so no library closure can name it unless it is held (`WF.avail`). -/
+@[reducible] def supLib : Lib := Lib.idFree isNeverClo
 
 /-- The user programs are well-formed (decision 27), for every map order. -/
 def AllWF (ho : List Val → List Val) (ws : List IO) (ps : List Nat) (b : IO) (u : UserEnv) : Prop :=
@@ -415,15 +431,16 @@ def supRemovedV (v : Nat) : Prop :=
         terminated (run ho aw false cv ws ps b u fuel cs v) x = false
 
 /-- Statement 7 (variant `v`): `await = false` cancels. Children whose user program is a
-`sleep(d)` with `d ≥ 1`, a pure body, no restart: when the root is done, no child finished its
-sleep (status 2): the close canceled each child that was still sleeping. -/
+`sleep(d)` with `d ≥ 1`, a body `b` that does not advance the clock (`IO.pure(())` or
+`IO.cede`), no restart: when the root is done, no child finished its sleep (status 2): the close
+canceled each child that was still sleeping. -/
 def supCancelsV (v : Nat) : Prop :=
-  ∀ (u : UserEnv) (ho : List Val → List Val) (cv : Nat) (ds : List Nat) (ps : List Nat),
-    IsOrder ho → cv ≤ 1 → (∀ d ∈ ds, 1 ≤ d) →
-    AllWF ho (ds.map Model.IO.sleep) ps (.pure .unit) u →
+  ∀ (u : UserEnv) (ho : List Val → List Val) (cv : Nat) (ds : List Nat) (ps : List Nat) (b : IO),
+    IsOrder ho → cv ≤ 1 → (∀ d ∈ ds, 1 ≤ d) → (b = .pure .unit ∨ b = .cede) →
+    AllWF ho (ds.map Model.IO.sleep) ps b u →
     ∀ (fuel : Nat) (cs : List PChoice) (oc : Outcome),
-      (run ho false false cv (ds.map Model.IO.sleep) ps (.pure .unit) u fuel cs v).halt = some (.done oc) →
-      ∀ j, status (run ho false false cv (ds.map Model.IO.sleep) ps (.pure .unit) u fuel cs v) j ≠ 2
+      (run ho false false cv (ds.map Model.IO.sleep) ps b u fuel cs v).halt = some (.done oc) →
+      ∀ j, status (run ho false false cv (ds.map Model.IO.sleep) ps b u fuel cs v) j ≠ 2
 
 def supNoLeak : Prop := supNoLeakV 0
 def supClosedNoRun : Prop := supClosedNoRunV 0

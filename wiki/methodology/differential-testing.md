@@ -150,6 +150,10 @@ model bug · harness/glue bug · deliberate model simplification · intended CE 
 
 Ops `cdlNew`, `cdlRelease`, `cdlAwait`, `cbNew`, `cbAwait` (`std.CountDownLatch`, `std.CyclicBarrier`). Templates appended with their own RNG (`p_latch`), as for `parTraverseN`; other cases do not change. A mutation check runs each wrong variant of the mirror in the translation: all 7 were killed, but only after a template for the second cancel race (`tpl_barrier_race`). Lesson: a mutant that survives shows a coverage gap of the generator, not a correct model. Details and counts: [CountDownLatch and CyclicBarrier model](../cats-effect/latch-barrier-model.md).
 
+## Format v2, track V (Phase 7, 2026-11-25)
+
+Ops `supUse`, `supervise` (`std.Supervisor`). Template `tpl_sup` with its own RNG (`p_sup`). Lessons: (1) a closure code that embeds other closure references doubles per level; a value that user code holds must not embed a source code (8 GB on a 4-`supervise` case before the fix); (2) a documented library exception needs `LIB_EXNS` in `drive.py`, or the case is binned `generator-bug`; (3) `opcount.py --start` lets several processes share one seed. Counts: [Supervisor model](../cats-effect/supervisor-model.md).
+
 ## See Also
 
 - [Difftest program format v0 and Scala runner](difftest-program-format.md)
@@ -161,3 +165,4 @@ Ops `cdlNew`, `cdlRelease`, `cdlAwait`, `cbNew`, `cbAwait` (`std.CountDownLatch`
 - [Scheduler model (multi-fiber, replay)](../cats-effect/scheduler-model.md)
 - [Formalization precedents](../precedents/formalization-precedents.md)
 - [CountDownLatch and CyclicBarrier model](../cats-effect/latch-barrier-model.md)
+- [Supervisor model](../cats-effect/supervisor-model.md)

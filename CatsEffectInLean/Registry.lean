@@ -21,6 +21,7 @@ import CatsEffectInLean.Props.Phase7.Semaphore
 import CatsEffectInLean.Proofs.Phase7.SemaphoreCount
 import CatsEffectInLean.Props.Phase7.CountDownLatch
 import CatsEffectInLean.Props.Phase7.CyclicBarrier
+import CatsEffectInLean.Props.Phase7.Supervisor
 
 /-!
 # Property registry
@@ -905,7 +906,42 @@ def registry : List Entry := [
     note := "Phase 7, track L, review 13 (H4): for cap >= 1 and cap * g awaiters with user programs \
       IO.pure(()), no cancels, all schedules and fuel: the run is never blocked. Satisfiable \
       (LatchBattery.CB.noDeadlock_sat). Wrong functions: apply hangs (apply_hangs_breaks); smoke: \
-      await hangs. Open." }
+      await hangs. Open." },
+  { id := "std.Supervisor.noLeak"
+    rows := ["std.Supervisor.apply", "std.Supervisor.apply#3", "std.Supervisor.supervise", "std.Supervisor.SupervisorImpl.supervise", "std.Supervisor.State.add", "std.Supervisor.State.remove", "std.Supervisor.State.joinAll", "std.Supervisor.State.cancelAll"]
+    prop := ``Props.Phase7.Supervisor.supNoLeak
+    status := .«open»
+    note := "Phase 7, track V: when the root (Supervisor.use, then late supervise calls) is done, no supervised child runs its user code (status 1). Any await, checkRestart None or Some(_ => true), both state kinds, any user programs, nesting tree, all schedules, any map order. Satisfiable (SupervisorWitness.noLeak_sat: a child canceled by the close). Wrong functions: finalizer drops (noLeak_v7, kernel); restart ignores canceled/done (smoke, variant 11). Open." },
+  { id := "std.Supervisor.closedNoRun"
+    rows := ["std.Supervisor.supervise", "std.Supervisor.SupervisorImpl.supervise", "std.Supervisor.State.add", "std.Supervisor.apply", "std.Supervisor.apply#3"]
+    prop := ``Props.Phase7.Supervisor.supClosedNoRun
+    status := .«open»
+    note := "Phase 7, track V: in every state, a child whose supervise raised IllegalStateException never started its user code; when the root is done Succeeded(()), every child supervised after use returned got IllegalStateException (Scaladoc SV:97-98). Satisfiable (closedNoRun_sat). Wrong function: add ignores the close (closedNoRun_v9, kernel). Open." },
+  { id := "std.Supervisor.runsOnce"
+    rows := ["std.Supervisor.supervise", "std.Supervisor.SupervisorImpl.supervise"]
+    prop := ``Props.Phase7.Supervisor.supRunsOnce
+    status := .«open»
+    note := "Phase 7, track V: without checkRestart, in every state each child started its user code at most once and its finalizer ran at most once. Satisfiable (runsOnce_sat: one start, one finalizer run). Wrong function: supervise doubles (runsOnce_v4, kernel). Open." },
+  { id := "std.Supervisor.awaitJoins"
+    rows := ["std.Supervisor.apply", "std.Supervisor.apply#3", "std.Supervisor.supervise", "std.Supervisor.SupervisorImpl.supervise", "std.Supervisor.State.add", "std.Supervisor.State.remove", "std.Supervisor.State.joinAll", "std.Supervisor.State.cancelAll"]
+    prop := ``Props.Phase7.Supervisor.supAwaitJoins
+    status := .«open»
+    note := "Phase 7, track V, decision 63 companion success claim: await = true, no restart, flat, user programs IO.pure(()): a done root is Succeeded(()) and every child has status 2 (joined, not canceled). Satisfiable (awaitJoins_sat). Wrong functions: supervise raises (v1), supervise drops (v3), factory raises (v5), await = true cancels (v12), all kernel. Open." },
+  { id := "std.Supervisor.noDeadlock"
+    rows := ["std.Supervisor.apply", "std.Supervisor.apply#3", "std.Supervisor.supervise", "std.Supervisor.SupervisorImpl.supervise", "std.Supervisor.State.add", "std.Supervisor.State.remove", "std.Supervisor.State.joinAll", "std.Supervisor.State.cancelAll"]
+    prop := ``Props.Phase7.Supervisor.supNoDeadlock
+    status := .«open»
+    note := "Phase 7, track V: user programs IO.pure(()), no restart, any await, state kind and nesting (a child supervises a grandchild, racing the finalizer): the run is never blocked. Satisfiable (noDeadlock_sat: the grandchild supervise races the await = true close and raises). Wrong functions: supervise hangs (v2), factory hangs (v6), kernel. Open." },
+  { id := "std.Supervisor.removed"
+    rows := ["std.Supervisor.supervise", "std.Supervisor.SupervisorImpl.supervise", "std.Supervisor.State.add", "std.Supervisor.State.remove"]
+    prop := ``Props.Phase7.Supervisor.supRemoved
+    status := .«open»
+    note := "Phase 7, track V: without restart, in a blocked state the supervisor map holds no terminated fiber (a finished child is removed, SV:316-319: no unbounded growth). Satisfiable (removed_sat: a finished child removed, a live one kept). Wrong function: remove never removes (removed_v10, kernel). Open." },
+  { id := "std.Supervisor.cancels"
+    rows := ["std.Supervisor.apply", "std.Supervisor.apply#3", "std.Supervisor.State.cancelAll", "std.Supervisor.supervise"]
+    prop := ``Props.Phase7.Supervisor.supCancels
+    status := .«open»
+    note := "Phase 7, track V: await = false, children that sleep (d >= 1), body IO.pure(()) or IO.cede, no restart: when the root is done no child finished its sleep (the close canceled it, Scaladoc SV:121-127). Satisfiable (cancels_sat). Wrong function: await = false joins (cancels_v8, kernel). Open." }
 ]
 
 end CatsEffectInLean

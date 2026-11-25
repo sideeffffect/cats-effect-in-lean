@@ -100,12 +100,12 @@ is mirrored too (`cv = 1`), as a twin (`F = IO` through the `private[effect]` en
   1 = `applyForConcurrent`), variant `v`.
 * The state cell holds the map as `mapV c es`: the entries `pair (pair token (nat i)) fiber` in
   insertion order and a ghost insertion counter `c` (`i` is the insertion index); the
-  `Concurrent` state uses `none` for `null` (`SV:353-356`). The iteration order of
+  `Concurrent` state uses `pair (nat c) none` for `null` (`SV:353-356`; the counter is ghost). The iteration order of
   `ConcurrentHashMap.values` and of a Scala `HashMap` depends on identity hashes; the mirror
   takes it as an input `ho : List Val → List Val` (applied to the entries; statements require
   that it is a permutation).
 * A fiber in the map is `fiber t` (an `IOFiber`, `checkRestart = None`) or the restart wrapper
-  `Val.fn (SLam.wrap r).id` (`SV:231-282`; `nat 0` ↦ `cancel`, `nat 1` ↦ `join`).
+  `Val.fn (SLam.wrap w).id` (`w` = `RCtx.toW`: the wrapper does not capture `fa`) (`SV:231-282`; `nat 0` ↦ `cancel`, `nat 1` ↦ `join`).
   Scala's `null` in `Deferred[Fiber]` is `none`.
 * An `IO` that Scala holds as a value (`cleanup`, `fin`, the sides of `both`, the elements of a
   traverse) is a descriptor code (`D`, namespace `effNs`); `dIO` rebuilds the term.
@@ -201,6 +201,20 @@ def RCtx.ofVal? : Val → Option RCtx
     | some [cv, src, .deferred res, .ref can, .ref cur] =>
       match Call.ofVal? cv with
       | some c => some { c, src, res, can, cur }
+      | none => none
+    | _ => none
+
+/-- The fields of the restart wrapper (`SV:231-282`): the call, `resultR`, `canceledR`,
+`currentR`. The wrapper does not capture `fa` (only `action` does). -/
+def RCtx.toW (r : RCtx) : Val := listV [r.c.toVal, .deferred r.res, .ref r.can, .ref r.cur]
+
+/-- The context of wrapper fields (`src` is not used by the wrapper closures). -/
+def RCtx.ofW? : Val → Option RCtx
+  | x =>
+    match unlistV x with
+    | some [cv, .deferred res, .ref can, .ref cur] =>
+      match Call.ofVal? cv with
+      | some c => some { c, src := .unit, res, can, cur }
       | none => none
     | _ => none
 
@@ -614,6 +628,8 @@ def removeIO (s : Sup) (tok : Val) : IO :=
 /-- `state.add(token, fiber)` (`SV:343-347`, `:378-386`). -/
 def addIO (s : Sup) (tok fib : Val) : IO :=
   if s.cv == 1 then .delay (SLam.modAdd s.m tok fib s.v).fn
+  -- variant 9 (not Cats Effect code): `add` ignores the shutdown
+  else if s.v == 9 then .map (.delay (SLam.putThunk s.m tok fib).fn) (SLam.constV (.bool true)).fn
   else .flatMap (.delay (SLam.putThunk s.m tok fib).fn) (SLam.thenNotDone s.d).fn
 
 /-- `allFibers` (`SV:352-357`, `:391-401`). -/
@@ -668,13 +684,13 @@ def supOf? : Val → Option Sup
 
 
 /-- The wrapper value of a restart context. -/
-def wrapVal (r : RCtx) : Val := .fn (SLam.wrap r.toVal).id
+def wrapVal (r : RCtx) : Val := .fn (SLam.wrap r.toW).id
 
 /-- The restart context of a wrapper value. -/
 def wrapOf? : Val → Option RCtx
   | .fn id =>
     match SLam.ofId? id with
-    | some (.wrap r) => RCtx.ofVal? r
+    | some (.wrap r) => RCtx.ofW? r
     | _ => none
   | _ => none
 
@@ -719,7 +735,7 @@ def cancelElemIO : Val → IO
   | .pair (.fiber t) snap => IO.cancelOf t (Timeout.snapOutcome snap)
   | .pair x _ =>
     match wrapOf? x with
-    | some r => wCancelIO r.toVal
+    | some r => wCancelIO r.toW
     | none => .error illErr
   | _ => .error illErr
 
@@ -797,6 +813,11 @@ in insertion order (`i` = the insertion index; ghost state, not observable: it n
 iteration order in the difftest). -/
 def mapV (c : Nat) (es : List Val) : Val := .pair (.nat c) (listV es)
 
+/-- `null` (`SV:356`), with the ghost counter of the map it replaced. -/
+def nullMap : Val → Val
+  | .pair c _ => .pair c .none
+  | _ => .pair (.nat 0) .none
+
 /-- The empty map (`Map.empty`, a new `ConcurrentHashMap`). -/
 def emptyMap : Val := mapV 0 []
 
@@ -872,7 +893,8 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
     match mapOf? (v.refs.getD m .unit) with
     | some (_, es) => ret (listV ((ho es).map entryFiber))
     | none => illTyped
-  | .getAndSetNull m => { effects := [.writeRef m .none], out := .ret (v.refs.getD m .unit) }
+  | .getAndSetNull m =>
+    { effects := [.writeRef m (nullMap (v.refs.getD m .unit))], out := .ret (v.refs.getD m .unit) }
   | .valuesK =>
     match mapOf? arg with
     | some (_, es) => ret (listV ((ho es).map entryFiber))
@@ -995,7 +1017,7 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
     | none => illTyped
   | .updRemove m tok vr =>
     match v.refs.getD m .unit with
-    | .none => { effects := [.writeRef m .none], out := .ret .unit }
+    | .pair c .none => { effects := [.writeRef m (.pair c .none)], out := .ret .unit }
     | x =>
       match mapOf? x with
       | some (c, es) =>
@@ -1004,7 +1026,7 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
       | none => illTyped
   | .modAdd m tok fib vr =>
     match v.refs.getD m .unit with
-    | .none => { effects := [.writeRef m .none], out := .ret (.bool (vr == 9)) }
+    | .pair c .none => { effects := [.writeRef m (.pair c .none)], out := .ret (.bool (vr == 9)) }
     | x =>
       match mapOf? x with
       | some (c, es) =>
@@ -1080,19 +1102,19 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
     | some rc => prog (finResIO rc oc)
     | none => illTyped
   | .wrap r =>
-    match arg, RCtx.ofVal? r with
+    match arg, RCtx.ofW? r with
     | .nat 0, some _ => prog (wCancelIO r)
     -- `def join = resultR.get`
     | .nat 1, some rc => prog (IO.deferredGetOf rc.res (v.deferred rc.res))
     | _, _ => illTyped
   -- `(canceledR.set(true) *> delegateF) flatMap { ... }`
   | .wBody r =>
-    match RCtx.ofVal? r with
+    match RCtx.ofW? r with
     | some rc =>
       prog (.flatMap (.flatMap (setIO rc.can (.bool true)) (SLam.thenDelegate r).fn) (SLam.wSel1 r).fn)
     | none => illTyped
   | .thenDelegate r =>
-    match RCtx.ofVal? r with
+    match RCtx.ofW? r with
     | some rc => prog (delegateIO rc)
     | none => illTyped
   | .getDef =>
@@ -1100,7 +1122,7 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
     | .deferred x => prog (IO.deferredGetOf x (v.deferred x))
     | _ => illTyped
   | .wSel1 r =>
-    match arg, RCtx.ofVal? r with
+    match arg, RCtx.ofW? r with
     | .none, some rc => prog (voidIO (IO.deferredGetOf rc.res (v.deferred rc.res)))
     -- `(fiber.cancel *> fiber.join) flatMap { ... }`: both built now
     | .fiber t, some _ =>
@@ -1109,12 +1131,12 @@ def call (uc : Nat → Val → View → UserResult) (ioOf : Val → IO) (ho : Li
         (SLam.wSel2 r arg).fn)
     | _, _ => illTyped
   | .wSel2 r fiber =>
-    match arg, RCtx.ofVal? r with
+    match arg, RCtx.ofW? r with
     | .ocCanceled, some rc => prog (.flatMap (delegateIO rc) (SLam.wSel3 r fiber).fn)
     | _, some rc => prog (voidIO (IO.deferredGetOf rc.res (v.deferred rc.res)))
     | _, none => illTyped
   | .wSel3 r fiber =>
-    match arg, RCtx.ofVal? r with
+    match arg, RCtx.ofW? r with
     | .none, some rc => prog (voidIO (IO.deferredGetOf rc.res (v.deferred rc.res)))
     | fiber2, some rc =>
       let cleanup := finResIO rc .ocCanceled

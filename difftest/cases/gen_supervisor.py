@@ -49,7 +49,7 @@ cases = []
 def case(id, prog, **k):
     c = {"v": 2, "id": id, "mode": "replay"}
     if "-rs1" in id:
-        c["maxSteps"] = 300  # `always` restarts a finished child forever: a join never returns
+        c["maxSteps"] = 150  # `always` restarts a finished child forever: a join never returns
     c.update(k)
     c["prog"] = prog
     cases.append(c)

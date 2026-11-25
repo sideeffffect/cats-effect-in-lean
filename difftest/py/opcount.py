@@ -29,6 +29,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('--seeds', type=int, nargs='+', default=[1, 2, 3])
     ap.add_argument('--n', type=int, default=1000)
+    # track V: the first case index, so that several processes can share one seed
+    ap.add_argument('--start', type=int, default=0)
     ap.add_argument('--chunk', type=int, default=20000)
     ap.add_argument('--max-size', type=int, default=40)
     ap.add_argument('--ops', nargs='+', required=True)
@@ -44,7 +46,7 @@ def main(argv=None):
     bad = []
     t0 = time.time()
     for seed in a.seeds:
-        for start in range(0, a.n, a.chunk):
+        for start in range(a.start, a.n, a.chunk):
             cases = [gen.gen_case(seed, i, max_size=a.max_size, weights=weights)
                      for i in range(start, min(a.n, start + a.chunk))]
             s = drive.run_scala(cases)

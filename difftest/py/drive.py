@@ -155,6 +155,10 @@ def run_lean(lean_cmd, cases):
 
 # --------------------------------------------------------------- comparing
 
+# Library exceptions that a well-typed program can raise (they are compared like any outcome).
+LIB_EXNS = ('IllegalStateException: supervisor already shutdown',)
+
+
 def scala_problem(s):
     """A problem in the Scala output alone (no Lean needed): bin and detail, or None."""
     if s is None:
@@ -165,6 +169,10 @@ def scala_problem(s):
         e = s['error']
         return ('generator-bug' if e.startswith('decode') else 'harness'), f"scala: {e}"
     raw = s.get('_raw') or dumps(s)
+    # Phase 7, track V: the documented error of `supervise` after the close (`Supervisor.scala:97-98`,
+    # `:322`) is a library exception, not a type error; the Lean side prints the same text
+    for ok in LIB_EXNS:
+        raw = raw.replace(f'"exn":"{ok}"', '').replace(f'"exn": "{ok}"', '')
     if '"exn"' in raw or 'TypeError' in raw:
         # decision 8: a non-UserError error (TypeError) means the program was not well-typed
         return 'generator-bug', 'scala: non-UserError error in output'

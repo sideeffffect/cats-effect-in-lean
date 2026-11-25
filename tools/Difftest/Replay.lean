@@ -391,6 +391,17 @@ def replayFields (cfg : Config) (p : Prog) (choices : List Choice) (maxSteps : N
     List (String × Json) :=
   replayFieldsH (fun _ xs => xs) cfg p choices maxSteps s0
 
+/-- Track V: the largest ghost insertion counter of a `Supervisor` map cell after the replay
+with the insertion order (`Supervisor.mapV c es`; a closed `Concurrent` map keeps it). A user
+`Ref` of the same shape can only raise it (more alternatives, never fewer). -/
+def supPutsMax (cfg : Config) (p : Prog) (choices : List Choice) (maxSteps : Nat) (s0 : Sched RMask) : Nat :=
+  let env := userEnvH (fun _ xs => xs) p
+  let r0 : RS := { s := s0, cs := choices }
+  let r := RS.run cfg env maxSteps (replayFuel cfg maxSteps) r0.absorb
+  r.s.liveHeap.refs.foldl (fun m v => match v with
+    | .pair (.nat c) (.pair _ _) | .pair (.nat c) .unit | .pair (.nat c) .none => max m c
+    | _ => m) 0
+
 /-- All permutations of a list. -/
 def perms : List Nat → List (List Nat)
   | [] => [[]]

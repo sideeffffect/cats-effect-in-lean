@@ -77,6 +77,7 @@ Harness: awaiters `user.attempt *> uncancelable(poll => mark 1 *> poll(await).on
 ## See Also
 
 - [memoize model](memoize-model.md)
+- [Supervisor model](supervisor-model.md)
 - [Queue and timeout model](queue-model.md)
 - [Scheduler model](scheduler-model.md)
 - [Differential testing](../methodology/differential-testing.md)

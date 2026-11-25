@@ -209,6 +209,19 @@ New ops, each one `IO#` entry point. `"v":2`; a v2 op in a v0/v1 case is a decod
 - Lean side: `Std/CountDownLatch.lean`, `Std/CyclicBarrier.lean` (`apply?`, `releaseIO`, `awaitIO`); the model value is the object closure reference (`latchOf?`, `barrierOf?`); lambdas `latchHandle`, `barrierHandle`. In the Lean decoder these ops are parsed before the big `match` (as `parTraverseN`).
 - Fixed cases `cases/latch.jsonl` (`cases/gen_latch.py`). Generator: `tpl_latch`, `tpl_barrier_race`, appended by `gen_case` with their own RNG (`p_latch`). See [CountDownLatch and CyclicBarrier model](../cats-effect/latch-barrier-model.md).
 
+### Format v2 ops of track V (Phase 7; same version, same `checkNoV2` gate)
+
+| op | fields | term |
+|----|--------|------|
+| `supUse` | `aw`, `rs`, `cv` (booleans), `x`, `k` | `SupervisorShim(aw, rs, cv).use(s => I(k)[x := sup(h.newSup(s))])`: `Supervisor.apply(aw, if rs then Some(_ => true) else None)` (`private[std]`; `IO` takes the `Async` state), or `applyForConcurrent` if `cv` |
+| `supervise` | `s`: atom, `e` | `supOf(⟦s⟧).supervise(I(e)).map(f => fiber(h.fiberHandle(f)))` |
+
+- Value `{"t":"sup","id":n}` (output only; generated cases never print it). A literal is a decode error.
+- Lean side: `Std/Supervisor.lean` (`useIO`, `superviseIO`); lambdas `supUseK`, `supSrc` (snapshot, `Env.srcIO`), `supFiberHandle`, `alwaysTrue`; `Env.dispatchSup` (fuel), `Env.supOrder` (map order from the ghost insertion index). With `rs`, the fiber is the restart wrapper: `join`/`cancel` call its methods; its handle comes from the internal event `wrapH`; it has no task label (`fibers` omits it on both sides); an external cancel of its handle is skipped on both sides.
+- `IllegalStateException: supervisor already shutdown` prints as an exception (`Prog.userCodeV?`, `drive.py` `LIB_EXNS`).
+- Alternatives: if a map held ≥ 2 entries (ghost counter after the insertion-order replay), every order of up to 5 entries.
+- Fixed cases `cases/supervisor.jsonl` (`cases/gen_supervisor.py`). Generator: `tpl_sup`, appended by `gen_case` with its own RNG (`p_sup`). See [Supervisor model](../cats-effect/supervisor-model.md).
+
 ## User function table
 
 `call(fn, v)` first emits `{"ev":"call","fn":fn,"arg":v}`, then applies the function. Lean must implement the same table.

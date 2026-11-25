@@ -386,7 +386,7 @@ def tr (R : Resource.REnv) : Prog → (node : Nat) → (env : List Val) → (vw 
     | w =>
       -- track V: the wrapper's `val cancel` (`Supervisor.scala:235-279`)
       match CatsEffectInLean.Std.Supervisor.wrapOf? w with
-      | some r => pure (.map (CatsEffectInLean.Std.Supervisor.wCancelIO r.toVal) (clo node .asUnit []))
+      | some r => pure (.map (CatsEffectInLean.Std.Supervisor.wCancelIO r.toW) (clo node .asUnit []))
       | none => throw .typeError
   | .racePair a b, node, env, vw => do
     let ia ← tr R a (node + 1) env vw
