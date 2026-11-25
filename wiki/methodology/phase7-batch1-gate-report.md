@@ -107,7 +107,7 @@ All closed on 2026-11-25:
 
 Closed in review batch 15: C1 (12 honest queue rows, kernel), C4 (CE-0060 `status` comment), C5 (inventory `registry` column of the track S rows matches the registry in both directions).
 
-Low notes (not blocking): N1 cite `S:41-43` for the `tryAcquireN` condition; N2 list `tryPermit` as not mirrored in the Semaphore battery table; N3 the 585-script check of statement 9 is evaluation only.
+Low notes (not blocking; all fixed 2026-11-25 in the docstring, registry note and battery table): N1 cite `S:41-43` for the `tryAcquireN` condition; N2 list `tryPermit` as not mirrored in the Semaphore battery table; N3 the 585-script check of statement 9 is evaluation only.
 
 ## Open caveats
 

@@ -463,6 +463,8 @@
 - Updated: methodology/project-plan.md
 - Raw: raw/project-decisions/2026-11-25-phase7-batch2-start.md
 
+## [2026-11-25] update | Review 15 low notes N1–N3 fixed
+- Updated: methodology/phase7-batch1-gate-report.md (Semaphore docstring cites S:41-43; registry note marks the 585-script check as evaluation only; battery table names tryPermit as not mirrored)
 ## [2026-11-25] ingest | Phase 7 track V: Supervisor model
 - Created: cats-effect/supervisor-model.md
 - Updated: methodology/difftest-program-format.md, methodology/differential-testing.md, cats-effect/latch-barrier-model.md, index.md
