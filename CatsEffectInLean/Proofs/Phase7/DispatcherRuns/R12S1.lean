@@ -26,7 +26,7 @@ def S1 : Sched CounterMask :=
                      CatsEffectInLean.Model.Val.fn 1461532454711703105701419263733939347840100597897,
                      CatsEffectInLean.Model.Val.unit,
                      CatsEffectInLean.Model.Val.pair
-                       (CatsEffectInLean.Model.Val.unit)
+                       (CatsEffectInLean.Model.Val.some (CatsEffectInLean.Model.Val.unit))
                        (CatsEffectInLean.Model.Val.unit),
                      CatsEffectInLean.Model.Val.bool true,
                      CatsEffectInLean.Model.Val.pair

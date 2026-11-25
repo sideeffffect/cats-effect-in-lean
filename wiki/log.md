@@ -520,3 +520,7 @@
 - Added: review/2026-11-25-review-batch-17.md; raw/project-decisions/2026-11-25-review-batch-17-notes.md
 - Updated: methodology/phase7-batch2-gate-report.md, methodology/agent-workflow.md (review log line)
 - B1 fix correct as far as it goes (join, `accepted`, R32 kernel fact, twin 32), but `noLostSubmission` is still false for every Dispatcher with `c = IO.canceled` (B2). C1, C2 met; N3 closed; C3 withdrawal confirmed; C4 open; C5 on the B2 commit.
+
+## [2026-11-25] update | Track P7D: review batch 17 B2 fix (noLostSubmission over accepted submissions)
+- Updated: cats-effect/dispatcher-model.md
+- Raw: raw/cats-effect/2026-11-25-track-p7d-review17-b2.md

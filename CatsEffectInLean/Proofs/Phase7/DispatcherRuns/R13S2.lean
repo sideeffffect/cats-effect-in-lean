@@ -30,7 +30,7 @@ def S2 : Sched CounterMask :=
                          (CatsEffectInLean.Model.Val.nat 0)
                          (CatsEffectInLean.Model.Val.unit)),
                      CatsEffectInLean.Model.Val.pair
-                       (CatsEffectInLean.Model.Val.unit)
+                       (CatsEffectInLean.Model.Val.some (CatsEffectInLean.Model.Val.unit))
                        (CatsEffectInLean.Model.Val.unit),
                      CatsEffectInLean.Model.Val.bool true,
                      CatsEffectInLean.Model.Val.pair

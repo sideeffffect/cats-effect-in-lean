@@ -57,8 +57,8 @@ RUNS = {
     '30': (True, True, 'xcan', 5, None, None, DONE, [('status', 0, 2)], 'variant 5 (the cancel action raises)'),
     '31': (True, True, 'xcan', 7, None, None, DONE, [('status', 0, 2)], 'variant 7 (the cancel action drops)'),
     '32': (True, True, 'x90', 0, 18, None, DONE, [('status', 0, 2), ('status', 1, 0), ('rejected', 1, 0), ('accepted', 1, 'true')], 'CE-0090: the concurrent submission (joined by the root) is accepted and never runs'),
-    '33': (True, True, 'x90', 32, 18, None, DONE, [('status', 0, 2), ('rejected', 1, 1)], 'fixed twin 32 of CE-0090: the concurrent submission throws'),
-    '34': (False, True, 'x90', 0, None, None, DONE, [('status', 0, 2), ('rejected', 1, 1)], 'sequential: the late concurrent submission throws'),
+    '33': (True, True, 'x90', 32, 18, None, DONE, [('status', 0, 2), ('accepted', 0, 'true'), ('rejected', 1, 1), ('accepted', 1, 'false')], 'fixed twin 32 of CE-0090: the concurrent submission throws'),
+    '34': (False, True, 'x90', 0, None, None, DONE, [('status', 0, 2), ('accepted', 0, 'true'), ('rejected', 1, 1), ('accepted', 1, 'false')], 'sequential: the late concurrent submission throws'),
 }
 
 OVERLAP_STEP = {'26': 402}

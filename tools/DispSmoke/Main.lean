@@ -112,7 +112,7 @@ def bad2 (cs : Case) (s : Sched CounterMask) : Bool :=
   | some (.done oc) => oc != .succeeded .unit || (List.range (k cs)).any fun j => status s j != 2
   | _ => false
 def bad3 (cs : Case) (s : Sched CounterMask) : Bool :=
-  isDone s && (List.range (k cs)).any fun j => rejected s j != 1 && status s j != 2
+  isDone s && (List.range (k cs)).any fun j => accepted s j && status s j != 2
 def bad6 (cs : Case) (s : Sched CounterMask) : Bool := isDone s && (List.range (k cs)).any fun j => status s j == 2
 def bad8 (cs : Case) (s : Sched CounterMask) : Bool := isDone s && (List.range (k cs)).any fun j => status s j != 3
 
@@ -127,7 +127,10 @@ def stat (st v runs : Nat) : Array Nat := Id.run do
     let p0 := x.ps.map (fun _ => 0)
     let cs : Case := match st with
       | 2 => { base with aw := true, x := { x with cn := [] } }
-      | 3 => { base with aw := true, x := { x with cn := [], c := .pure .unit, ps := x.ps.mapIdx fun j _ => j % 2 } }
+      -- review 17 (B2): the concurrent submitter's prefix `c` is any user program (it can cancel
+      -- itself or never end before it submits)
+      | 3 => { base with aw := true, x := { x with cn := [], c := progs.getD (i % progs.size) (.pure .unit),
+                ps := x.ps.mapIdx fun j _ => j % 2 } }
       | 5 => { base with par := false, n := 1, x := { x with cn := [] } }
       | 6 => { base with aw := false, x := { x with ws := sl, cn := [], ps := p0, b := .cede } }
       | 8 => { base with par := true, x := { x with ws := sl, cn := [], ps := p0, ms := p0, b := .pure .unit, sw := true } }

@@ -13,7 +13,9 @@ open CatsEffectInLean.Proofs.Phase7.DispatcherCommon
 theorem fin :
     ((runSchedStateP {} counterMaskModel (env id x90 u) 6 (((((sched 18 300).drop 93).drop 92).drop 92).drop 101) S4).halt == some (Summary.done (.succeeded .unit)) &&
     status (runSchedStateP {} counterMaskModel (env id x90 u) 6 (((((sched 18 300).drop 93).drop 92).drop 92).drop 101) S4) 0 == 2 &&
-    rejected (runSchedStateP {} counterMaskModel (env id x90 u) 6 (((((sched 18 300).drop 93).drop 92).drop 92).drop 101) S4) 1 == 1) = true := by
+    accepted (runSchedStateP {} counterMaskModel (env id x90 u) 6 (((((sched 18 300).drop 93).drop 92).drop 92).drop 101) S4) 0 == true &&
+    rejected (runSchedStateP {} counterMaskModel (env id x90 u) 6 (((((sched 18 300).drop 93).drop 92).drop 92).drop 101) S4) 1 == 1 &&
+    accepted (runSchedStateP {} counterMaskModel (env id x90 u) 6 (((((sched 18 300).drop 93).drop 92).drop 92).drop 101) S4) 1 == false) = true := by
   decide +kernel
 
 /-- The run of 384 micro-steps. -/
@@ -26,7 +28,9 @@ theorem eq_fin : run id true true 1 .unit x90 u 384 (sched 18 300) 32 =
 theorem obs :
     ((run id true true 1 .unit x90 u 384 (sched 18 300) 32).halt == some (Summary.done (.succeeded .unit)) &&
     status (run id true true 1 .unit x90 u 384 (sched 18 300) 32) 0 == 2 &&
-    rejected (run id true true 1 .unit x90 u 384 (sched 18 300) 32) 1 == 1) = true := by
+    accepted (run id true true 1 .unit x90 u 384 (sched 18 300) 32) 0 == true &&
+    rejected (run id true true 1 .unit x90 u 384 (sched 18 300) 32) 1 == 1 &&
+    accepted (run id true true 1 .unit x90 u 384 (sched 18 300) 32) 1 == false) = true := by
   rw [eq_fin]; exact fin
 
 end CatsEffectInLean.Proofs.Phase7.DispatcherRuns.R33

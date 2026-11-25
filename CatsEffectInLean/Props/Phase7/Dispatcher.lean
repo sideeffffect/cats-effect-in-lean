@@ -68,9 +68,13 @@ list and fuel; the `Supervisor` map order is any permutation `ho`; any worker ch
 2. `dispAwaitDrains`: `aw = true`, the body submits pure tasks (`IO.pure(())`), no cancel: a done
    root is `Succeeded(())` and every task has status 2. Refuted for `parallel`: CE-0091.
 3. `dispNoLostSubmission`: `aw = true`, pure tasks from the body and the concurrent fiber (which
-   the root joins), no cancel: when the root is done, every submission either threw (flag) or its
-   task has status 2 (`DP:130-133`: after the scope exits a submission throws; an accepted one is
-   awaited). Refuted: CE-0090 (and CE-0091).
+   the root joins), no cancel: when the root is done, every **accepted** submission (it returned:
+   `accepted`) has its task at status 2 (`DP:130-133`: an accepted effect is awaited; a submission
+   after the close throws, a rejected or never-made one claims nothing). Review batch 17 (B2): the
+   former conclusion "threw or status 2" was false for every Dispatcher with `c = IO.canceled` (the
+   submitter cancels itself before it submits). An implementation that rejects everything meets
+   this statement vacuously; its success companion is `dispAwaitDrains` (v1, "submit raises",
+   breaks it). Refuted: CE-0090 (and CE-0091).
 4. `dispClosedRejects`: in every state, a task whose submission threw never started; when the
    root is done `Succeeded(())`, every `late` task threw.
 5. `dispSeqFifo`: `sequential`, tasks from the body only: in every state the start order is
@@ -342,7 +346,9 @@ def HLam.call (x : Inp) (h : HLam) (arg : Val) (w : View) : UserResult :=
       if e == CatsEffectInLean.Std.Dispatcher.iseErr then
         { out := .prog (.flatMap (.delay (HLam.flag j).fn) (HLam.subs d p (j + 1)).fn) }
       else { out := .prog (subsFrom x d p (j + 1)) }
-    | .right v => { out := .prog (.flatMap (.delay (HLam.save j v).fn) (HLam.subs d p (j + 1)).fn) }
+    -- an `unsafeRunAndForget` returns `()`: saved as `some ()`, so `accepted` sees it (review 17, B2)
+    | .right v => { out := .prog (.flatMap (.delay (HLam.save j (if v == .unit then .some .unit else v)).fn)
+        (HLam.subs d p (j + 1)).fn) }
     | _ => { out := .prog (subsFrom x d p (j + 1)) }
   | .flag j, _ => { effects := [setIn w.refs 3 j (.nat 1)], out := .ret .unit }
   | .save j v, _ => { effects := [setIn w.refs 6 j v], out := .ret .unit }
@@ -450,10 +456,12 @@ def runs {M : Type} (s : Sched M) (j : Nat) : Nat := natIn s.liveHeap.refs 1 j
 def fins {M : Type} (s : Sched M) (j : Nat) : Nat := natIn s.liveHeap.refs 2 j
 /-- Did the submission of task `j` throw `IllegalStateException` (`Ref` 3)? -/
 def rejected {M : Type} (s : Sched M) (j : Nat) : Nat := natIn s.liveHeap.refs 3 j
-/-- Did the submission of task `j` return (cell 6 holds its `unsafeToFutureCancelable` result)? -/
+/-- Did the submission of task `j` return (cell 6 holds its `unsafeToFutureCancelable` result, or
+`some ()` for `unsafeRunAndForget`)? -/
 def accepted {M : Type} (s : Sched M) (j : Nat) : Bool :=
   match (lst (s.liveHeap.refs.getD 6 .unit))[j]? with
   | some (.pair (.ref _) _) => true
+  | some (.some .unit) => true
   | _ => false
 
 /-- The start order (`Ref` 5). -/
@@ -536,7 +544,7 @@ def dispNoLostSubmissionV (v : Nat) : Prop :=
     ∀ (fuel : Nat) (cs : List PChoice) (oc : Outcome),
       (run ho par true n wc (pureInp ps ms [] c (.pure .unit)) u fuel cs v).halt = some (.done oc) →
       ∀ j < ps.length,
-        rejected (run ho par true n wc (pureInp ps ms [] c (.pure .unit)) u fuel cs v) j = 1 ∨
+        accepted (run ho par true n wc (pureInp ps ms [] c (.pure .unit)) u fuel cs v) j = true →
         status (run ho par true n wc (pureInp ps ms [] c (.pure .unit)) u fuel cs v) j = 2
 
 /-- Statement 4 (variant `v`): a submission after the close throws and never runs. -/
