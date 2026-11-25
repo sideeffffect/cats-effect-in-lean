@@ -34,7 +34,9 @@ stmt 9. For the other operations the drop has no answer to lie about (`acquire`,
 `permit`, `lock` return `()`), so their "drops" rows are already honest; reads have no drop. A factory
 has no effect besides making the object, so drops/doubles have no meaning for it. `mapK` and `in`
 are not mirrored (no row): `MapKSemaphore`/`TransformedMutex` only map each operation with a natural
-transformation, and `in` builds the same `impl` with `Ref.in`.
+transformation, and `in` builds the same `impl` with `Ref.in`. `tryPermit` (`S:116-117`) is not
+mirrored (no row; inventory `todo`): it is `Resource.make(tryAcquire)(release.whenA(_))`, so its answer
+is the `tryAcquire` answer; when it is mirrored it needs its own honest-drop row.
 
 Statement numbers: 2 `std.Semaphore.noDeadlock`, 4 `std.Mutex.lock.mutualExclusion`, 5
 `std.Mutex.lock.noDeadlock`, 7 `std.Semaphore.acquireN.fifo`.
