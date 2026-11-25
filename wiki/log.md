@@ -498,3 +498,6 @@
 - Updated: Agent workflow and review protocol (review log), index
 - Raw: raw/project-decisions/2026-11-25-review-batch-16-notes.md
 - Review: review/2026-11-25-review-batch-16.md
+
+## [2026-11-25] update | Review 16 condition C3 fixed
+- Updated: inventory (13 std.Supervisor.* / std.Dispatcher.* rows with registry links: todo -> modelled)
