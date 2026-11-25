@@ -505,3 +505,6 @@
 ## [2026-11-25] update | Track P7D: review batch 16 B1 fix (noLostSubmission), C4 recorded
 - Updated: cats-effect/dispatcher-model.md (review 16 section: B1 fix, C4 open item)
 - Raw: raw/cats-effect/2026-11-25-track-p7d-review16-b1.md
+
+## [2026-11-25] update | Inventory: review 16 C3 reverted (13 rows back to todo)
+- The 13 rows of C3 link only to `open` entries; the heavy audit (`lake exe audit_heavy`) requires a `proven` or `refuted` entry for a `modelled` row ("status modelled, but no named registry entry is proven or refuted", 13 errors). Rows set back to `todo`; the gate is not changed. Open question for the reviewer: C3 needs a proven/refuted entry per row, or the rule changes (user decision).
