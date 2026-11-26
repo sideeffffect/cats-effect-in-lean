@@ -18,7 +18,7 @@ lazy val difftest = (project in file("."))
       "org.typelevel" %% "cats-effect" % ceVersion,
       "org.typelevel" %% "cats-effect-testkit" % ceVersion,
       "com.lihaoyi" %% "ujson" % "4.4.3",
-      "org.scalameta" %% "munit" % "1.2.4" % Test
+      "org.scalameta" %% "munit" % "1.3.6" % Test
     ),
     scalacOptions ++= Seq("-deprecation", "-feature", "-Wunused:all"),
     Compile / run / fork := true,
